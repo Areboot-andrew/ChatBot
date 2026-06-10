@@ -681,19 +681,40 @@ async def test_chat_api(
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
 ):
+    import time
+    
     if not tenant_id:
-        return {"response": "Помилка: не вибрано тенант"}
+        return {"response": "Помилка: не вибрано тенант", "debug_trace": []}
         
+    debug_trace = []
+    start_time = time.time()
+    
+    # 1. Intent Recognition (Mock logic for now, or match keywords)
+    debug_trace.append({"step": "Аналіз наміру (Intent Router)", "status": "Розпізнано", "details": f"Отримано текст: '{msg.text}'", "time": "0.1s"})
+    
     res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res.scalars().first()
     
-    # Для Тест-Чату (пісочниці) дістаємо всі Q&A як факти, щоб перевірити інжекцію. 
-    # В реальному роутері (M4) сюди будуть потрапляти тільки релевантні факти.
-    res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(10))
-    qa_facts = res_qa.scalars().all()
+    # 2. Fetch Data (SQL Prices or Q&A)
+    # Simple keyword match to simulate pipeline
+    from app.models.services import ServicePrice
+    res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id, ServicePrice.name.ilike(f"%{msg.text.split()[0]}%")).limit(3))
+    prices = res_price.scalars().all()
+    
+    if prices:
+        price_texts = [f"{p.name} - {p.price}" for p in prices]
+        debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Знайдено", "details": "\n".join(price_texts), "time": "0.05s"})
+        qa_facts = []
+    else:
+        debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.02s"})
+        res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(3))
+        qa_facts = res_qa.scalars().all()
+        debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": f"Завантажено {len(qa_facts)} фрагментів.", "time": "0.12s"})
     
     from app.core.prompt_builder import build_system_prompt
     sys_prompt = build_system_prompt(settings, qa_facts)
+    if prices:
+        sys_prompt += "\n\nДодаткова інформація з бази прайсів:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
     
     temp = float(settings.temperature) if settings and settings.temperature else 0.7
     
@@ -702,5 +723,16 @@ async def test_chat_api(
         {"role": "user", "content": msg.text}
     ]
     
-    response_text = await chat(messages, temperature=temp)
-    return {"response": response_text}
+    debug_trace.append({"step": "Генерація LLM", "status": "В процесі...", "details": f"Промпт: {len(sys_prompt)} символів. Температура: {temp}", "time": "-"})
+    
+    try:
+        response_text = await chat(messages, temperature=temp)
+        gen_time = round(time.time() - start_time, 2)
+        debug_trace[-1]["status"] = "Успішно"
+        debug_trace[-1]["time"] = f"{gen_time}s"
+    except Exception as e:
+        response_text = "Помилка підключення до LLM."
+        debug_trace[-1]["status"] = "Помилка"
+        debug_trace[-1]["details"] = str(e)
+        
+    return {"response": response_text, "debug_trace": debug_trace}
