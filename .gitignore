@@ -75,5 +75,5 @@ redis_data/
 .DS_Store
 Thumbs.db
 
-# Any random knowledge/temp files
-*knowledge_template.yaml
+# Any random temp files
+*.tmp
