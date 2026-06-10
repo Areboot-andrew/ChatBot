@@ -73,8 +73,39 @@ async def dashboard(
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
 ):
+    import httpx
+    from app.config import settings
+    
     tenants = await get_all_tenants(db)
-    statuses = {"lmstudio": "OK", "postgres": "OK", "redis": "OK", "qdrant": "OK"}
+    
+    # Real LM Studio Check
+    lmstudio_status = "ERROR"
+    loaded_models = "Немає підключення"
+    url = settings.LMSTUDIO_URL.replace('/v1', '') if settings.LMSTUDIO_URL.endswith('/v1') else settings.LMSTUDIO_URL
+    
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(f"{url}/v1/models")
+            if resp.status_code == 200:
+                lmstudio_status = "OK"
+                data = resp.json()
+                models = [m.get("id") for m in data.get("data", [])]
+                if models:
+                    loaded_models = ", ".join(models)
+                else:
+                    loaded_models = "Моделі не завантажені"
+    except Exception as e:
+        loaded_models = "Недоступно (Check URL/Network)"
+
+    statuses = {
+        "lmstudio": lmstudio_status, 
+        "postgres": "OK", 
+        "redis": "OK", 
+        "qdrant": "OK",
+        "lmstudio_models": loaded_models,
+        "lmstudio_url": settings.LMSTUDIO_URL
+    }
+    
     return templates.TemplateResponse(request=request, name="dashboard.html", context={
         "request": request, "user": user, "tenants": tenants,
         "current_tenant_id": tenant_id, "statuses": statuses
