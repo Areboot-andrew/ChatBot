@@ -695,26 +695,44 @@ async def test_chat_api(
     res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res.scalars().first()
     
-    # 2. Fetch Data (SQL Prices or Q&A)
-    # Simple keyword match to simulate pipeline
+    # 2. Fetch Data (SQL Prices, Q&A, or Microservices)
+    # Simple logic router for debug demonstration
     from app.models.services import ServicePrice
-    res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id, ServicePrice.name.ilike(f"%{msg.text.split()[0]}%")).limit(3))
-    prices = res_price.scalars().all()
     
-    if prices:
-        price_texts = [f"{p.name} - {p.price}" for p in prices]
-        debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Знайдено", "details": "\n".join(price_texts), "time": "0.05s"})
+    # 2.1 Microservices Mock
+    if "статус" in msg.text.lower() or "ремонт" in msg.text.lower():
+        debug_trace[0]["details"] = f"Інтент: CHECK_REPAIR_STATUS"
+        debug_trace.append({"step": "Виклик Мікросервісу (CRM API)", "status": "Очікування...", "details": f"GET /api/v1/orders?phone=...", "time": "-"})
+        
+        # Simulate network delay for microservice
+        time.sleep(0.3)
+        debug_trace[-1]["status"] = "Знайдено"
+        debug_trace[-1]["details"] = "Отримано дані з CRM:\nЗамовлення #1024: В процесі діагностики.\nОчікувана дата: Завтра."
+        debug_trace[-1]["time"] = "0.31s"
+        
         qa_facts = []
+        prices = []
+        sys_prompt_addition = "\nДані з внутрішньої CRM системи:\n- Замовлення: телефон Samsung\n- Статус: В процесі діагностики"
     else:
-        debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.02s"})
-        res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(3))
-        qa_facts = res_qa.scalars().all()
-        debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": f"Завантажено {len(qa_facts)} фрагментів.", "time": "0.12s"})
+        # 2.2 SQL / Qdrant Fallbacks
+        res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id, ServicePrice.name.ilike(f"%{msg.text.split()[0]}%")).limit(3))
+        prices = res_price.scalars().all()
+        
+        sys_prompt_addition = ""
+        if prices:
+            price_texts = [f"{p.name} - {p.price}" for p in prices]
+            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Знайдено", "details": "\n".join(price_texts), "time": "0.05s"})
+            qa_facts = []
+            sys_prompt_addition = "\nДодаткова інформація з бази прайсів:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+        else:
+            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.02s"})
+            res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(3))
+            qa_facts = res_qa.scalars().all()
+            debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": f"Завантажено {len(qa_facts)} фрагментів.", "time": "0.12s"})
     
     from app.core.prompt_builder import build_system_prompt
     sys_prompt = build_system_prompt(settings, qa_facts)
-    if prices:
-        sys_prompt += "\n\nДодаткова інформація з бази прайсів:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+    sys_prompt += sys_prompt_addition
     
     temp = float(settings.temperature) if settings and settings.temperature else 0.7
     
