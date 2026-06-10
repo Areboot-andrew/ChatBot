@@ -791,6 +791,7 @@ async def test_chat_api(
         debug_trace[-1]["time"] = "0.31s"
         
         qa_facts = []
+        rag_docs = []
         prices = []
         sys_prompt_addition = "\nДані з внутрішньої CRM системи:\n- Замовлення: телефон Samsung\n- Статус: В процесі діагностики"
     else:
@@ -799,6 +800,8 @@ async def test_chat_api(
         prices = res_price.scalars().all()
         
         sys_prompt_addition = ""
+        rag_docs = []
+        
         if prices:
             price_texts = [f"{p.name} - {p.price}" for p in prices]
             debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Знайдено", "details": "\n".join(price_texts), "time": "0.05s"})
@@ -806,12 +809,22 @@ async def test_chat_api(
             sys_prompt_addition = "\nДодаткова інформація з бази прайсів:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
         else:
             debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.02s"})
+            
+            # 2.2.1 Search SQL QA
             res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(3))
             qa_facts = res_qa.scalars().all()
-            debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": f"Завантажено {len(qa_facts)} фрагментів.", "time": "0.12s"})
+            
+            # 2.2.2 Search Qdrant RAG
+            rag_start = time.time()
+            from app.core.rag import search_knowledge
+            rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
+            rag_time = round(time.time() - rag_start, 2)
+            
+            doc_details = f"Знайдено Q&A: {len(qa_facts)}. Знайдено RAG: {len(rag_docs)} фрагментів."
+            debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": doc_details, "time": f"{rag_time}s"})
     
     from app.core.prompt_builder import build_system_prompt
-    sys_prompt = build_system_prompt(settings, qa_facts)
+    sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
     sys_prompt += sys_prompt_addition
     
     temp = float(settings.temperature) if settings and settings.temperature else 0.7

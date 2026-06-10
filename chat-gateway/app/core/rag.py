@@ -65,3 +65,37 @@ async def process_and_vectorize_document(tenant_id: str, doc_id: str, title: str
             
     except Exception as e:
         logger.error(f"Error vectorizing document {doc_id}: {e}")
+
+async def search_knowledge(query: str, tenant_id: str, top_k: int = 3, threshold: float = 0.5) -> List[str]:
+    """
+    Шукає релевантні шматки тексту в Qdrant.
+    Повертає список знайдених фрагментів (текстів).
+    """
+    from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+    
+    vector = await embed(query)
+    if not vector:
+        logger.warning("Could not generate embedding for query.")
+        return []
+
+    try:
+        results = await qdrant.search(
+            collection_name="knowledge_base",
+            query_vector=vector,
+            query_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="tenant_id",
+                        match=MatchValue(value=str(tenant_id))
+                    )
+                ]
+            ),
+            limit=top_k,
+            score_threshold=threshold
+        )
+        
+        # Повертаємо знайдені тексти
+        return [hit.payload.get("content", "") for hit in results if hit.payload]
+    except Exception as e:
+        logger.error(f"Qdrant search error: {e}")
+        return []

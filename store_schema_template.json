@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Каталог комп'ютерних комплектуючих (kompi.com.ua)",
+  "type": "object",
+  "properties": {
+    "store_name": {
+      "type": "string",
+      "default": "Kompi"
+    },
+    "service_center": {
+      "type": "string",
+      "default": "Texno.Plus"
+    },
+    "catalog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Артикул (SKU)"
+          },
+          "category": {
+            "type": "string",
+            "description": "Наприклад: 'Материнські плати', 'Процесори', 'Відеокарти', 'Оперативна пам'ять'"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "in_stock": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "specifications": {
+            "type": "object",
+            "description": "Ключові параметри для перевірки сумісності комплектуючих",
+            "properties": {
+              "brand": { "type": "string" },
+              "socket": { 
+                "type": "string",
+                "description": "Для процесорів та материнських плат (напр., 'AM5', 'LGA1700')"
+              },
+              "chipset": { 
+                "type": "string",
+                "description": "Для материнських плат (напр., 'B650', 'Z790')"
+              },
+              "memory_type": { 
+                "type": "string",
+                "description": "Тип пам'яті (напр., 'DDR4', 'DDR5')"
+              },
+              "form_factor": { 
+                "type": "string",
+                "description": "Форм-фактор (ATX, Micro-ATX, Mini-ITX)"
+              },
+              "power_w": {
+                "type": "number",
+                "description": "Споживання (TDP) або потужність БЖ (напр., 65, 850)"
+              },
+              "interface": {
+                "type": "string",
+                "description": "Інтерфейс підключення (напр., 'PCIe 4.0 x16', 'M.2 PCIe 4.0')"
+              }
+            },
+            "additionalProperties": true
+          },
+          "product_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "product_name",
+          "price",
+          "in_stock",
+          "specifications",
+          "product_url"
+        ]
+      }
+    }
+  }
+}

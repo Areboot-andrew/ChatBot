@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from app.models.tenant import BotSetting
 from app.models.knowledge import QaPair
 
-def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None) -> str:
+def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None, rag_docs: List[str] = None) -> str:
     """
     Builds the final system prompt by injecting Business Rules, Marketing Protocols,
     Escalation Policies, and found Facts (Q&A/RAG).
@@ -32,13 +32,21 @@ def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None) -> 
         parts.append(f"Настанова: {settings.escalation_prompt}")
         parts.append("")
         
-    # 4. Inject Knowledge Base Facts (Q&A / RAG Context)
+    # 4. Inject Knowledge Base Facts (Q&A)
     if qa_facts and len(qa_facts) > 0:
-        parts.append("--- [ФАКТИ ТА БАЗА ЗНАНЬ] ---")
-        parts.append("Використай наступні факти для відповіді на запитання. Це сухі факти або приклади, не копіюй їх дослівно, а вплітай у свою відповідь природно:")
+        parts.append("--- [ТОЧНІ ФАКТИ (Q&A)] ---")
+        parts.append("Використай ці затверджені відповіді:")
         for qa in qa_facts:
-            parts.append(f"- Питання клієнта: {qa.question}")
-            parts.append(f"  Факт/Інформація: {qa.answer}")
+            parts.append(f"- Питання: {qa.question}")
+            parts.append(f"  Відповідь: {qa.answer}")
+        parts.append("")
+        
+    # 5. Inject RAG Documents
+    if rag_docs and len(rag_docs) > 0:
+        parts.append("--- [ДОКУМЕНТИ / БАЗА ЗНАНЬ] ---")
+        parts.append("Використай наступні уривки документів для формування відповіді:")
+        for i, doc in enumerate(rag_docs):
+            parts.append(f"[Фрагмент {i+1}]: {doc}")
         parts.append("")
         
     parts.append("--- [КІНЕЦЬ СИСТЕМНИХ ІНСТРУКЦІЙ] ---")
