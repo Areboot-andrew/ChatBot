@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вхід - Chat Gateway</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: tailwind.colors.slate,
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-950 flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-md p-8 space-y-8 bg-gray-900 rounded-2xl shadow-xl border border-gray-800">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500 mb-2">
+                🤖 Chat Gateway
+            </h1>
+            <p class="text-gray-400 text-sm">Введіть свої дані для доступу</p>
+        </div>
+
+        {% if error %}
+        <div class="p-4 mb-4 text-sm text-red-400 rounded-lg bg-red-900/20 border border-red-800/50" role="alert">
+            <span class="font-medium">Помилка!</span> {{ error }}
+        </div>
+        {% endif %}
+
+        <form class="space-y-6" method="POST" action="/admin/login">
+            <div>
+                <label for="username" class="block mb-2 text-sm font-medium text-gray-300">Логін</label>
+                <input type="text" name="username" id="username" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="admin" required>
+            </div>
+            <div>
+                <label for="password" class="block mb-2 text-sm font-medium text-gray-300">Пароль</label>
+                <input type="password" name="password" id="password" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="••••••••" required>
+            </div>
+            
+            <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 focus:ring-4 focus:outline-none focus:ring-blue-800 font-medium rounded-lg text-sm px-5 py-3 text-center transition-all duration-300 shadow-lg shadow-blue-900/50">
+                Увійти
+            </button>
+        </form>
+    </div>
+
+</body>
+</html>

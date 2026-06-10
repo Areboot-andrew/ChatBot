@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{% if channel %}Редагувати канал{% else %}Додати канал{% endif %}{% endblock %}
+{% block header %}{% if channel %}Редагувати: {{ channel.name }}{% else %}Новий канал{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-sm">
+    <form method="POST" action="{% if channel %}/admin/channels/{{ channel.id }}/edit{% else %}/admin/channels/create{% endif %}" class="space-y-6">
+        
+        <div>
+            <label for="name" class="block mb-2 text-sm font-medium text-gray-300">Внутрішня назва</label>
+            <input type="text" name="name" id="name" value="{{ channel.name if channel else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Telegram Основний" required>
+        </div>
+
+        <div>
+            <label for="type" class="block mb-2 text-sm font-medium text-gray-300">Тип каналу</label>
+            <select name="type" id="type" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
+                <option value="telegram" {% if channel and channel.type == 'telegram' %}selected{% endif %}>Telegram</option>
+                <option value="viber" {% if channel and channel.type == 'viber' %}selected{% endif %}>Viber</option>
+                <option value="webchat" {% if channel and channel.type == 'webchat' %}selected{% endif %}>Webchat</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="credentials" class="block mb-2 text-sm font-medium text-gray-300">Токен (JSON або рядок)</label>
+            <input type="text" name="credentials" id="credentials" value="{{ channel.credentials.token if channel and 'token' in channel.credentials else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" required>
+        </div>
+
+        <div>
+            <label for="greeting" class="block mb-2 text-sm font-medium text-gray-300">Привітання бота (опціонально)</label>
+            <textarea name="greeting" id="greeting" rows="2" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Вітаю! Чим можу допомогти?">{{ channel.greeting if channel else '' }}</textarea>
+        </div>
+
+        <div class="flex items-center mt-4">
+            <input type="checkbox" name="enabled" id="enabled" value="true" {% if not channel or channel.enabled %}checked{% endif %} class="w-4 h-4 text-blue-600 bg-gray-800 border-gray-700 rounded focus:ring-blue-600 focus:ring-2">
+            <label for="enabled" class="ml-2 text-sm font-medium text-gray-300">Активний</label>
+        </div>
+
+        <div class="flex items-center space-x-4 pt-4 border-t border-gray-800">
+            <button type="submit" class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center transition">
+                Зберегти
+            </button>
+            <a href="/admin/channels" class="text-gray-400 hover:text-white font-medium text-sm px-5 py-2.5 transition">
+                Скасувати
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

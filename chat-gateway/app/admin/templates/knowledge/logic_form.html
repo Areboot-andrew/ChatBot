@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}{% if logic %}Редагувати Логіку{% else %}Додати Логіку{% endif %}{% endblock %}
+{% block header %}{% if logic %}Редагувати Інтент: {{ logic.label }}{% else %}Новий Інтент (Схема Логіки){% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-sm">
+    <form method="POST" action="{% if logic %}/admin/knowledge/logic/{{ logic.id }}/edit{% else %}/admin/knowledge/logic/create{% endif %}" class="space-y-6">
+        
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label for="label" class="block mb-2 text-sm font-medium text-gray-300">Назва (зрозуміла)</label>
+                <input type="text" name="label" id="label" value="{{ logic.label if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Запит статусу ремонту" required onkeyup="generateCode(this.value)">
+            </div>
+            <div>
+                <label for="code" class="block mb-2 text-sm font-medium text-gray-300">Внутрішній Код</label>
+                <p class="text-[10px] text-gray-500 mb-1 absolute -mt-3">Генерується автоматично, для внутрішньої роботи системи.</p>
+                <input type="text" name="code" id="code" value="{{ logic.code if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="CHECK_REPAIR_STATUS" required>
+            </div>
+        </div>
+
+        <div>
+            <label for="intent_patterns" class="block mb-2 text-sm font-medium text-gray-300">Тригери / Приклади фраз (через кому)</label>
+            <p class="text-xs text-gray-500 mb-2"><strong>Не хвилюйтесь про помилки чи мову!</strong> Бот використовує Штучний Інтелект. Вам достатньо написати 2-3 приклади (напр: "статус ремонту", "ціна"), і ШІ сам зрозуміє синоніми, помилки ("скока стоїть") або російську мову.</p>
+            <input type="text" name="intent_patterns" id="intent_patterns" value="{{ logic.intent_patterns|join(', ') if logic and logic.intent_patterns else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
+        </div>
+
+        <div class="p-4 bg-gray-950 border border-gray-800 rounded-lg space-y-4">
+            <h4 class="text-sm font-semibold text-gray-200">Ланцюг обробки (Як шукати інформацію)</h4>
+            
+            <div>
+                <label for="handler" class="block mb-2 text-xs font-medium text-gray-400">1. Основна дія (Джерело даних)</label>
+                <select name="handler" id="handler" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
+                    <option value="RAG_SEARCH" {% if logic and logic.handler == 'RAG_SEARCH' %}selected{% endif %}>Пошук у локальній Базі Знань (Q&A / Мануали)</option>
+                    <option value="PRODUCT_SEARCH" {% if logic and logic.handler == 'PRODUCT_SEARCH' %}selected{% endif %}>Пошук по Прайсу / Товарах (SQL)</option>
+                    <option value="CHECK_REPAIR" {% if logic and logic.handler == 'CHECK_REPAIR' %}selected{% endif %}>Перевірка статусу ремонту (CRM)</option>
+                    <option value="GOOGLE_SEARCH" {% if logic and logic.handler == 'GOOGLE_SEARCH' %}selected{% endif %}>Одразу шукати в Інтернеті (Google/Serper)</option>
+                    <option value="NO_SEARCH" {% if logic and logic.handler == 'NO_SEARCH' %}selected{% endif %}>Не шукати, просто відповісти (Для звичайних розмов)</option>
+                </select>
+            </div>
+
+            <div class="hidden">
+                <input type="text" name="target_category" id="target_category" value="{{ logic.meta.target_category if logic and logic.meta else '' }}">
+            </div>
+
+            <div>
+                <label for="fallback_action" class="block mb-2 text-xs font-medium text-gray-400">3. Що робити, якщо інформацію НЕ ЗНАЙДЕНО?</label>
+                <select name="fallback_action" id="fallback_action" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <option value="google" {% if logic and logic.meta and logic.meta.fallback_action == 'google' %}selected{% endif %}>Шукати в Інтернеті (Google/Serper)</option>
+                    <option value="escalate" {% if logic and logic.meta and logic.meta.fallback_action == 'escalate' %}selected{% endif %}>Запустити Політику Ескалації (Кликати менеджера)</option>
+                    <option value="decline" {% if logic and logic.meta and logic.meta.fallback_action == 'decline' %}selected{% endif %}>Просто відмовити ("На жаль, не знайшов")</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex items-center mt-4">
+            <input type="checkbox" name="enabled" id="enabled" value="true" {% if not logic or logic.enabled %}checked{% endif %} class="w-4 h-4 text-blue-600 bg-gray-800 border-gray-700 rounded focus:ring-blue-600 focus:ring-2">
+            <label for="enabled" class="ml-2 text-sm font-medium text-gray-300">Активний</label>
+        </div>
+
+        <div class="flex items-center space-x-4 pt-4 border-t border-gray-800">
+            <button type="submit" class="text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-sm px-5 py-2.5 transition">Зберегти</button>
+            <a href="/admin/knowledge" class="text-gray-400 hover:text-white font-medium text-sm transition">Скасувати</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function generateCode(text) {
+    if (!document.getElementById('code').value || document.getElementById('code').value === document.getElementById('code').dataset.lastGenerated) {
+        // Transliteration map
+        const uaToEn = {
+            'а':'a', 'б':'b', 'в':'v', 'г':'h', 'ґ':'g', 'д':'d', 'е':'e', 'є':'ye', 'ж':'zh',
+            'з':'z', 'и':'y', 'і':'i', 'ї':'yi', 'й':'y', 'к':'k', 'л':'l', 'м':'m', 'н':'n',
+            'о':'o', 'п':'p', 'р':'r', 'с':'s', 'т':'t', 'у':'u', 'ф':'f', 'х':'kh', 'ц':'ts',
+            'ч':'ch', 'ш':'sh', 'щ':'shch', 'ь':'', 'ю':'yu', 'я':'ya'
+        };
+        let slug = text.toLowerCase().split('').map(c => uaToEn[c] || c).join('');
+        slug = slug.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase();
+        
+        document.getElementById('code').value = slug;
+        document.getElementById('code').dataset.lastGenerated = slug;
+    }
+}
+</script>
+{% endblock %}

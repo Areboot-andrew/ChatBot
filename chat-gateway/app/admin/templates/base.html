@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Адмінка{% endblock %} - Chat Gateway</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: tailwind.colors.slate,
+                    }
+                }
+            }
+        }
+    </script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-950 text-gray-200 h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+        <div class="h-16 flex items-center px-6 border-b border-gray-800">
+            <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500">
+                🤖 Chat Gateway
+            </span>
+        </div>
+        
+        <nav class="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+            <a href="/admin/dashboard" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-xl transition group">
+                <span class="mr-3 text-xl group-hover:text-blue-500 transition">📊</span>
+                <span class="font-medium">Дашборд</span>
+            </a>
+            <a href="/admin/tenants" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-xl transition group">
+                <span class="mr-3 text-xl group-hover:text-purple-500 transition">🏢</span>
+                <span class="font-medium">Бізнеси (Тенанти)</span>
+            </a>
+            <a href="/admin/channels" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-xl transition group">
+                <span class="mr-3 text-xl group-hover:text-green-500 transition">🔌</span>
+                <span class="font-medium">Канали (Telegram, Web)</span>
+            </a>
+            <a href="/admin/knowledge" class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg group transition-colors">
+                <svg class="w-5 h-5 text-gray-500 group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                База Знань та Логіка
+            </a>
+            
+            <a href="/admin/knowledge/prices" class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg group transition-colors">
+                <svg class="w-5 h-5 text-gray-500 group-hover:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Прайси та Послуги
+            </a>
+
+            <a href="/admin/settings" class="flex items-center gap-3 px-4 py-2 text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg group transition-colors">
+                <span class="mr-3 text-xl group-hover:text-red-500 transition">⚙️</span>
+                <span class="font-medium">Налаштування Бота</span>
+            </a>
+            <a href="/admin/test-chat" class="flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-xl transition group">
+                <span class="mr-3 text-xl group-hover:text-teal-500 transition">💬</span>
+                <span class="font-medium">Тест-чат (Пісочниця)</span>
+            </a>
+        </nav>
+        
+        <div class="p-4 border-t border-gray-800">
+            <a href="/admin/logout" class="flex items-center justify-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-400 hover:text-white transition">
+                <span>🚪</span>
+                <span>Вийти</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col h-screen overflow-hidden">
+        
+        <!-- Top header -->
+        <header class="h-16 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-8">
+            <h1 class="text-xl font-semibold text-gray-100">{% block header %}{% endblock %}</h1>
+            
+            <div class="flex items-center space-x-6">
+                <!-- Tenant Selector -->
+                <form id="tenant-form" hx-post="/admin/set-tenant" hx-trigger="change" class="flex items-center">
+                    <label class="text-sm text-gray-400 mr-2">Тенант:</label>
+                    <select name="tenant_id" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2">
+                        <option value="">-- Виберіть бізнес --</option>
+                        {% for t in tenants %}
+                        <option value="{{ t.id }}" {% if current_tenant_id|string == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center text-sm font-bold">
+                        {{ user.username[0]|upper }}
+                    </div>
+                    <span class="text-sm text-gray-300">{{ user.username }}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main scrollable area -->
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-950 p-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+</body>
+</html>

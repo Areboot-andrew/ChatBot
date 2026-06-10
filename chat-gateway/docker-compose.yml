@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: .
+    container_name: chat-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LMSTUDIO_URL=${LMSTUDIO_URL:-http://192.168.1.84:1234/v1}
+      - LLM_MODEL=${LLM_MODEL:-gemma-4}
+      - EMBED_MODEL=${EMBED_MODEL:-bge-m3}
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/chatbot
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - SECRET_KEY=${SECRET_KEY:-super-secret-key-change-me-in-production}
+      - FERNET_KEY=${FERNET_KEY:-super-secret-fernet-key-change-me}
+      - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-admin123}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://bot.texno.plus}
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+    networks:
+      - chat-network
+
+  worker:
+    build: .
+    container_name: chat-worker
+    command: arq app.workers.tasks.WorkerSettings
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - LMSTUDIO_URL=${LMSTUDIO_URL:-http://192.168.1.84:1234/v1}
+      - LLM_MODEL=${LLM_MODEL:-gemma-4}
+      - EMBED_MODEL=${EMBED_MODEL:-bge-m3}
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/chatbot
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
+    networks:
+      - chat-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: chat-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=chatbot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chat-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - chat-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: chat-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - chat-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+
+networks:
+  chat-network:
+    driver: bridge

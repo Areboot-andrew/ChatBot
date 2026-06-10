@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}База Знань та Логіка{% endblock %}
+{% block header %}База Знань ({{ tenant.name if tenant else 'Виберіть бізнес' }}){% endblock %}
+
+{% block content %}
+{% if not current_tenant_id %}
+<div class="bg-blue-900/20 border border-blue-800/50 text-blue-400 p-4 rounded-lg">
+    Будь ласка, виберіть бізнес (тенант) у верхньому правому куті, щоб керувати його базою знань.
+</div>
+{% else %}
+<!-- Tabs -->
+<div class="mb-6 border-b border-gray-800">
+    <ul class="flex flex-wrap -mb-px text-sm font-medium text-center text-gray-400" id="knowledgeTabs">
+        <li class="mr-2">
+            <button class="inline-block p-4 border-b-2 border-blue-500 text-blue-500 rounded-t-lg active-tab" data-tab="qa">Питання-Відповідь (Q&A)</button>
+        </li>
+        <li class="mr-2">
+            <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="logic">Схема Логіки (Інтенти)</button>
+        </li>
+        <li class="mr-2">
+            <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="docs">Документи (Мануали)</button>
+        </li>
+    </ul>
+</div>
+
+<!-- Tab Content: Q&A -->
+<div id="tab-qa" class="tab-pane">
+    <div class="flex justify-between items-center mb-4">
+        <p class="text-sm text-gray-400">Прямі відповіді на часті запитання. Бот використовує їх як найвищий пріоритет.</p>
+        <a href="/admin/knowledge/qa/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати Q&A</a>
+    </div>
+    
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm">
+        <table class="w-full text-sm text-left text-gray-400">
+            <thead class="text-xs text-gray-300 uppercase bg-gray-800/50">
+                <tr>
+                    <th class="px-6 py-3">Питання</th>
+                    <th class="px-6 py-3">Відповідь</th>
+                    <th class="px-6 py-3">Дії</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800">
+                {% for qa in qa_pairs %}
+                <tr class="hover:bg-gray-800/30 transition">
+                    <td class="px-6 py-4 font-medium text-gray-200">{{ qa.question }}</td>
+                    <td class="px-6 py-4 truncate max-w-xs">{{ qa.answer }}</td>
+                    <td class="px-6 py-4"><a href="/admin/knowledge/qa/{{ qa.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="px-6 py-8 text-center text-gray-500">Немає збережених відповідей.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab Content: Logic Schema -->
+<div id="tab-logic" class="tab-pane hidden">
+    <div class="flex justify-between items-center mb-4">
+        <p class="text-sm text-gray-400">Логічні схеми роутингу. Визначають, як бот реагує на конкретні ключові слова (патерни).</p>
+        <a href="/admin/knowledge/logic/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати Логіку</a>
+    </div>
+    
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm">
+        <table class="w-full text-sm text-left text-gray-400">
+            <thead class="text-xs text-gray-300 uppercase bg-gray-800/50">
+                <tr>
+                    <th class="px-6 py-3">Назва (Код)</th>
+                    <th class="px-6 py-3">Тригери (Патерни)</th>
+                    <th class="px-6 py-3">Дія (Handler)</th>
+                    <th class="px-6 py-3">Дії</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800">
+                {% for logic in logic_schemas %}
+                <tr class="hover:bg-gray-800/30 transition">
+                    <td class="px-6 py-4 font-medium text-gray-200">{{ logic.label }} <span class="text-xs text-gray-500 block">{{ logic.code }}</span></td>
+                    <td class="px-6 py-4 text-xs">{{ logic.intent_patterns | join(', ') }}</td>
+                    <td class="px-6 py-4">
+                        <span class="bg-purple-900/30 text-purple-400 border border-purple-800/50 px-2 py-1 rounded text-xs">{{ logic.handler }}</span>
+                    </td>
+                    <td class="px-6 py-4"><a href="/admin/knowledge/logic/{{ logic.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">Немає логічних схем.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab Content: Documents -->
+<div id="tab-docs" class="tab-pane hidden">
+    <div class="flex justify-between items-center mb-4">
+        <p class="text-sm text-gray-400">Текстові файли, PDF, DOCX (RAG). Бот використовуватиме їх для відповідей на складні питання.</p>
+        <button type="button" onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Завантажити Файл</button>
+    </div>
+    
+    <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm">
+        <table class="w-full text-sm text-left text-gray-400">
+            <thead class="text-xs text-gray-300 uppercase bg-gray-800/50">
+                <tr>
+                    <th class="px-6 py-3">Назва</th>
+                    <th class="px-6 py-3">Файл</th>
+                    <th class="px-6 py-3">Категорія</th>
+                    <th class="px-6 py-3">Статус</th>
+                    <th class="px-6 py-3">Дії</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-800">
+                {% for doc in documents %}
+                <tr class="hover:bg-gray-800/30 transition">
+                    <td class="px-6 py-4 font-medium text-gray-200">{{ doc.title }}</td>
+                    <td class="px-6 py-4 text-xs">{{ doc.filename }}</td>
+                    <td class="px-6 py-4 text-xs">{{ doc.category or '-' }}</td>
+                    <td class="px-6 py-4">
+                        {% if doc.status == 'indexed' %}
+                        <span class="text-green-500 bg-green-500/10 px-2 py-1 rounded text-xs">Проіндексовано</span>
+                        {% elif doc.status == 'processing' %}
+                        <span class="text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded text-xs">В процесі</span>
+                        {% else %}
+                        <span class="text-red-500 bg-red-500/10 px-2 py-1 rounded text-xs">{{ doc.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4"><a href="#" class="text-red-500 hover:underline">Видалити</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Немає завантажених документів.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Upload Modal -->
+<div id="uploadModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-xl w-full max-w-md">
+        <div class="flex justify-between items-center p-4 border-b border-gray-800">
+            <h3 class="text-lg font-semibold text-gray-200">Завантажити Документ</h3>
+            <button onclick="document.getElementById('uploadModal').classList.add('hidden')" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <form action="/admin/knowledge/docs/upload" method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Файл (PDF, DOCX, TXT)</label>
+                <input type="file" name="file" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg cursor-pointer bg-gray-800 focus:outline-none" required>
+            </div>
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Назва (зрозуміла)</label>
+                <input type="text" name="title" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Інструкція по поверненню">
+            </div>
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Категорія (опціонально)</label>
+                <input type="text" name="category" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Напр: warranty">
+            </div>
+            <div class="pt-4 flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('uploadModal').classList.add('hidden')" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition">Скасувати</button>
+                <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">Завантажити</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('#knowledgeTabs button').forEach(button => {
+        button.addEventListener('click', () => {
+            // Reset styles
+            document.querySelectorAll('#knowledgeTabs button').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-500', 'active-tab');
+                btn.classList.add('border-transparent');
+            });
+            // Hide all tabs
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden'));
+            
+            // Activate clicked
+            button.classList.add('border-blue-500', 'text-blue-500', 'active-tab');
+            button.classList.remove('border-transparent');
+            const target = button.getAttribute('data-tab');
+            document.getElementById('tab-' + target).classList.remove('hidden');
+        });
+    });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="flex items-center justify-between mb-8">
+    <h1 class="text-2xl font-bold text-gray-100">Прайси та Послуги (Каталог)</h1>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    
+    <!-- Ліва частина: Інтерфейс -->
+    <div class="lg:col-span-2 space-y-6">
+        
+        <!-- Блок імпорту YAML -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт Каталогу (YAML)</h2>
+            <p class="text-sm text-gray-400 mb-4">
+                Тут ви можете завантажити ваш файл `knowledge_template.yaml`. Він автоматично оновить всі прайси, категорії та питання-відповіді.
+            </p>
+            <form action="/admin/knowledge/prices/import" method="POST" enctype="multipart/form-data" class="flex gap-4 items-center">
+                <input type="file" name="file" accept=".yaml,.yml" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg cursor-pointer bg-gray-800 focus:outline-none p-2">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">
+                    Імпортувати
+                </button>
+            </form>
+        </div>
+
+        <!-- Таблиця категорій та прайсів -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6 overflow-hidden">
+            <h2 class="text-lg font-semibold text-gray-200 mb-4">Поточний Каталог</h2>
+            
+            {% if not categories %}
+                <div class="text-center py-8 text-gray-500">
+                    Каталог порожній. Будь ласка, імпортуйте YAML файл.
+                </div>
+            {% else %}
+                <div class="space-y-6">
+                    {% for cat in categories %}
+                        <div class="border border-gray-800 rounded-lg bg-gray-950 p-4 relative group">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="text-md font-bold text-gray-200">{{ cat.title }} <span class="text-xs text-gray-500 font-normal">({{ cat.slug }})</span></h3>
+                                <a href="/admin/knowledge/prices/{{ cat.id }}/edit" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition opacity-0 group-hover:opacity-100">
+                                    Редагувати
+                                </a>
+                            </div>
+                            <p class="text-xs text-gray-400 mb-4">{{ cat.description }}</p>
+                            
+                            <table class="w-full text-sm text-left text-gray-400">
+                                <thead class="text-xs text-gray-500 uppercase bg-gray-900">
+                                    <tr>
+                                        <th class="px-4 py-2">Послуга</th>
+                                        <th class="px-4 py-2">Ціна</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for price in cat.prices %}
+                                    <tr class="border-b border-gray-800 hover:bg-gray-900/50">
+                                        <td class="px-4 py-2">{{ price.name }}</td>
+                                        <td class="px-4 py-2 text-blue-400 font-medium">{{ price.price }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Права частина: Пояснення "Пайплайн / Логіка" -->
+    <div class="space-y-6">
+        <div class="bg-gray-900 border border-blue-900/50 rounded-xl shadow-sm p-6 relative overflow-hidden">
+            <!-- Декоративний фон -->
+            <div class="absolute top-0 right-0 w-32 h-32 bg-blue-600/5 rounded-full blur-2xl"></div>
+            
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Як це працює (Pipeline)
+            </h3>
+            
+            <div class="space-y-4 text-sm text-gray-300 relative border-l-2 border-gray-800 ml-2 pl-4">
+                
+                <div class="relative">
+                    <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
+                    <p class="font-medium text-gray-200">1. Редагування YAML</p>
+                    <p class="text-xs text-gray-500 mt-1">Ви відкриваєте `knowledge_template.yaml` на комп'ютері. Змінюєте ціни або додаєте нові питання.</p>
+                </div>
+
+                <div class="relative">
+                    <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
+                    <p class="font-medium text-gray-200">2. Імпорт в систему</p>
+                    <p class="text-xs text-gray-500 mt-1">Файл завантажується тут. Система оновлює SQL таблиці (ServiceCategory, ServicePrice) та таблицю питань-відповідей (QaPair).</p>
+                </div>
+
+                <div class="relative">
+                    <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-gray-900"></div>
+                    <p class="font-medium text-purple-300">3. Аналіз наміру (Intent Router)</p>
+                    <p class="text-xs text-gray-400 mt-1">Коли клієнт питає <i>"Скільки коштує заміна екрану?"</i>, бот розуміє намір (CHECK_PRICE) і йде шукати в SQL.</p>
+                </div>
+
+                <div class="relative">
+                    <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
+                    <p class="font-medium text-green-300">4. Точна Відповідь</p>
+                    <p class="text-xs text-gray-400 mt-1">Бот знаходить конкретну послугу, підтягує точну ціну (наприклад 1500 грн) і формулює живу відповідь клієнту без галюцинацій.</p>
+                </div>
+            </div>
+            
+            <div class="mt-6 p-3 bg-gray-800/50 rounded-lg border border-gray-800">
+                <p class="text-xs text-gray-400">
+                    <span class="text-orange-400 font-semibold">Чому не Qdrant?</span> 
+                    Векторна база Qdrant погано підходить для <i>точних чисел</i>. Її ми використовуємо для складних інструкцій ("що робити якщо..."). А прайси зберігаємо в чіткій таблиці.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

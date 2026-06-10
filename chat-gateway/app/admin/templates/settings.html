@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Налаштування бота{% endblock %}
+{% block header %}Налаштування ({{ tenant.name if tenant else 'Виберіть бізнес' }}){% endblock %}
+
+{% block content %}
+{% if not current_tenant_id %}
+<div class="bg-blue-900/20 border border-blue-800/50 text-blue-400 p-4 rounded-lg">
+    Будь ласка, виберіть бізнес (тенант) у верхньому правому куті, щоб редагувати його налаштування.
+</div>
+{% else %}
+<div class="max-w-4xl bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-sm">
+    <form method="POST" action="/admin/settings" class="space-y-8">
+        
+        <!-- System Prompt -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Системний Промпт</h3>
+            <p class="text-sm text-gray-400 mb-3">Головна інструкція для LLM. Визначає персону, тон та базові правила поведінки.</p>
+            <textarea name="system_prompt" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" required>{{ settings.system_prompt if settings else 'Ти корисний асистент.' }}</textarea>
+        </div>
+
+        <!-- LLM Params -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Параметри генерації</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="temperature" class="block mb-2 text-sm font-medium text-gray-300">
+                        Температура (<span id="temp_val">{{ settings.temperature if settings else '0.7' }}</span>)
+                    </label>
+                    <input type="range" name="temperature" id="temperature" min="0" max="1" step="0.1" value="{{ settings.temperature if settings else '0.7' }}" oninput="document.getElementById('temp_val').innerText = this.value" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <p class="mt-1 text-xs text-gray-500">0 = чіткі відповіді, 1 = креативні.</p>
+                </div>
+                <div>
+                    <label for="max_tokens" class="block mb-2 text-sm font-medium text-gray-300">Максимум токенів</label>
+                    <input type="number" name="max_tokens" id="max_tokens" value="{{ settings.max_tokens if settings else '1024' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+            </div>
+        </div>
+
+        <!-- Business Rules -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Бізнес-правила (Жорсткі обмеження)</h3>
+            <p class="text-sm text-gray-400 mb-3">Вкажіть правила, які бот ніколи не повинен порушувати (наприклад: "Ми не ремонтуємо принтери" або "Повернення тільки протягом 14 днів"). Вони будуть вшиті як жорсткі інструкції.</p>
+            <textarea name="business_rules" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Ми не ремонтуємо залиті водою пристрої без повної передоплати.">{{ settings.business_rules if settings and settings.business_rules else '' }}</textarea>
+        </div>
+
+        <!-- Marketing Protocols -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Маркетинг та Крос-сейл (Upsell)</h3>
+            <p class="text-sm text-gray-400 mb-3">Інструкції для допродажів. Наприклад: "Якщо клієнт купує відеокарту, ненав'язливо запитай, чи вистачить йому потужності блоку живлення". Бот застосує їх природно.</p>
+            <textarea name="marketing_rules" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Пропонуй чистку ноутбука, якщо клієнт скаржиться на перегрів.">{{ settings.marketing_rules if settings and settings.marketing_rules else '' }}</textarea>
+        </div>
+
+        <!-- Escalation Policy -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Політика Ескалації (Що робити, коли немає відповіді)</h3>
+            <p class="text-sm text-gray-400 mb-3">Як бот повинен поводитись, коли в базі знань або прайсі немає інформації.</p>
+            <div class="space-y-4">
+                <div>
+                    <label for="escalation_policy" class="block mb-2 text-sm font-medium text-gray-300">Стратегія</label>
+                    <select name="escalation_policy" id="escalation_policy" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        <option value="handoff" {% if settings and settings.escalation_policy == 'handoff' %}selected{% endif %}>Передати оператору (Handoff) + Дати телефон</option>
+                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (Serper) - Тільки для технічних параметрів</option>
+                        <option value="info" {% if settings and settings.escalation_policy == 'info' %}selected{% endif %}>Просто вибачитись і зупинитись</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="escalation_prompt" class="block mb-2 text-sm font-medium text-gray-300">Інструкція для ескалації (Промпт)</label>
+                    <p class="text-xs text-gray-500 mb-2">Напишіть, як бот має відповідати живою мовою. Без хардкоду конкретних фраз, просто поясніть боту його роль.</p>
+                    <input type="text" name="escalation_prompt" id="escalation_prompt" value="{{ settings.escalation_prompt if settings else 'Вибачся своїми словами, скажи, що зараз уточниш у менеджера, і залиш номер 0800-111-222 для швидкого зв\'язку.' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+            </div>
+        </div>
+
+        <!-- Fallback Settings -->
+        <div class="hidden">
+            <input type="hidden" name="fallback_text" id="fallback_text" value="{{ settings.fallback_text if settings else 'Вибачте, сталася технічна помилка.' }}">
+        </div>
+
+        <div class="pt-4 border-t border-gray-800">
+            <button type="submit" class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-800 font-medium rounded-lg text-sm px-8 py-3 text-center transition shadow-lg shadow-blue-900/20">
+                Зберегти налаштування
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

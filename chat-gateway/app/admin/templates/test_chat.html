@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Тест-чат{% endblock %}
+{% block header %}Пісочниця ({{ tenant.name if tenant else 'Виберіть бізнес' }}){% endblock %}
+
+{% block content %}
+{% if not current_tenant_id %}
+<div class="bg-blue-900/20 border border-blue-800/50 text-blue-400 p-4 rounded-lg">
+    Будь ласка, виберіть бізнес (тенант) у верхньому правому куті, щоб протестувати його налаштування у чаті.
+</div>
+{% else %}
+<div class="max-w-3xl mx-auto bg-gray-900 border border-gray-800 rounded-xl shadow-sm flex flex-col h-[70vh]">
+    
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🤖</span>
+            <div>
+                <h3 class="text-gray-200 font-medium">{{ tenant.name }} Bot</h3>
+                <p class="text-xs text-green-400 flex items-center"><span class="w-2 h-2 rounded-full bg-green-500 mr-1 shadow-[0_0_5px_rgba(34,197,94,0.8)]"></span> Готовий</p>
+            </div>
+        </div>
+        <button onclick="document.getElementById('chat-messages').innerHTML = '';" class="text-xs text-gray-500 hover:text-gray-300">Очистити чат</button>
+    </div>
+
+    <!-- Messages -->
+    <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-950/50">
+        <!-- Chat history will appear here -->
+        <div class="flex justify-start">
+            <div class="bg-gray-800 border border-gray-700 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%] text-sm">
+                Привіт! Я віртуальний асистент. Напиши мені повідомлення, щоб перевірити мої налаштування.
+            </div>
+        </div>
+    </div>
+
+    <!-- Input -->
+    <div class="p-4 bg-gray-900 border-t border-gray-800 rounded-b-xl">
+        <form id="chat-form" onsubmit="sendMessage(event)" class="flex space-x-3">
+            <input type="text" id="chat-input" class="flex-1 bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3" placeholder="Введіть повідомлення..." required autocomplete="off">
+            <button type="submit" id="send-btn" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-2 transition font-medium">
+                Відправити
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+async function sendMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const messages = document.getElementById('chat-messages');
+    
+    // Add user message
+    messages.innerHTML += `
+        <div class="flex justify-end mb-4">
+            <div class="bg-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-[80%] text-sm">
+                ${text}
+            </div>
+        </div>
+    `;
+    input.value = '';
+    messages.scrollTop = messages.scrollHeight;
+
+    // Show typing indicator
+    const typingId = 'typing-' + Date.now();
+    messages.innerHTML += `
+        <div id="${typingId}" class="flex justify-start mb-4">
+            <div class="bg-gray-800 border border-gray-700 text-gray-400 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[80%] text-sm flex space-x-1">
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+            </div>
+        </div>
+    `;
+    messages.scrollTop = messages.scrollHeight;
+
+    try {
+        const response = await fetch('/admin/api/test-chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ text: text })
+        });
+        
+        const data = await response.json();
+        
+        // Remove typing
+        document.getElementById(typingId).remove();
+        
+        // Add bot message
+        messages.innerHTML += `
+            <div class="flex justify-start mb-4">
+                <div class="bg-gray-800 border border-gray-700 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%] text-sm whitespace-pre-wrap">${data.response || 'Помилка (немає відповіді)'}</div>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById(typingId).remove();
+        messages.innerHTML += `
+            <div class="flex justify-start mb-4">
+                <div class="bg-red-900/20 border border-red-800/50 text-red-400 rounded-2xl rounded-tl-sm px-4 py-2 max-w-[80%] text-sm">
+                    Помилка з'єднання з бекендом.
+                </div>
+            </div>
+        `;
+    }
+    messages.scrollTop = messages.scrollHeight;
+}
+</script>
+{% endif %}
+{% endblock %}

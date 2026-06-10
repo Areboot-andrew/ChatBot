@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="mb-6">
+    <a href="/admin/knowledge/prices" class="text-sm text-gray-400 hover:text-white mb-2 inline-block">← Назад до Прайсів</a>
+    <h1 class="text-2xl font-bold text-gray-100">Редагування Категорії: {{ cat.slug }}</h1>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="lg:col-span-2">
+        <form action="/admin/knowledge/prices/{{ cat.id }}/edit" method="POST" class="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-gray-200 mb-4">Основна інформація</h2>
+            <div class="space-y-4 mb-8">
+                <div>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Назва категорії</label>
+                    <input type="text" name="title" value="{{ cat.title }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
+                </div>
+                <div>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Короткий опис</label>
+                    <textarea name="description" rows="2" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.description }}</textarea>
+                </div>
+                <div>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Детальний опис</label>
+                    <textarea name="detailed_description" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.meta.get('detailed_description', '') if cat.meta else '' }}</textarea>
+                </div>
+            </div>
+
+            <h2 class="text-lg font-semibold text-gray-200 mb-4 flex justify-between items-center">
+                <span>Прайс-лист (Послуги)</span>
+                <button type="button" onclick="addPriceRow()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition">+ Додати послугу</button>
+            </h2>
+            
+            <div id="prices-container" class="space-y-3 mb-8">
+                {% for price in cat.prices %}
+                <div class="flex gap-4 items-center price-row bg-gray-800 p-2 rounded-lg border border-gray-700">
+                    <div class="flex-grow">
+                        <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва послуги" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                    </div>
+                    <div class="w-1/3">
+                        <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                    </div>
+                    <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="pt-4 border-t border-gray-800 flex justify-end gap-3">
+                <a href="/admin/knowledge/prices" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition">Скасувати</a>
+                <button type="submit" class="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition shadow-lg shadow-green-900/20">Зберегти Зміни</button>
+            </div>
+        </form>
+    </div>
+    
+    <div class="space-y-6">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <h3 class="text-sm font-semibold text-gray-300 mb-3">Типові несправності</h3>
+            <ul class="text-sm text-gray-400 space-y-2 list-disc pl-4">
+                {% if cat.meta and cat.meta.get('problems') %}
+                    {% for problem in cat.meta.get('problems') %}
+                        <li>{{ problem }}</li>
+                    {% endfor %}
+                {% else %}
+                    <li class="text-gray-600 italic">Не вказано</li>
+                {% endif %}
+            </ul>
+            <p class="text-xs text-gray-500 mt-4 italic">Щоб редагувати несправності або питання FAQ для цієї категорії, відредагуйте YAML файл та імпортуйте його знову.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function addPriceRow() {
+    const container = document.getElementById('prices-container');
+    const row = document.createElement('div');
+    row.className = 'flex gap-4 items-center price-row bg-gray-800 p-2 rounded-lg border border-gray-700';
+    row.innerHTML = `
+        <div class="flex-grow">
+            <input type="text" name="price_name[]" placeholder="Назва послуги" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+        </div>
+        <div class="w-1/3">
+            <input type="text" name="price_value[]" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+        </div>
+        <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </button>
+    `;
+    container.appendChild(row);
+}
+</script>
+{% endblock %}
