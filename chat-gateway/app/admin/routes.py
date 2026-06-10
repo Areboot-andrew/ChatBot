@@ -735,6 +735,7 @@ async def logic_edit(
 # --- TEST CHAT ---
 class ChatMessage(BaseModel):
     text: str
+    history: list = []
 
 @router.get("/test-chat", response_class=HTMLResponse)
 async def test_chat_page(
@@ -796,7 +797,8 @@ async def test_chat_api(
         sys_prompt_addition = "\nДані з внутрішньої CRM системи:\n- Замовлення: телефон Samsung\n- Статус: В процесі діагностики"
     else:
         # 2.2 SQL / Qdrant Fallbacks
-        res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id, ServicePrice.name.ilike(f"%{msg.text.split()[0]}%")).limit(3))
+        # Fetching all prices (up to 100) to allow LLM to understand synonyms and categories natively
+        res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
         prices = res_price.scalars().all()
         
         sys_prompt_addition = ""
@@ -804,24 +806,23 @@ async def test_chat_api(
         
         if prices:
             price_texts = [f"{p.name} - {p.price}" for p in prices]
-            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Знайдено", "details": "\n".join(price_texts), "time": "0.05s"})
-            qa_facts = []
-            sys_prompt_addition = "\nДодаткова інформація з бази прайсів:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Завантажено весь прайс", "details": f"Завантажено {len(prices)} позицій прайсу", "time": "0.01s"})
+            sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
         else:
-            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.02s"})
+            debug_trace.append({"step": "Пошук в Прайсах (SQL)", "status": "Пусто", "details": "Відповідних послуг не знайдено", "time": "0.01s"})
             
-            # 2.2.1 Search SQL QA
-            res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(3))
-            qa_facts = res_qa.scalars().all()
-            
-            # 2.2.2 Search Qdrant RAG
-            rag_start = time.time()
-            from app.core.rag import search_knowledge
-            rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
-            rag_time = round(time.time() - rag_start, 2)
-            
-            doc_details = f"Знайдено Q&A: {len(qa_facts)}. Знайдено RAG: {len(rag_docs)} фрагментів."
-            debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": doc_details, "time": f"{rag_time}s"})
+        # 2.2.1 Search SQL QA (Fetch all up to 50 for full context)
+        res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
+        qa_facts = res_qa.scalars().all()
+        
+        # 2.2.2 Search Qdrant RAG (for large documents)
+        rag_start = time.time()
+        from app.core.rag import search_knowledge
+        rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
+        rag_time = round(time.time() - rag_start, 2)
+        
+        doc_details = f"Знайдено Q&A: {len(qa_facts)}. Знайдено RAG: {len(rag_docs)} фрагментів."
+        debug_trace.append({"step": "Глобальна База (Qdrant/FAQ)", "status": "Знайдено факти", "details": doc_details, "time": f"{rag_time}s"})
     
     from app.core.prompt_builder import build_system_prompt
     sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
@@ -830,11 +831,17 @@ async def test_chat_api(
     temp = float(settings.temperature) if settings and settings.temperature else 0.7
     
     messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": msg.text}
+        {"role": "system", "content": sys_prompt}
     ]
     
-    debug_trace.append({"step": "Генерація LLM", "status": "В процесі...", "details": f"Промпт: {len(sys_prompt)} символів. Температура: {temp}", "time": "-"})
+    # Add history (which already includes the current msg.text since we pushed it in frontend)
+    if msg.history:
+        for h in msg.history:
+            messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+    else:
+        messages.append({"role": "user", "content": msg.text})
+    
+    debug_trace.append({"step": "Генерація LLM", "status": "В процесі...", "details": f"Промпт: {len(sys_prompt)} символів. Історія: {len(msg.history)} повідомлень. Температура: {temp}", "time": "-"})
     
     try:
         response_text = await chat(messages, temperature=temp)
