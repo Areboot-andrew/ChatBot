@@ -23,6 +23,33 @@
             </form>
         </div>
 
+        <!-- Блок Динамічної Синхронізації (JSON Feed) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6 mt-6">
+            <h2 class="text-lg font-semibold text-gray-200 mb-2 flex justify-between items-center">
+                <span>Динамічна Синхронізація (JSON Feed)</span>
+                <span class="bg-blue-900 text-blue-300 text-xs px-2 py-1 rounded">PRO</span>
+            </h2>
+            <p class="text-sm text-gray-400 mb-4">
+                Введіть URL до JSON-файлу з вашого сайту. Бот зможе періодично скачувати його та оновлювати наявність і ціни товарів.
+            </p>
+            <div class="flex gap-4 items-center mb-4">
+                <input type="url" id="feed-url" placeholder="https://kompi.com.ua/api/export/prices.json" value="{{ tenant_meta.get('catalog_sync_url', '') if tenant_meta else '' }}" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg bg-gray-800 focus:outline-none focus:border-blue-500 p-2">
+                <button onclick="previewFeed()" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">
+                    Тест та Прев'ю
+                </button>
+                <button onclick="syncFeed()" id="btn-sync" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap hidden">
+                    Синхронізувати (Зберегти)
+                </button>
+            </div>
+            
+            <div id="preview-result" class="hidden">
+                <h3 class="text-sm font-semibold text-gray-300 mb-2">Результат прев'ю (Перші 5 записів):</h3>
+                <div class="bg-gray-950 border border-gray-800 rounded p-4 text-xs text-gray-400 font-mono overflow-auto max-h-60" id="preview-content">
+                    Завантаження...
+                </div>
+            </div>
+        </div>
+
         <!-- Таблиця категорій та прайсів -->
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6 overflow-hidden">
             <h2 class="text-lg font-semibold text-gray-200 mb-4">Поточний Каталог</h2>
@@ -113,4 +140,65 @@
         </div>
     </div>
 </div>
+
+<script>
+async function previewFeed() {
+    const url = document.getElementById('feed-url').value.trim();
+    if(!url) return alert('Введіть URL');
+    
+    document.getElementById('preview-result').classList.remove('hidden');
+    document.getElementById('preview-content').innerText = 'Завантаження...';
+    document.getElementById('btn-sync').classList.add('hidden');
+    
+    try {
+        const res = await fetch('/admin/knowledge/prices/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ url: url })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'ok') {
+            document.getElementById('preview-content').innerText = JSON.stringify(data.preview, null, 2);
+            document.getElementById('btn-sync').classList.remove('hidden');
+        } else {
+            document.getElementById('preview-content').innerText = 'Помилка: ' + data.detail;
+        }
+    } catch(err) {
+        document.getElementById('preview-content').innerText = 'Помилка мережі: ' + err.message;
+    }
+}
+
+async function syncFeed() {
+    const url = document.getElementById('feed-url').value.trim();
+    if(!url) return;
+    
+    const btn = document.getElementById('btn-sync');
+    const originalText = btn.innerText;
+    btn.innerText = 'Збереження...';
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch('/admin/knowledge/prices/sync_now', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ url: url })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'ok') {
+            alert('Синхронізація успішна! Завантажено ' + data.count + ' записів.');
+            window.location.reload();
+        } else {
+            alert('Помилка: ' + data.detail);
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    } catch(err) {
+        alert('Помилка: ' + err.message);
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+</script>
 {% endblock %}

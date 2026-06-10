@@ -430,7 +430,8 @@ async def prices_page(
     return templates.TemplateResponse(request=request, name="knowledge/prices.html", context={
         "request": request, "user": user, "tenants": tenants, 
         "current_tenant_id": tenant_id, "tenant": tenant,
-        "categories": categories
+        "categories": categories,
+        "tenant_meta": tenant.meta if tenant else {}
     })
 
 import yaml
@@ -508,6 +509,96 @@ async def import_prices_yaml(
         logging.getLogger(__name__).error(f"Import Error: {e}")
         
     return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
+
+class FeedUrlRequest(BaseModel):
+    url: str
+
+@router.post("/knowledge/prices/preview")
+async def preview_prices_feed(
+    req: FeedUrlRequest,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id)
+):
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(req.url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+        categories = data if isinstance(data, list) else data.get("categories", [])
+        
+        preview = []
+        for cat in categories[:2]:
+            cat_info = {"category": cat.get("title") or cat.get("name"), "services": []}
+            services = cat.get("prices") or cat.get("services") or []
+            for s in services[:3]:
+                cat_info["services"].append({"name": s.get("name"), "price": s.get("price")})
+            preview.append(cat_info)
+            
+        return {"status": "ok", "preview": preview}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+@router.post("/knowledge/prices/sync_now")
+async def sync_prices_feed(
+    req: FeedUrlRequest,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    import httpx
+    from app.models.services import ServiceCategory, ServicePrice
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(req.url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+        res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = res.scalars().first()
+        if tenant:
+            meta = tenant.meta if tenant.meta else {}
+            meta["catalog_sync_url"] = req.url
+            tenant.meta = meta
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(tenant, "meta")
+            
+        categories = data if isinstance(data, list) else data.get("categories", [])
+        
+        count = 0
+        for cat_data in categories:
+            title = cat_data.get("title") or cat_data.get("name")
+            if not title: continue
+            
+            res_c = await db.execute(select(ServiceCategory).where(ServiceCategory.tenant_id == tenant_id, ServiceCategory.title == title))
+            cat = res_c.scalars().first()
+            if not cat:
+                import re
+                slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')
+                cat = ServiceCategory(tenant_id=tenant_id, title=title, slug=slug, description="")
+                db.add(cat)
+                await db.flush()
+                
+            services = cat_data.get("prices") or cat_data.get("services") or []
+            for s in services:
+                s_name = s.get("name")
+                s_price = str(s.get("price"))
+                if not s_name: continue
+                
+                res_p = await db.execute(select(ServicePrice).where(ServicePrice.category_id == cat.id, ServicePrice.name == s_name))
+                price_obj = res_p.scalars().first()
+                if price_obj:
+                    price_obj.price = s_price
+                else:
+                    price_obj = ServicePrice(tenant_id=tenant_id, category_id=cat.id, name=s_name, price=s_price)
+                    db.add(price_obj)
+                count += 1
+                
+        await db.commit()
+        return {"status": "ok", "count": count}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
 @router.get("/knowledge/prices/{cat_id}/edit", response_class=HTMLResponse)
 async def price_edit_form(
