@@ -77,3 +77,6 @@ Thumbs.db
 
 # Any random temp files
 *.tmp
+
+# Ignore old mockups
+*.html
