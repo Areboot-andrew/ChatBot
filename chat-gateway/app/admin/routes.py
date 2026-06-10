@@ -75,14 +75,15 @@ async def dashboard(
 ):
     import httpx
     from app.config import settings
+    from sqlalchemy import text
+    from datetime import date
     
     tenants = await get_all_tenants(db)
     
-    # Real LM Studio Check
+    # 1. Real LM Studio Check
     lmstudio_status = "ERROR"
     loaded_models = "Немає підключення"
     url = settings.LMSTUDIO_URL.replace('/v1', '') if settings.LMSTUDIO_URL.endswith('/v1') else settings.LMSTUDIO_URL
-    
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(f"{url}/v1/models")
@@ -94,16 +95,64 @@ async def dashboard(
                     loaded_models = ", ".join(models)
                 else:
                     loaded_models = "Моделі не завантажені"
-    except Exception as e:
+    except Exception:
         loaded_models = "Недоступно (Check URL/Network)"
+
+    # 2. Postgres Check
+    postgres_status = "ERROR"
+    try:
+        await db.execute(text("SELECT 1"))
+        postgres_status = "OK"
+    except Exception:
+        pass
+
+    # 3. Redis Check
+    redis_status = "ERROR"
+    try:
+        from app.core.history import redis_client
+        if await redis_client.ping():
+            redis_status = "OK"
+    except Exception:
+        pass
+
+    # 4. Qdrant Check
+    qdrant_status = "ERROR"
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            resp = await client.get(f"{settings.QDRANT_URL}/collections")
+            if resp.status_code == 200:
+                qdrant_status = "OK"
+    except Exception:
+        pass
+
+    # 5. Quick Stats
+    channels_count = 0
+    messages_today = 0
+    
+    if tenant_id:
+        res_ch = await db.execute(text("SELECT COUNT(id) FROM channels WHERE tenant_id = :tid"), {"tid": tenant_id})
+        channels_count = res_ch.scalar() or 0
+        
+        # Temporary fallback for messages, if conversations/messages table exists
+        try:
+            today = date.today().isoformat()
+            res_msg = await db.execute(
+                text("SELECT COUNT(m.id) FROM messages m JOIN conversations c ON m.conversation_id = c.id WHERE c.tenant_id = :tid AND m.created_at >= :today"), 
+                {"tid": tenant_id, "today": today}
+            )
+            messages_today = res_msg.scalar() or 0
+        except Exception:
+            messages_today = 0
 
     statuses = {
         "lmstudio": lmstudio_status, 
-        "postgres": "OK", 
-        "redis": "OK", 
-        "qdrant": "OK",
+        "postgres": postgres_status, 
+        "redis": redis_status, 
+        "qdrant": qdrant_status,
         "lmstudio_models": loaded_models,
-        "lmstudio_url": settings.LMSTUDIO_URL
+        "lmstudio_url": settings.LMSTUDIO_URL,
+        "channels_count": channels_count,
+        "messages_today": messages_today
     }
     
     return templates.TemplateResponse(request=request, name="dashboard.html", context={
