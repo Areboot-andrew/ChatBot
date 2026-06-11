@@ -19,16 +19,36 @@ def strip_think(text: str) -> str:
     # Use re.DOTALL to match across newlines
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
-async def chat(messages: list, model: str = settings.LLM_MODEL, temperature: float = 0.7, max_tokens: int = 1024) -> str:
-    """Sends a chat completion request to LM Studio."""
+async def chat(
+    messages: list, 
+    model: str = settings.LLM_MODEL, 
+    temperature: float = 0.7, 
+    max_tokens: int = 1024,
+    base_url: str = None,
+    api_key: str = None
+) -> str:
+    """Sends a chat completion request to LM Studio or a custom API."""
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            timeout=60.0
-        )
+        if base_url:
+            dynamic_client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=api_key or "not-needed"
+            )
+            response = await dynamic_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=60.0
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=60.0
+            )
         raw_content = response.choices[0].message.content
         return strip_think(raw_content)
     except Exception as e:

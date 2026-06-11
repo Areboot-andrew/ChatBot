@@ -405,6 +405,8 @@ async def update_settings(
     system_prompt: str = Form(...),
     temperature: str = Form(...),
     max_tokens: str = Form(...),
+    llm_base_url: str = Form(""),
+    llm_api_key: str = Form(""),
     business_rules: str = Form(""),
     marketing_rules: str = Form(""),
     escalation_policy: str = Form("handoff"),
@@ -426,6 +428,15 @@ async def update_settings(
             settings.escalation_policy = escalation_policy
             settings.escalation_prompt = escalation_prompt
             settings.fallback_text = fallback_text
+            
+            meta_data = settings.meta if settings.meta else {}
+            meta_data["llm_base_url"] = llm_base_url
+            meta_data["llm_api_key"] = llm_api_key
+            settings.meta = meta_data
+            
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(settings, "meta")
+            
             await db.commit()
     return RedirectResponse(url="/admin/settings", status_code=303)
 
@@ -1074,7 +1085,10 @@ async def test_chat_api(
     debug_trace.append({"step": "Генерація LLM", "status": "В процесі...", "details": f"Промпт: {len(sys_prompt)} символів. Історія: {len(msg.history)} повідомлень. Температура: {temp}", "time": "-"})
     
     try:
-        response_text = await chat(messages, temperature=temp)
+        base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
+        api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
+        
+        response_text = await chat(messages, temperature=temp, base_url=base_url, api_key=api_key)
         gen_time = round(time.time() - start_time, 2)
         debug_trace[-1]["status"] = "Успішно"
         debug_trace[-1]["time"] = f"{gen_time}s"
