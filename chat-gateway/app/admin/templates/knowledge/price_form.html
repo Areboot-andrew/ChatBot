@@ -22,6 +22,10 @@
                     <label class="block mb-2 text-sm font-medium text-gray-300">Детальний опис</label>
                     <textarea name="detailed_description" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.meta.get('detailed_description', '') if cat.meta else '' }}</textarea>
                 </div>
+                <div>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Типові несправності (по одній на рядок)</label>
+                    <textarea name="problems" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Не вмикається&#10;Не заряджається">{% if cat.meta and cat.meta.get('problems') %}{{ cat.meta.get('problems') | join('\n') }}{% endif %}</textarea>
+                </div>
             </div>
 
             <h2 class="text-lg font-semibold text-gray-200 mb-4 flex justify-between items-center">
@@ -54,17 +58,9 @@
     
     <div class="space-y-6">
         <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h3 class="text-sm font-semibold text-gray-300 mb-3">Типові несправності</h3>
-            <ul class="text-sm text-gray-400 space-y-2 list-disc pl-4">
-                {% if cat.meta and cat.meta.get('problems') %}
-                    {% for problem in cat.meta.get('problems') %}
-                        <li>{{ problem }}</li>
-                    {% endfor %}
-                {% else %}
-                    <li class="text-gray-600 italic">Не вказано</li>
-                {% endif %}
-            </ul>
-            <p class="text-xs text-gray-500 mt-4 italic">Щоб редагувати несправності або питання FAQ для цієї категорії, відредагуйте YAML файл та імпортуйте його знову.</p>
+            <h3 class="text-sm font-semibold text-gray-300 mb-3">Як редагувати FAQ?</h3>
+            <p class="text-sm text-gray-400">Питання та відповіді (FAQ) для цієї категорії знаходяться на головній сторінці "База Знань та Логіка" у відповідній таблиці.</p>
+            <a href="/admin/knowledge" class="mt-4 inline-block text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded transition">Перейти до FAQ →</a>
         </div>
     </div>
 </div>

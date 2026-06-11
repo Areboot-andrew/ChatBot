@@ -740,6 +740,7 @@ async def price_edit_submit(
     title: str = Form(...),
     description: str = Form(""),
     detailed_description: str = Form(""),
+    problems: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -754,6 +755,7 @@ async def price_edit_submit(
         
         meta = cat.meta or {}
         meta["detailed_description"] = detailed_description
+        meta["problems"] = [p.strip() for p in problems.split("\n") if p.strip()]
         cat.meta = meta
         
         # Form submission for dynamic prices:
