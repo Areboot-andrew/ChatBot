@@ -40,6 +40,16 @@ async def shutdown_event():
 async def health_check():
     return {"status": "ok", "environment": settings.ENVIRONMENT}
 
+from fastapi.responses import RedirectResponse
+
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/admin/dashboard")
+
+@app.get("/admin", include_in_schema=False)
+async def admin_redirect():
+    return RedirectResponse(url="/admin/dashboard")
+
 class ChatRequest(BaseModel):
     chat_id: str
     text: str
