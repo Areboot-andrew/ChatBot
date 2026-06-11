@@ -210,6 +210,41 @@ async def create_tenant(
     await db.commit()
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
+@router.get("/tenants/{tenant_id}/edit", response_class=HTMLResponse)
+async def edit_tenant_form(
+    tenant_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(get_current_user),
+    current_tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    tenants = await get_all_tenants(db)
+    res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = res.scalars().first()
+    if not tenant:
+        return RedirectResponse(url="/admin/tenants", status_code=303)
+    return templates.TemplateResponse(request=request, name="tenants/form.html", context={
+        "request": request, "user": user, "tenants": tenants, "current_tenant_id": current_tenant_id, "tenant": tenant
+    })
+
+@router.post("/tenants/{tenant_id}/edit")
+async def edit_tenant(
+    tenant_id: uuid.UUID,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    enabled: bool = Form(False),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    res = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = res.scalars().first()
+    if tenant:
+        tenant.name = name
+        tenant.description = description
+        tenant.enabled = enabled
+        await db.commit()
+    return RedirectResponse(url="/admin/tenants", status_code=303)
 # --- CHANNELS ---
 @router.get("/channels", response_class=HTMLResponse)
 async def list_channels(
@@ -283,6 +318,65 @@ async def create_channel(
     await db.commit()
     return RedirectResponse(url="/admin/channels", status_code=303)
 
+@router.get("/channels/{channel_id}/edit", response_class=HTMLResponse)
+async def edit_channel_form(
+    channel_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    if not tenant_id:
+        return RedirectResponse(url="/admin/channels", status_code=303)
+    tenants = await get_all_tenants(db)
+    res = await db.execute(select(Channel).where(Channel.id == channel_id, Channel.tenant_id == tenant_id))
+    channel = res.scalars().first()
+    if not channel:
+        return RedirectResponse(url="/admin/channels", status_code=303)
+    return templates.TemplateResponse(request=request, name="channels/form.html", context={
+        "request": request, "user": user, "tenants": tenants, "current_tenant_id": tenant_id, "channel": channel
+    })
+
+@router.post("/channels/{channel_id}/edit")
+async def edit_channel(
+    channel_id: uuid.UUID,
+    request: Request,
+    name: str = Form(...),
+    type: str = Form(...),
+    credentials: str = Form(""),
+    api_id: str = Form(""),
+    api_hash: str = Form(""),
+    session_string: str = Form(""),
+    greeting: str = Form(""),
+    enabled: bool = Form(False),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    if not tenant_id:
+        return RedirectResponse(url="/admin/channels", status_code=303)
+        
+    res = await db.execute(select(Channel).where(Channel.id == channel_id, Channel.tenant_id == tenant_id))
+    channel = res.scalars().first()
+    if channel:
+        if type == 'telegram_userbot':
+            creds_json = {
+                "api_id": api_id,
+                "api_hash": api_hash,
+                "session_string": session_string
+            }
+        elif type == 'telegram':
+            creds_json = {"token": credentials}
+        else:
+            creds_json = {"config": credentials}
+            
+        channel.name = name
+        channel.type = type
+        channel.credentials = creds_json
+        channel.greeting = greeting
+        channel.enabled = enabled
+        await db.commit()
+    return RedirectResponse(url="/admin/channels", status_code=303)
 # --- SETTINGS ---
 @router.get("/settings", response_class=HTMLResponse)
 async def bot_settings(
