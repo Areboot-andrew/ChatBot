@@ -25,9 +25,11 @@ async def chat(
     temperature: float = 0.7, 
     max_tokens: int = 1024,
     base_url: str = None,
-    api_key: str = None
-) -> str:
+    api_key: str = None,
+    return_usage: bool = False
+):
     """Sends a chat completion request to LM Studio or a custom API."""
+    usage_data = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     try:
         if base_url:
             dynamic_client = AsyncOpenAI(
@@ -49,11 +51,24 @@ async def chat(
                 max_tokens=max_tokens,
                 timeout=60.0
             )
+            
+        if response.usage:
+            usage_data["prompt_tokens"] = response.usage.prompt_tokens or 0
+            usage_data["completion_tokens"] = response.usage.completion_tokens or 0
+            usage_data["total_tokens"] = response.usage.total_tokens or 0
+            
         raw_content = response.choices[0].message.content
-        return strip_think(raw_content)
+        clean_content = strip_think(raw_content)
+        
+        if return_usage:
+            return clean_content, usage_data
+        return clean_content
     except Exception as e:
         logger.error(f"LLM Chat Error: {e}")
-        return "Вибачте, зараз я не можу відповісти. Зачекайте хвилинку або зверніться пізніше."
+        err_msg = "Вибачте, зараз я не можу відповісти. Зачекайте хвилинку або зверніться пізніше."
+        if return_usage:
+            return err_msg, usage_data
+        return err_msg
 
 async def embed(text: str, model: str = settings.EMBED_MODEL) -> list[float]:
     """Generates embeddings using LM Studio."""

@@ -880,6 +880,7 @@ async def logic_create(
     intent_patterns: str = Form(...),
     handler: str = Form(...),
     target_category: str = Form(""),
+    target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
@@ -888,7 +889,7 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-        meta_data = {"target_category": target_category, "fallback_action": fallback_action}
+        meta_data = {"target_category": target_category, "fallback_action": fallback_action, "target_url": target_url}
         logic = KnowledgeType(tenant_id=tenant_id, label=label, code=code, intent_patterns=patterns, handler=handler, enabled=enabled, meta=meta_data)
         db.add(logic)
         await db.commit()
@@ -919,6 +920,7 @@ async def logic_edit(
     intent_patterns: str = Form(...),
     handler: str = Form(...),
     target_category: str = Form(""),
+    target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
@@ -937,6 +939,7 @@ async def logic_edit(
             meta_data = logic.meta if logic.meta else {}
             meta_data["target_category"] = target_category
             meta_data["fallback_action"] = fallback_action
+            meta_data["target_url"] = target_url
             logic.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
@@ -986,10 +989,11 @@ async def test_chat_api(
     # 1. Intent Recognition (LLM Router)
     from app.core.intents import detect_intent
     intent_start = time.time()
-    intent_data = await detect_intent(msg.text, msg.history)
+    intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
     intent = intent_data.get("intent", "GENERAL")
     search_query = intent_data.get("query", "")
     error_msg = intent_data.get("error", "")
+    intent_usage = intent_data.get("usage", {"total_tokens": 0})
     intent_time = round(time.time() - intent_start, 2)
     
     if intent == "ERROR":
@@ -1003,8 +1007,8 @@ async def test_chat_api(
         
     debug_trace.append({
         "step": "Аналіз наміру (Intent Router)", 
-        "status": "Розпізнано", 
-        "details": f"Інтент: {intent}. Запит: '{msg.text}'", 
+        "status": "Успішно", 
+        "details": f"Розпізнано інтент: {intent}. Витрачено токенів: {intent_usage['total_tokens']}.", 
         "time": f"{intent_time}s"
     })
     
