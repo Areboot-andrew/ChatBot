@@ -21,7 +21,21 @@
 
         <!-- LLM Params -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Параметри генерації</h3>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Параметри генерації (LLM)</h3>
+            
+            <div class="mb-6 p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
+                <label for="quick_setup" class="block mb-2 text-sm font-bold text-blue-400">Швидке налаштування провайдера (Шаблони)</label>
+                <select id="quick_setup" class="bg-gray-900 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <option value="">-- Виберіть провайдера зі списку --</option>
+                    <option value="local">🖥️ Локальна модель (LM Studio / Ollama) - Безкоштовно, Працює на вашому сервері</option>
+                    <option value="pollinations">🌍 Pollinations.ai - ПОВНІСТЮ БЕЗКОШТОВНО (Без реєстрацій і ключів)</option>
+                    <option value="openrouter_free">🌐 OpenRouter (Безкоштовні моделі Llama 3) - Потрібен API Ключ</option>
+                    <option value="groq">⚡ Groq (Найшвидший) - Потрібен безкоштовний API Ключ</option>
+                    <option value="openai">🤖 OpenAI (ChatGPT) - Платний API Ключ</option>
+                </select>
+                <p class="mt-1 text-xs text-gray-400" id="quick_setup_hint">Виберіть шаблон, щоб автоматично заповнити поля нижче.</p>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2">
                     <label for="llm_model" class="block mb-2 text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
@@ -31,16 +45,14 @@
                         <option value="meta-llama/llama-3-8b-instruct:free">OpenRouter: Llama 3 8B (Безкоштовно)</option>
                         <option value="google/gemma-7b-it:free">OpenRouter: Gemma 7B (Безкоштовно)</option>
                         <option value="mistralai/mistral-7b-instruct:free">OpenRouter: Mistral 7B (Безкоштовно)</option>
-                        <option value="microsoft/phi-3-mini-128k-instruct:free">OpenRouter: Phi-3 Mini (Безкоштовно)</option>
                         <!-- Groq Models -->
                         <option value="llama3-8b-8192">Groq: Llama 3 8B</option>
                         <option value="llama3-70b-8192">Groq: Llama 3 70B</option>
-                        <option value="mixtral-8x7b-32768">Groq: Mixtral 8x7B</option>
                         <!-- Local/Ollama Models -->
                         <option value="gemma-4">Локальна: gemma-4</option>
-                        <option value="llama3">Локальна: llama3</option>
+                        <!-- Pollinations -->
+                        <option value="openai">Pollinations: openai</option>
                     </datalist>
-                    <p class="mt-1 text-xs text-gray-500">Виберіть зі списку популярних або впишіть будь-який інший ID. Для локального сервера залиште як є.</p>
                 </div>
                 <div>
                     <label for="temperature" class="block mb-2 text-sm font-medium text-gray-300">
@@ -56,13 +68,14 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-800">
                 <div>
-                    <label for="llm_base_url" class="block mb-2 text-sm font-medium text-gray-300">Кастомний API URL (напр. OpenAI, Groq)</label>
+                    <label for="llm_base_url" class="block mb-2 text-sm font-medium text-gray-300">Кастомний API URL (Базовий шлях)</label>
                     <input type="text" name="llm_base_url" id="llm_base_url" value="{{ settings.meta.get('llm_base_url', '') if settings and settings.meta else '' }}" placeholder="https://api.groq.com/openai/v1" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Залиште пустим для використання локального сервера.</p>
                 </div>
                 <div>
                     <label for="llm_api_key" class="block mb-2 text-sm font-medium text-gray-300">API Ключ</label>
                     <input type="password" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">Якщо API публічне і не вимагає ключа, впишіть будь-що (напр. 'free').</p>
                 </div>
             </div>
         </div>
@@ -114,5 +127,52 @@
         </div>
     </form>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const qs = document.getElementById('quick_setup');
+    const model = document.getElementById('llm_model');
+    const baseUrl = document.getElementById('llm_base_url');
+    const apiKey = document.getElementById('llm_api_key');
+    const hint = document.getElementById('quick_setup_hint');
+
+    qs.addEventListener('change', function() {
+        const val = this.value;
+        if (val === 'local') {
+            model.value = 'gemma-4';
+            baseUrl.value = '';
+            apiKey.value = '';
+            hint.textContent = 'Локальна модель обрана. Залиште URL і Ключ пустими.';
+            hint.className = 'mt-1 text-xs text-green-400';
+        } else if (val === 'pollinations') {
+            model.value = 'openai';
+            baseUrl.value = 'https://text.pollinations.ai/openai';
+            apiKey.value = 'free';
+            hint.textContent = 'Публічне API Pollinations обрано. Реєстрація не потрібна.';
+            hint.className = 'mt-1 text-xs text-green-400';
+        } else if (val === 'openrouter_free') {
+            model.value = 'meta-llama/llama-3-8b-instruct:free';
+            baseUrl.value = 'https://openrouter.ai/api/v1';
+            apiKey.value = '';
+            hint.textContent = 'Введіть ваш безкоштовний ключ OpenRouter нижче.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else if (val === 'groq') {
+            model.value = 'llama3-8b-8192';
+            baseUrl.value = 'https://api.groq.com/openai/v1';
+            apiKey.value = '';
+            hint.textContent = 'Введіть ваш ключ Groq нижче.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else if (val === 'openai') {
+            model.value = 'gpt-4o-mini';
+            baseUrl.value = 'https://api.openai.com/v1';
+            apiKey.value = '';
+            hint.textContent = 'Введіть ваш платний ключ OpenAI нижче.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else {
+            hint.textContent = 'Виберіть шаблон, щоб автоматично заповнити поля нижче.';
+            hint.className = 'mt-1 text-xs text-gray-400';
+        }
+    });
+});
+</script>
 {% endif %}
 {% endblock %}
