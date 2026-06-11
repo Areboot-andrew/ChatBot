@@ -247,7 +247,10 @@ async def create_channel(
     request: Request,
     name: str = Form(...),
     type: str = Form(...),
-    credentials: str = Form(...),
+    credentials: str = Form(""),
+    api_id: str = Form(""),
+    api_hash: str = Form(""),
+    session_string: str = Form(""),
     greeting: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
@@ -257,7 +260,16 @@ async def create_channel(
     if not tenant_id:
         return RedirectResponse(url="/admin/channels", status_code=303)
         
-    creds_json = {"token": credentials} if type == 'telegram' else {"config": credentials}
+    if type == 'telegram_userbot':
+        creds_json = {
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "session_string": session_string
+        }
+    elif type == 'telegram':
+        creds_json = {"token": credentials}
+    else:
+        creds_json = {"config": credentials}
     
     new_channel = Channel(
         tenant_id=tenant_id,

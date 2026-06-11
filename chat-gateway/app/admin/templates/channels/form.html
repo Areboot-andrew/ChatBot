@@ -14,17 +14,56 @@
 
         <div>
             <label for="type" class="block mb-2 text-sm font-medium text-gray-300">Тип каналу</label>
-            <select name="type" id="type" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
-                <option value="telegram" {% if channel and channel.type == 'telegram' %}selected{% endif %}>Telegram</option>
+            <select name="type" id="type" onchange="toggleFields()" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
+                <option value="telegram" {% if channel and channel.type == 'telegram' %}selected{% endif %}>Telegram Бот (@BotFather)</option>
+                <option value="telegram_userbot" {% if channel and channel.type == 'telegram_userbot' %}selected{% endif %}>Telegram Особистий Акаунт (UserBot)</option>
                 <option value="viber" {% if channel and channel.type == 'viber' %}selected{% endif %}>Viber</option>
                 <option value="webchat" {% if channel and channel.type == 'webchat' %}selected{% endif %}>Webchat</option>
             </select>
         </div>
 
-        <div>
-            <label for="credentials" class="block mb-2 text-sm font-medium text-gray-300">Токен (JSON або рядок)</label>
-            <input type="text" name="credentials" id="credentials" value="{{ channel.credentials.token if channel and 'token' in channel.credentials else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" required>
+        <!-- Поля для звичайного бота -->
+        <div id="field-bot-token" class="channel-field">
+            <label for="credentials" class="block mb-2 text-sm font-medium text-gray-300">Токен Бота (Credentials)</label>
+            <input type="text" name="credentials" id="credentials" value="{{ channel.credentials.token if channel and 'token' in channel.credentials else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр. 123456:ABC-DEF1234ghIkl">
+            <p class="mt-1 text-xs text-gray-400">Отримується у @BotFather.</p>
         </div>
+
+        <!-- Поля для UserBot -->
+        <div id="field-userbot" class="channel-field hidden space-y-4">
+            <div class="bg-yellow-900/20 border border-yellow-700/50 p-4 rounded-lg text-sm text-yellow-300">
+                <strong>Увага!</strong> Використання особистого акаунта для бота (UserBot) вимагає <code>API_ID</code>, <code>API_HASH</code> (отримати на my.telegram.org) та <code>Session String</code> (генерується окремим скриптом авторизації).
+            </div>
+            <div>
+                <label for="api_id" class="block mb-2 text-sm font-medium text-gray-300">API ID</label>
+                <input type="text" name="api_id" id="api_id" value="{{ channel.credentials.api_id if channel and 'api_id' in channel.credentials else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+            </div>
+            <div>
+                <label for="api_hash" class="block mb-2 text-sm font-medium text-gray-300">API HASH</label>
+                <input type="text" name="api_hash" id="api_hash" value="{{ channel.credentials.api_hash if channel and 'api_hash' in channel.credentials else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+            </div>
+            <div>
+                <label for="session_string" class="block mb-2 text-sm font-medium text-gray-300">Session String</label>
+                <textarea name="session_string" id="session_string" rows="3" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Довгий рядок сесії...">{{ channel.credentials.session_string if channel and 'session_string' in channel.credentials else '' }}</textarea>
+            </div>
+        </div>
+
+        <script>
+            function toggleFields() {
+                const type = document.getElementById('type').value;
+                document.querySelectorAll('.channel-field').forEach(el => el.classList.add('hidden'));
+                
+                if (type === 'telegram_userbot') {
+                    document.getElementById('field-userbot').classList.remove('hidden');
+                    document.getElementById('credentials').required = false;
+                } else {
+                    document.getElementById('field-bot-token').classList.remove('hidden');
+                    document.getElementById('credentials').required = true;
+                }
+            }
+            // Run on load
+            document.addEventListener('DOMContentLoaded', toggleFields);
+        </script>
 
         <div>
             <label for="greeting" class="block mb-2 text-sm font-medium text-gray-300">Привітання бота (опціонально)</label>

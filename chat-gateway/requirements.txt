@@ -36,3 +36,4 @@ python-multipart>=0.0.9
 PyYAML==6.0.1
 duckduckgo-search>=6.1.7
 aiogram>=3.6.0
+telethon>=1.36.0
