@@ -19,10 +19,7 @@ services:
       - FERNET_KEY=${FERNET_KEY:-super-secret-fernet-key-change-me}
       - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD:-admin123}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-https://bot.texno.plus}
-    volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
+
     depends_on:
       - postgres
       - redis
@@ -43,8 +40,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/chatbot
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
-    volumes:
-      - ./app:/app/app
+
     depends_on:
       - postgres
       - redis
