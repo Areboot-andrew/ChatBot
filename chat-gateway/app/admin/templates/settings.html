@@ -25,8 +25,22 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2">
                     <label for="llm_model" class="block mb-2 text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
-                    <input type="text" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <p class="mt-1 text-xs text-gray-500">Для OpenRouter впишіть повну назву моделі з їх сайту. Залиште як є для локального сервера.</p>
+                    <input type="text" list="model_suggestions" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <datalist id="model_suggestions">
+                        <!-- OpenRouter Free Models -->
+                        <option value="meta-llama/llama-3-8b-instruct:free">OpenRouter: Llama 3 8B (Безкоштовно)</option>
+                        <option value="google/gemma-7b-it:free">OpenRouter: Gemma 7B (Безкоштовно)</option>
+                        <option value="mistralai/mistral-7b-instruct:free">OpenRouter: Mistral 7B (Безкоштовно)</option>
+                        <option value="microsoft/phi-3-mini-128k-instruct:free">OpenRouter: Phi-3 Mini (Безкоштовно)</option>
+                        <!-- Groq Models -->
+                        <option value="llama3-8b-8192">Groq: Llama 3 8B</option>
+                        <option value="llama3-70b-8192">Groq: Llama 3 70B</option>
+                        <option value="mixtral-8x7b-32768">Groq: Mixtral 8x7B</option>
+                        <!-- Local/Ollama Models -->
+                        <option value="gemma-4">Локальна: gemma-4</option>
+                        <option value="llama3">Локальна: llama3</option>
+                    </datalist>
+                    <p class="mt-1 text-xs text-gray-500">Виберіть зі списку популярних або впишіть будь-який інший ID. Для локального сервера залиште як є.</p>
                 </div>
                 <div>
                     <label for="temperature" class="block mb-2 text-sm font-medium text-gray-300">
