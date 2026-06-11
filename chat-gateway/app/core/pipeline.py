@@ -91,14 +91,34 @@ async def process_message_pipeline(
     elif handler == "escalate":
         sys_prompt_addition = "\nІНСТРУКЦІЯ: Клієнт хоче зв'язатися з оператором. Повідомте, що ви передаєте діалог менеджеру."
         
-    elif handler == "fallback":
-        # Check Qdrant just in case
+    elif handler == "fallback" or handler == "qa_handler":
+        # Check Qdrant just in case, even for fallback
         try:
             rag_docs = await search_knowledge(text, str(tenant_id), top_k=2)
         except Exception as e:
             logger.error(f"RAG search error: {e}")
             rag_docs = []
             
+        # Waterfall Logic
+        if not rag_docs and not prices and not qa_facts:
+            fallback_sites = settings.meta.get("fallback_sites", "") if settings.meta else ""
+            found_in_waterfall = False
+            
+            # Step 1: Trusted Sites
+            if fallback_sites:
+                sites = [s.strip() for s in fallback_sites.split(",")]
+                sites_query = " OR ".join([f"site:{s}" for s in sites])
+                search_result = search_internet(f"({sites_query}) {search_query or text}", max_results=3)
+                
+                if "Результатів в інтернеті не знайдено" not in search_result:
+                    sys_prompt_addition = f"\nДані з довірених сайтів ({fallback_sites}):\n{search_result}"
+                    found_in_waterfall = True
+                    
+            # Step 2: General Internet (Restricted to IT/Tech by System Prompt)
+            if not found_in_waterfall:
+                search_result = search_internet(f"{search_query or text}", max_results=3)
+                sys_prompt_addition = f"\nДані із загального пошуку в інтернеті:\n{search_result}"
+                
     # 4. Build Prompt
     sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
     sys_prompt += sys_prompt_addition

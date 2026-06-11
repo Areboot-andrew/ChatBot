@@ -411,6 +411,7 @@ async def update_settings(
     business_rules: str = Form(""),
     marketing_rules: str = Form(""),
     escalation_policy: str = Form("handoff"),
+    fallback_sites: str = Form(""),
     escalation_prompt: str = Form(...),
     fallback_text: str = Form(...),
     user: User = Depends(get_current_user),
@@ -435,6 +436,7 @@ async def update_settings(
             meta_data = settings.meta if settings.meta else {}
             meta_data["llm_base_url"] = llm_base_url
             meta_data["llm_api_key"] = llm_api_key
+            meta_data["fallback_sites"] = fallback_sites
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified

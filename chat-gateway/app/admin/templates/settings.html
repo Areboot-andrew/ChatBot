@@ -95,9 +95,9 @@
                     </select>
                 </div>
                 <div>
-                    <label for="escalation_prompt" class="block mb-2 text-sm font-medium text-gray-300">Інструкція для ескалації (Промпт)</label>
-                    <p class="text-xs text-gray-500 mb-2">Напишіть, як бот має відповідати живою мовою. Без хардкоду конкретних фраз, просто поясніть боту його роль.</p>
-                    <input type="text" name="escalation_prompt" id="escalation_prompt" value="{{ settings.escalation_prompt if settings else 'Вибачся своїми словами, скажи, що зараз уточниш у менеджера, і залиш номер 0800-111-222 для швидкого зв\'язку.' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <label for="fallback_sites" class="block mb-2 text-sm font-medium text-gray-300">Довірені сайти для резервного пошуку (через кому)</label>
+                    <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.fallback_sites if settings and settings.meta and settings.meta.fallback_sites else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний Google.</p>
                 </div>
             </div>
         </div>
