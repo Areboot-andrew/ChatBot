@@ -23,6 +23,11 @@
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Параметри генерації</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                    <label for="llm_model" class="block mb-2 text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
+                    <input type="text" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">Для OpenRouter впишіть повну назву моделі з їх сайту. Залиште як є для локального сервера.</p>
+                </div>
                 <div>
                     <label for="temperature" class="block mb-2 text-sm font-medium text-gray-300">
                         Температура (<span id="temp_val">{{ settings.temperature if settings else '0.7' }}</span>)

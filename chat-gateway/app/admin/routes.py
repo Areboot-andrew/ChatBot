@@ -403,6 +403,7 @@ async def bot_settings(
 async def update_settings(
     request: Request,
     system_prompt: str = Form(...),
+    llm_model: str = Form(""),
     temperature: str = Form(...),
     max_tokens: str = Form(...),
     llm_base_url: str = Form(""),
@@ -421,6 +422,8 @@ async def update_settings(
         settings = res.scalars().first()
         if settings:
             settings.system_prompt = system_prompt
+            if llm_model:
+                settings.llm_model = llm_model
             settings.temperature = temperature
             settings.max_tokens = max_tokens
             settings.business_rules = business_rules
@@ -1087,8 +1090,9 @@ async def test_chat_api(
     try:
         base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
         api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
+        model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
         
-        response_text = await chat(messages, temperature=temp, base_url=base_url, api_key=api_key)
+        response_text = await chat(messages, model=model_name, temperature=temp, base_url=base_url, api_key=api_key)
         gen_time = round(time.time() - start_time, 2)
         debug_trace[-1]["status"] = "Успішно"
         debug_trace[-1]["time"] = f"{gen_time}s"

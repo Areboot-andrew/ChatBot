@@ -84,9 +84,10 @@ async def process_message_pipeline(
     # 4. Generate LLM Response
     base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
     api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
+    model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
     
     try:
-        response_text = await chat(messages, temperature=temp, base_url=base_url, api_key=api_key)
+        response_text = await chat(messages, model=model_name, temperature=temp, base_url=base_url, api_key=api_key)
         return response_text
     except Exception as e:
         logger.error(f"LLM Generation error: {e}")
