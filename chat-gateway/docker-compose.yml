@@ -4,6 +4,8 @@ services:
   gateway:
     build: .
     container_name: chat-gateway
+    expose:
+      - "8000"
     restart: unless-stopped
     environment:
       - ENVIRONMENT=production
