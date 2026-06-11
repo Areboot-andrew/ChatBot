@@ -86,3 +86,52 @@ async def seed_admin():
                 logger.info("Test data seeded successfully!")
             except Exception as e:
                 logger.error(f"Failed to seed data: {e}")
+
+        # Seed Intents (KnowledgeType) if empty
+        from app.models.tenant import KnowledgeType, BotSetting
+        res_kt = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant.id))
+        if not res_kt.scalars().first():
+            logger.info("Seeding default intents...")
+            intents_data = [
+                {"code": "qa", "label": "Відповіді на питання (Послуги та Ціни)", "handler": "qa_handler", "intent_patterns": ["скільки коштує", "ціна", "прайс", "заміна", "ремонт", "терміни"]},
+                {"code": "web_search", "label": "Пошук в інтернеті (Характеристики)", "handler": "web_search_handler", "intent_patterns": ["характеристики", "який процесор", "скільки пам'яті", "відгуки", "порівняти"]},
+                {"code": "handoff", "label": "Перевід на оператора", "handler": "escalate", "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "допомога", "зв'язок", "записатись"]},
+                {"code": "unknown", "label": "Невідомий запит", "handler": "fallback", "intent_patterns": []}
+            ]
+            for intent in intents_data:
+                kt = KnowledgeType(
+                    tenant_id=tenant.id,
+                    code=intent["code"],
+                    label=intent["label"],
+                    handler=intent["handler"],
+                    intent_patterns=intent["intent_patterns"]
+                )
+                db.add(kt)
+            await db.commit()
+            logger.info("Default intents seeded successfully.")
+
+        # Update default system prompt
+        res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant.id))
+        settings_db = res_s.scalars().first()
+        try:
+            with open("/app/app/givi_system_prompt.md", "r", encoding="utf-8") as f:
+                givi_prompt = f.read()
+        except Exception as e:
+            logger.error(f"Could not load givi_system_prompt.md: {e}")
+            givi_prompt = "Ти корисний асистент."
+
+        if not settings_db:
+            default_settings = BotSetting(
+                tenant_id=tenant.id,
+                system_prompt=givi_prompt,
+                llm_model="gemma-4",
+                temperature="0.7",
+                max_tokens="1024"
+            )
+            db.add(default_settings)
+            await db.commit()
+            logger.info("Default BotSettings created.")
+        elif settings_db.system_prompt == "Ти корисний асистент.":
+            settings_db.system_prompt = givi_prompt
+            await db.commit()
+            logger.info("BotSettings system prompt updated to givi_system_prompt.md.")
