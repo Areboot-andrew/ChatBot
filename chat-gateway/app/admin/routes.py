@@ -867,8 +867,18 @@ async def test_chat_api(
     intent_data = await detect_intent(msg.text, msg.history)
     intent = intent_data.get("intent", "GENERAL")
     search_query = intent_data.get("query", "")
+    error_msg = intent_data.get("error", "")
     intent_time = round(time.time() - intent_start, 2)
     
+    if intent == "ERROR":
+        debug_trace.append({
+            "step": "Аналіз наміру (Intent Router)", 
+            "status": "Помилка LLM", 
+            "details": f"Не вдалося підключитися до LLM: {error_msg}", 
+            "time": f"{intent_time}s"
+        })
+        return {"response": "Вибачте, сталася системна помилка (LLM недоступна).", "debug_trace": debug_trace}
+        
     debug_trace.append({
         "step": "Аналіз наміру (Intent Router)", 
         "status": "Розпізнано", 

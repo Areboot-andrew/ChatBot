@@ -59,7 +59,10 @@ async def test_chat(request: ChatRequest):
         "response": response
     }
 
+from app.channels.telegram import router as telegram_router
+
 app.include_router(admin_router)
+app.include_router(telegram_router)
 
 # Mount static files
 import os
