@@ -861,31 +861,52 @@ async def test_chat_api(
     debug_trace = []
     start_time = time.time()
     
-    # 1. Intent Recognition (Mock logic for now, or match keywords)
-    debug_trace.append({"step": "Аналіз наміру (Intent Router)", "status": "Розпізнано", "details": f"Отримано текст: '{msg.text}'", "time": "0.1s"})
+    # 1. Intent Recognition (LLM Router)
+    from app.core.intents import detect_intent
+    intent_start = time.time()
+    intent_data = await detect_intent(msg.text, msg.history)
+    intent = intent_data.get("intent", "GENERAL")
+    search_query = intent_data.get("query", "")
+    intent_time = round(time.time() - intent_start, 2)
+    
+    debug_trace.append({
+        "step": "Аналіз наміру (Intent Router)", 
+        "status": "Розпізнано", 
+        "details": f"Інтент: {intent}. Запит: '{msg.text}'", 
+        "time": f"{intent_time}s"
+    })
     
     res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res.scalars().first()
     
-    # 2. Fetch Data (SQL Prices, Q&A, or Microservices)
-    # Simple logic router for debug demonstration
+    # 2. Fetch Data (SQL Prices, Q&A, Web Search, or Microservices)
     from app.models.services import ServicePrice
     
-    # 2.1 Microservices Mock
-    if "статус" in msg.text.lower() or "ремонт" in msg.text.lower():
-        debug_trace[0]["details"] = f"Інтент: CHECK_REPAIR_STATUS"
+    qa_facts = []
+    rag_docs = []
+    prices = []
+    sys_prompt_addition = ""
+    
+    if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
         debug_trace.append({"step": "Виклик Мікросервісу (CRM API)", "status": "Очікування...", "details": f"GET /api/v1/orders?phone=...", "time": "-"})
-        
-        # Simulate network delay for microservice
         time.sleep(0.3)
         debug_trace[-1]["status"] = "Знайдено"
         debug_trace[-1]["details"] = "Отримано дані з CRM:\nЗамовлення #1024: В процесі діагностики.\nОчікувана дата: Завтра."
         debug_trace[-1]["time"] = "0.31s"
-        
-        qa_facts = []
-        rag_docs = []
-        prices = []
         sys_prompt_addition = "\nДані з внутрішньої CRM системи:\n- Замовлення: телефон Samsung\n- Статус: В процесі діагностики"
+        
+    elif intent == "WEB_SEARCH" and search_query:
+        from app.core.tools import search_internet
+        debug_trace.append({"step": "Пошук в Інтернеті (DuckDuckGo)", "status": "Шукаємо...", "details": f"Запит: {search_query}", "time": "-"})
+        search_start = time.time()
+        search_result = search_internet(search_query, max_results=3)
+        search_time = round(time.time() - search_start, 2)
+        debug_trace[-1]["status"] = "Успішно"
+        debug_trace[-1]["details"] = f"Запит: {search_query}\nРезультат:\n{search_result[:200]}..."
+        debug_trace[-1]["time"] = f"{search_time}s"
+        
+        sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
+        
     else:
         # 2.2 SQL / Qdrant Fallbacks
         # Fetching all prices (up to 100) to allow LLM to understand synonyms and categories natively
