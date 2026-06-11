@@ -2,7 +2,8 @@ import time
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.models.tenant import BotSetting, QaPair
+from app.models.tenant import BotSetting
+from app.models.knowledge import QaPair
 from app.models.services import ServicePrice
 from app.core.intents import detect_intent
 from app.core.tools import search_internet

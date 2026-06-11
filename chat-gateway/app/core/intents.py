@@ -43,4 +43,4 @@ async def detect_intent(text: str, history: list = None) -> dict:
         return data
     except Exception as e:
         logger.error(f"Intent detection failed: {e}. Raw response: {response if 'response' in locals() else 'None'}")
-        return {"intent": "GENERAL", "query": ""}
+        return {"intent": "ERROR", "error": str(e), "query": ""}
