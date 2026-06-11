@@ -96,7 +96,7 @@
                 </div>
                 <div>
                     <label for="fallback_sites" class="block mb-2 text-sm font-medium text-gray-300">Довірені сайти для резервного пошуку (через кому)</label>
-                    <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.fallback_sites if settings and settings.meta and settings.meta.fallback_sites else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.get('fallback_sites', '') if settings and settings.meta else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний Google.</p>
                 </div>
             </div>

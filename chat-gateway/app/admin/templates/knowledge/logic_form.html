@@ -41,20 +41,20 @@
             
             <div id="target_url_div" class="hidden">
                 <label for="target_url" class="block mb-2 text-sm font-medium text-gray-300">Шаблон пошуку або URL сайту</label>
-                <input type="text" name="target_url" id="target_url" value="{{ logic.meta.target_url if logic and logic.meta and logic.meta.target_url else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="https://kompi.com.ua/search?q={query}">
+                <input type="text" name="target_url" id="target_url" value="{{ logic.meta.get('target_url', '') if logic and logic.meta else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="https://kompi.com.ua/search?q={query}">
                 <p class="mt-1 text-xs text-gray-400">Напишіть `texno.plus` для DuckDuckGo пошуку по сайту, або посилання з `{query}` для прямого парсингу сторінки.</p>
             </div>
 
             <div class="hidden">
-                <input type="text" name="target_category" id="target_category" value="{{ logic.meta.target_category if logic and logic.meta else '' }}">
+                <input type="text" name="target_category" id="target_category" value="{{ logic.meta.get('target_category', '') if logic and logic.meta else '' }}">
             </div>
 
             <div>
                 <label for="fallback_action" class="block mb-2 text-xs font-medium text-gray-400">3. Що робити, якщо інформацію НЕ ЗНАЙДЕНО?</label>
                 <select name="fallback_action" id="fallback_action" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <option value="google" {% if logic and logic.meta and logic.meta.fallback_action == 'google' %}selected{% endif %}>Шукати в Інтернеті (Google/Serper)</option>
-                    <option value="escalate" {% if logic and logic.meta and logic.meta.fallback_action == 'escalate' %}selected{% endif %}>Запустити Політику Ескалації (Кликати менеджера)</option>
-                    <option value="decline" {% if logic and logic.meta and logic.meta.fallback_action == 'decline' %}selected{% endif %}>Просто відмовити ("На жаль, не знайшов")</option>
+                    <option value="google" {% if logic and logic.meta and logic.meta.get('fallback_action') == 'google' %}selected{% endif %}>Шукати в Інтернеті (Google/Serper)</option>
+                    <option value="escalate" {% if logic and logic.meta and logic.meta.get('fallback_action') == 'escalate' %}selected{% endif %}>Запустити Політику Ескалації (Кликати менеджера)</option>
+                    <option value="decline" {% if logic and logic.meta and logic.meta.get('fallback_action') == 'decline' %}selected{% endif %}>Просто відмовити ("На жаль, не знайшов")</option>
                 </select>
             </div>
         </div>
