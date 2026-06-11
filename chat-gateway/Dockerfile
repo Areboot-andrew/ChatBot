@@ -31,6 +31,7 @@ RUN pip install --no-cache /wheels/*
 COPY ./app /app/app
 COPY ./alembic /app/alembic
 COPY ./alembic.ini /app/alembic.ini
+COPY ./knowledge_template.yaml /app/knowledge_template.yaml
 
 # Для gateway
 EXPOSE 8000
