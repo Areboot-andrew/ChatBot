@@ -49,6 +49,13 @@ def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None, rag
             parts.append(f"[Фрагмент {i+1}]: {doc}")
         parts.append("")
         
+        parts.append("")
+        
+    parts.append("--- [RULES FOR CONTEXT EVALUATION] ---")
+    parts.append("Critically evaluate any data provided from the internet or knowledge base.")
+    parts.append("If the injected context does not contain the specific answer or technical specs needed to fulfill the user's request, YOU MUST state that the information is missing. DO NOT hallucinate missing details.")
+    parts.append("")
+        
     parts.append("--- [КІНЕЦЬ СИСТЕМНИХ ІНСТРУКЦІЙ] ---")
     
     return "\n".join(parts)

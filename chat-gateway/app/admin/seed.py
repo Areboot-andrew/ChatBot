@@ -94,7 +94,7 @@ async def seed_admin():
             logger.info("Seeding default intents...")
             intents_data = [
                 {"code": "qa", "label": "Відповіді на питання (Послуги та Ціни)", "handler": "qa_handler", "intent_patterns": ["скільки коштує", "ціна", "прайс", "заміна", "ремонт", "терміни"]},
-                {"code": "web_search", "label": "Пошук в інтернеті (Характеристики)", "handler": "web_search_handler", "intent_patterns": ["характеристики", "який процесор", "скільки пам'яті", "відгуки", "порівняти"]},
+                {"code": "web_search", "label": "Web Search (Only if exact technical specs are unknown to you. Formulate exact English query)", "handler": "web_search_handler", "intent_patterns": ["характеристики", "сумісність", "socket", "який процесор", "скільки пам'яті"]},
                 {"code": "handoff", "label": "Перевід на оператора", "handler": "escalate", "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "допомога", "зв'язок", "записатись"]},
                 {"code": "unknown", "label": "Невідомий запит", "handler": "fallback", "intent_patterns": []}
             ]
