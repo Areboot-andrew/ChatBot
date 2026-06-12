@@ -1122,22 +1122,24 @@ async def test_chat_api(
                 sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
                 
             else:
-                # 2.2 SQL / Qdrant Fallbacks
-                yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
-                sql_start = time.time()
-                res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
-                prices = res_price.scalars().all()
-                sql_time = round(time.time() - sql_start, 2)
-                
                 sys_prompt_addition = ""
                 rag_docs = []
                 
-                if prices:
-                    raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
-                    yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
-                    sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
+                if intent == "PRICE_INQUIRY":
+                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
+                    sql_start = time.time()
+                    res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
+                    prices = res_price.scalars().all()
+                    sql_time = round(time.time() - sql_start, 2)
+                    
+                    if prices:
+                        raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
+                        yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
+                        sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
+                    else:
+                        yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
                 else:
-                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
+                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пропущено", "Не завантажуємо прайси для інтенту " + intent)
                     
                 res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
                 qa_facts = res_qa.scalars().all()

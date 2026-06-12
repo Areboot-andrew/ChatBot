@@ -130,12 +130,12 @@ async def chat_stream(
         yield fallback_text or "Service temporarily unavailable."
 
 async def embed(text: str, model: str = settings.EMBED_MODEL) -> list[float]:
-    """Generates embeddings using LM Studio."""
+    """Generates embeddings using LM Studio or fails fast."""
     try:
-        response = await client.embeddings.create(
+        response = await client.embeddings.with_options(max_retries=0).create(
             input=text,
             model=model,
-            timeout=30.0
+            timeout=3.0
         )
         return response.data[0].embedding
     except Exception as e:
