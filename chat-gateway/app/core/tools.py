@@ -23,7 +23,7 @@ def search_internet(query: str, max_results: int = 3) -> str:
             urls_raw = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.IGNORECASE)
             
             if not snippets_raw:
-                return "Результатів в інтернеті не знайдено."
+                return "No search results found."
                 
             snippets = []
             for i in range(min(max_results, len(snippets_raw))):
@@ -48,7 +48,7 @@ def search_internet(query: str, max_results: int = 3) -> str:
             return result_text
     except Exception as e:
         logger.error(f"Error during web search: {e}")
-        return f"Помилка пошуку в інтернеті: {e}"
+        return f"Search error: {e}"
 
 def fetch_and_parse_url(url: str) -> str:
     """
@@ -72,7 +72,7 @@ def fetch_and_parse_url(url: str) -> str:
             text = trafilatura.extract(resp.text, include_links=True)
             if text:
                 return text[:4000]
-        return "Не вдалося витягти текст зі сторінки."
+        return "Could not extract text from page."
     except Exception as e:
         logger.error(f"Error fetching URL {url}: {e}")
-        return f"Помилка завантаження сайту: {e}"
+        return f"Error fetching URL: {e}"

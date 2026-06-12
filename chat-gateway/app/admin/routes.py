@@ -1074,11 +1074,7 @@ async def test_chat_api(
             sys_prompt_addition = ""
             
             if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
-                yield emit_trace("MICROSERVICE (CRM API)", "Очікування...", "Виконується HTTP GET /api/v1/orders?phone=...")
-                time.sleep(0.3)
-                crm_data = "{\n  \"order_id\": 1024,\n  \"status\": \"В процесі діагностики\",\n  \"device\": \"Samsung S23\"\n}"
-                yield emit_trace("MICROSERVICE (CRM API)", "Знайдено 200 OK", f"Отримано RAW payload:\n{crm_data}", "0.31")
-                sys_prompt_addition = f"\nДані з внутрішньої CRM системи (JSON):\n{crm_data}"
+                yield emit_trace("MICROSERVICE (CRM API)", "Пропущено", "CRM integration not configured")
                 
             elif intent == "WEB_SEARCH" and search_query:
                 from app.core.tools import search_internet
@@ -1088,7 +1084,7 @@ async def test_chat_api(
                 search_time = round(time.time() - search_start, 2)
                 yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
                 
-                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}\n\nУВАГА: Якщо вище немає ТОЧНОЇ інформації про сумісність або збіг сокетів (наприклад, AM3+ та FM2+), НЕ вигадуй сумісність! Скажіть клієнту, що ці деталі не сумісні, або що неможливо точно сказати без специфікацій."
+                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
                 
             else:
                 # 2.2 SQL / Qdrant Fallbacks
@@ -1114,7 +1110,9 @@ async def test_chat_api(
                 yield emit_trace("VECTOR DB (Qdrant RAG)", "Пошук векторів", f"Генерую embeddings для '{msg.text}' та шукаю в колекції '{tenant_id}'")
                 rag_start = time.time()
                 from app.core.rag import search_knowledge
-                rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
+                top_k = int(settings.rag_top_k) if settings and settings.rag_top_k else 3
+                threshold = float(settings.rag_score_threshold) if settings and settings.rag_score_threshold else 0.5
+                rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=top_k, threshold=threshold)
                 rag_time = round(time.time() - rag_start, 2)
                 
                 doc_details = f"Знайдено FAQ рядків (SQL): {len(qa_facts)}.\nЗнайдено RAG чанків (Qdrant): {len(rag_docs)}.\n\nRAW RAG CHUNKS:\n" + "\n---\n".join(rag_docs)

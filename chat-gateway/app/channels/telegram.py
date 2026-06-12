@@ -37,8 +37,8 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 tenant_id = channel.tenant_id
                 
                 # Fetch history from Redis
-                from app.core.history import get_redis_history, add_message_to_history
-                history = await get_redis_history(f"tg_{chat_id}", tenant_id)
+                from app.core.history import HistoryManager
+                history = await HistoryManager.get_history("telegram", str(chat_id))
                 
                 await bot.send_chat_action(chat_id=chat_id, action="typing")
                 
@@ -46,8 +46,8 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 response_text = await process_message_pipeline(text, history, tenant_id, db)
                 
                 # Update history
-                await add_message_to_history(f"tg_{chat_id}", tenant_id, "user", text)
-                await add_message_to_history(f"tg_{chat_id}", tenant_id, "assistant", response_text)
+                await HistoryManager.add_message("telegram", str(chat_id), "user", text)
+                await HistoryManager.add_message("telegram", str(chat_id), "assistant", response_text)
                 
                 await bot.send_message(chat_id=chat_id, text=response_text)
                 

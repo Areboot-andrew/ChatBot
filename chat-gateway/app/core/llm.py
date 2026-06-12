@@ -27,7 +27,8 @@ async def chat(
     base_url: str = None,
     api_key: str = None,
     return_usage: bool = False,
-    raise_error: bool = False
+    raise_error: bool = False,
+    fallback_text: str = None
 ):
     """Sends a chat completion request to LM Studio or a custom API."""
     usage_data = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -68,7 +69,7 @@ async def chat(
         logger.error(f"LLM Chat Error: {e}")
         if raise_error:
             raise e
-        err_msg = "Вибачте, зараз я не можу відповісти. Зачекайте хвилинку або зверніться пізніше."
+        err_msg = fallback_text or "Service temporarily unavailable."
         if return_usage:
             return err_msg, usage_data
         return err_msg
@@ -79,7 +80,8 @@ async def chat_stream(
     temperature: float = 0.7, 
     max_tokens: int = 1024,
     base_url: str = None,
-    api_key: str = None
+    api_key: str = None,
+    fallback_text: str = None
 ):
     """Sends a streaming chat completion request and yields tokens."""
     try:
@@ -113,7 +115,7 @@ async def chat_stream(
                     yield delta
     except Exception as e:
         logger.error(f"LLM Chat Stream Error: {e}")
-        yield "Вибачте, зараз я не можу відповісти."
+        yield fallback_text or "Service temporarily unavailable."
 
 async def embed(text: str, model: str = settings.EMBED_MODEL) -> list[float]:
     """Generates embeddings using LM Studio."""
