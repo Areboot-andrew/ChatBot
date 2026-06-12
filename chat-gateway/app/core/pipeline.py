@@ -14,6 +14,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_FALLBACK_TEXT = "Sorry, an error occurred while processing your request. Please try again later."
+
+
+def _safe_int(value, default: int) -> int:
+    """Safely convert a string/None to int, returning default on failure."""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(value, default: float) -> float:
+    """Safely convert a string/None to float, returning default on failure."""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 async def process_message_pipeline(
     text: str, 
     history: list, 
@@ -29,12 +52,18 @@ async def process_message_pipeline(
     intent = intent_data.get("intent", "GENERAL")
     search_query = intent_data.get("query", "")
     
-    if intent == "ERROR":
-        return "Вибачте, сталася системна помилка (сервіс генерації недоступний)."
-        
     res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res.scalars().first()
-    
+
+    # Read DB settings with safe defaults
+    fallback_text = (settings.fallback_text if settings and settings.fallback_text else DEFAULT_FALLBACK_TEXT)
+    rag_top_k = _safe_int(settings.rag_top_k if settings else None, 3)
+    rag_threshold = _safe_float(settings.rag_score_threshold if settings else None, 0.5)
+    max_tokens = _safe_int(settings.max_tokens if settings else None, 1024)
+
+    if intent == "ERROR":
+        return fallback_text
+        
     qa_facts = []
     rag_docs = []
     prices = []
@@ -46,7 +75,12 @@ async def process_message_pipeline(
         from app.models.tenant import KnowledgeType
         res_kt = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.code == intent))
         knowledge_type = res_kt.scalars().first()
-        
+
+    # Check that the knowledge type is enabled before using it
+    if knowledge_type and not knowledge_type.enabled:
+        logger.warning(f"KnowledgeType '{intent}' is disabled for tenant {tenant_id}, falling back.")
+        knowledge_type = None
+
     handler = knowledge_type.handler if knowledge_type else "fallback"
     
     # 3. Execute Handler Logic
@@ -55,7 +89,7 @@ async def process_message_pipeline(
         res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
         prices = res_price.scalars().all()
         if prices:
-            sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+            sys_prompt_addition = "\n[Price List Data]:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
             
         # SQL QA
         res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
@@ -63,7 +97,7 @@ async def process_message_pipeline(
         
         # Qdrant RAG
         try:
-            rag_docs = await search_knowledge(text, str(tenant_id), top_k=2)
+            rag_docs = await search_knowledge(text, str(tenant_id), top_k=rag_top_k, threshold=rag_threshold)
         except Exception as e:
             logger.error(f"RAG search error: {e}")
             rag_docs = []
@@ -71,7 +105,7 @@ async def process_message_pipeline(
     elif handler == "web_search_handler":
         if search_query:
             search_result = search_internet(search_query, max_results=3)
-            sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
+            sys_prompt_addition = f"\n[Web Search Results for '{search_query}']:\n{search_result}"
             
     elif handler == "site_search":
         target_url = knowledge_type.meta.get("target_url") if knowledge_type.meta else ""
@@ -82,19 +116,19 @@ async def process_message_pipeline(
                 final_url = target_url.replace("{query}", quote(search_query or text))
                 from app.core.tools import fetch_and_parse_url
                 site_content = fetch_and_parse_url(final_url)
-                sys_prompt_addition = f"\nДані зі сторінки пошуку ({final_url}):\n{site_content}"
+                sys_prompt_addition = f"\n[Site Search Results ({final_url})]:\n{site_content}"
             else:
                 # Use DuckDuckGo with site:
                 search_result = search_internet(f"site:{target_url} {search_query or text}", max_results=3)
-                sys_prompt_addition = f"\nДані з сайту {target_url} (DuckDuckGo пошук):\n{search_result}"
+                sys_prompt_addition = f"\n[Site Search Results ({target_url})]:\n{search_result}"
                 
     elif handler == "escalate":
-        sys_prompt_addition = "\nІНСТРУКЦІЯ: Клієнт хоче зв'язатися з оператором. Повідомте, що ви передаєте діалог менеджеру."
+        sys_prompt_addition = "\n[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator."
         
     elif handler == "fallback" or handler == "qa_handler":
         # Check Qdrant just in case, even for fallback
         try:
-            rag_docs = await search_knowledge(text, str(tenant_id), top_k=2)
+            rag_docs = await search_knowledge(text, str(tenant_id), top_k=rag_top_k, threshold=rag_threshold)
         except Exception as e:
             logger.error(f"RAG search error: {e}")
             rag_docs = []
@@ -110,14 +144,14 @@ async def process_message_pipeline(
                 sites_query = " OR ".join([f"site:{s}" for s in sites])
                 search_result = search_internet(f"({sites_query}) {search_query or text}", max_results=3)
                 
-                if "Результатів в інтернеті не знайдено" not in search_result:
-                    sys_prompt_addition = f"\nДані з довірених сайтів ({fallback_sites}):\n{search_result}"
+                if search_result and "no results" not in search_result.lower():
+                    sys_prompt_addition = f"\n[Trusted Sites Data ({fallback_sites})]:\n{search_result}"
                     found_in_waterfall = True
                     
-            # Step 2: General Internet (Restricted to IT/Tech by System Prompt)
+            # Step 2: General Internet
             if not found_in_waterfall:
                 search_result = search_internet(f"{search_query or text}", max_results=3)
-                sys_prompt_addition = f"\nДані із загального пошуку в інтернеті:\n{search_result}"
+                sys_prompt_addition = f"\n[General Web Search Results]:\n{search_result}"
                 
     # 4. Build Prompt
     sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
@@ -133,14 +167,18 @@ async def process_message_pipeline(
     else:
         messages.append({"role": "user", "content": text})
         
-    # 4. Generate LLM Response
+    # 5. Generate LLM Response
     base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
     api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
     model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
     
     try:
-        response_text = await chat(messages, model=model_name, temperature=temp, base_url=base_url, api_key=api_key)
+        response_text = await chat(
+            messages, model=model_name, temperature=temp,
+            max_tokens=max_tokens,
+            base_url=base_url, api_key=api_key
+        )
         return response_text
     except Exception as e:
         logger.error(f"LLM Generation error: {e}")
-        return "Вибачте, сталася помилка підключення до нейромережі."
+        return fallback_text

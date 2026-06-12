@@ -8,46 +8,80 @@ from app.models.tenant import KnowledgeType, BotSetting
 
 logger = logging.getLogger(__name__)
 
+
 async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: AsyncSession) -> dict:
     """
     Analyzes the user's message and routes it to the correct subsystem.
+    The router prompt is built dynamically from KnowledgeType records in the DB.
     """
+    # Load tenant LLM settings
     res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res_s.scalars().first()
-    
-    sys_prompt = """
-    You are an intent router for a technical repair chatbot.
-    Analyze the user's message IN THE CONTEXT of the conversation history.
-    Return a JSON object with:
-    - "intent": one of ["CHECK_REPAIR_STATUS", "WEB_SEARCH", "RAG_SEARCH", "GENERAL"]
-    - "query": a precise English technical search query if search is needed, otherwise empty.
-    
-    Rules for intents:
-    - "CHECK_REPAIR_STATUS": if the user explicitly asks about the status of their repair.
-    - "WEB_SEARCH": if the user asks for technical specs, pinouts, or compatibility. CRITICAL: If the user asks about compatibility between parts (e.g. "Biostar A78MD + fx6300"), you MUST generate a query that explicitly asks for sockets and specs to avoid false matches (e.g. "Biostar A78MD socket specs AND AMD FX-6300 socket specs"). If the user just types a model name, check history.
-    - "RAG_SEARCH": if the user asks about our prices, address, working hours, warranties.
-    - "GENERAL": ONLY for casual greetings or small talk that has NO technical context.
-    
-    Output strictly valid JSON and nothing else.
-    """
-    
+
+    # Load all enabled KnowledgeType records for this tenant, ordered by priority
+    res_kt = await db.execute(
+        select(KnowledgeType)
+        .where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.enabled == True)
+        .order_by(KnowledgeType.priority)
+    )
+    knowledge_types = res_kt.scalars().all()
+
+    # Build list of valid intent codes and their descriptions
+    intent_lines = []
+    intent_codes = []
+    for kt in knowledge_types:
+        intent_codes.append(kt.code)
+        description = kt.label or kt.code
+        # Use intent_patterns from meta as additional hints if available
+        patterns_hint = ""
+        if kt.intent_patterns:
+            patterns_hint = f" (e.g. {', '.join(kt.intent_patterns[:3])})"
+        intent_lines.append(f'- "{kt.code}": {description}{patterns_hint}')
+
+    # Always add GENERAL as fallback
+    if "GENERAL" not in intent_codes:
+        intent_codes.append("GENERAL")
+        intent_lines.append('- "GENERAL": General conversation, greetings, small talk, or anything that does not match the intents above.')
+
+    all_codes_str = json.dumps(intent_codes)
+    intents_block = "\n".join(intent_lines)
+
+    sys_prompt = f"""You are an intent router for a customer-facing chatbot.
+Analyze the user's message IN THE CONTEXT of the conversation history.
+Return a JSON object with:
+- "intent": one of {all_codes_str}
+- "query": a precise search query relevant to the detected intent (if a search is needed), otherwise empty string.
+
+Available intents:
+{intents_block}
+
+Rules:
+- Choose the most specific intent that matches the user's request.
+- If the user's message is a casual greeting, small talk, or does not clearly match any specific intent, use "GENERAL".
+- If a search query is needed, formulate it as a clear, concise query in the language most appropriate for accurate results.
+- Output strictly valid JSON and nothing else."""
+
     messages = [{"role": "system", "content": sys_prompt}]
     if history:
         for h in history[-2:]:
             messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
     messages.append({"role": "user", "content": text})
-        
+
     try:
         base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
         api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
         model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
-        
-        response_text, usage_data = await chat(messages, model=model_name, temperature=0.1, base_url=base_url, api_key=api_key, return_usage=True, raise_error=True)
-        
+
+        response_text, usage_data = await chat(
+            messages, model=model_name, temperature=0.1,
+            base_url=base_url, api_key=api_key,
+            return_usage=True, raise_error=True
+        )
+
         clean_json = response_text.strip()
         if clean_json.startswith("```"):
             clean_json = "\n".join(clean_json.split("\n")[1:-1])
-            
+
         data = json.loads(clean_json)
         data["usage"] = usage_data
         logger.info(f"Detected intent: {data}")
