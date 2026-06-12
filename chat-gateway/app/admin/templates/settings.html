@@ -107,6 +107,69 @@
             <textarea name="business_rules" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Ми не ремонтуємо залиті водою пристрої без повної передоплати.">{{ settings.business_rules if settings and settings.business_rules else '' }}</textarea>
         </div>
 
+        <!-- Agent Engine -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>
+            <p class="text-sm text-gray-400 mb-3">Агентний режим: модель сама вирішує, де шукати дані (каталог → база знань → інтернет), робить кілька кроків на бекфоні і тільки потім відповідає клієнту. Класичний режим — старий одношаговий маршрутизатор.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="engine" class="block mb-2 text-sm font-medium text-gray-300">Режим роботи</label>
+                    <select name="engine" id="engine" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+                        {% set cur_engine = settings.meta.get('engine', 'agent') if settings and settings.meta else 'agent' %}
+                        <option value="agent" {% if cur_engine == 'agent' %}selected{% endif %}>Агент (рекомендовано) — багатокроковий пошук відповіді</option>
+                        <option value="classic" {% if cur_engine == 'classic' %}selected{% endif %}>Класичний — один прохід (інтент → дані → відповідь)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="agent_max_iterations" class="block mb-2 text-sm font-medium text-gray-300">Макс. кроків агента за хід</label>
+                    <input type="number" min="1" max="8" name="agent_max_iterations" id="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '4') if settings and settings.meta else '4' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">Більше кроків = розумніше, але повільніше на локальній моделі.</p>
+                </div>
+            </div>
+            <label class="block mb-2 text-sm font-medium text-gray-300">Дозволені інструменти агента</label>
+            <p class="text-xs text-gray-500 mb-2">Якщо нічого не позначено — увімкнені всі.</p>
+            {% set cur_tools = settings.meta.get('enabled_tools') if settings and settings.meta else none %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-300">
+                {% for code, label in [
+                    ('search_catalog', 'Каталог/Прайси — ціни та послуги з нашої бази'),
+                    ('search_knowledge', 'База знань — FAQ, гарантія, документи (RAG)'),
+                    ('web_research', 'Інтернет-дослідження — пошук + читання знайдених сайтів'),
+                    ('open_url', 'Відкрити URL — читання конкретного посилання'),
+                    ('get_business_info', 'Бізнес-факти — адреса, години, оплата (з полів нижче)'),
+                    ('escalate', 'Ескалація — передати оператору')
+                ] %}
+                <label class="flex items-center gap-2 bg-gray-800/50 border border-gray-700 rounded-lg p-2">
+                    <input type="checkbox" name="enabled_tools" value="{{ code }}" {% if not cur_tools or code in cur_tools %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
+                    <span>{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Business Info -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Бізнес-факти (Контакти та умови)</h3>
+            <p class="text-sm text-gray-400 mb-3">Структуровані дані бізнесу. Бот підтягує їх <b>тільки коли клієнт питає</b> (адресу, графік, оплату) — вони не висять у кожному запиті і не з'їдають контекст.</p>
+            {% set bi = settings.meta.get('business_info', {}) if settings and settings.meta else {} %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for code, label, ph in [
+                    ('phone', 'Телефон', '066-170-12-82'),
+                    ('address', 'Адреса', 'м. Львів, вул. ...'),
+                    ('hours', 'Години роботи', 'Пн-Пт 10:00-19:00, Сб 10:00-15:00'),
+                    ('holidays', 'Графік на свята', 'На новорічні свята: 31.12 до 14:00...'),
+                    ('payment', 'Способи оплати', 'картка, готівка, наложка, крипта'),
+                    ('delivery', 'Доставка/видача', 'самовивіз або Нова Пошта'),
+                    ('warranty', 'Гарантія', '1-6 місяців залежно від запчастини'),
+                    ('extra', 'Інше (довільне)', 'Безкоштовна діагностика при ремонті')
+                ] %}
+                <div>
+                    <label class="block mb-1 text-sm font-medium text-gray-300">{{ label }}</label>
+                    <input type="text" name="bi_{{ code }}" value="{{ bi.get(code, '') }}" placeholder="{{ ph }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
         <!-- Marketing Protocols -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Маркетинг та Крос-сейл (Upsell)</h3>

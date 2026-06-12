@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Request, Depends, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -441,6 +442,17 @@ async def update_settings(
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
     tpl_evaluation_rules: str = Form(""),
+    engine: str = Form("agent"),
+    agent_max_iterations: str = Form("4"),
+    enabled_tools: List[str] = Form([]),
+    bi_phone: str = Form(""),
+    bi_address: str = Form(""),
+    bi_hours: str = Form(""),
+    bi_holidays: str = Form(""),
+    bi_payment: str = Form(""),
+    bi_delivery: str = Form(""),
+    bi_warranty: str = Form(""),
+    bi_extra: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -466,6 +478,25 @@ async def update_settings(
             meta_data["fallback_sites"] = fallback_sites
             if tpl_evaluation_rules:
                 meta_data["tpl_evaluation_rules"] = tpl_evaluation_rules
+
+            # Agent engine config
+            meta_data["engine"] = engine if engine in ("agent", "classic") else "agent"
+            meta_data["agent_max_iterations"] = agent_max_iterations
+            # Empty selection means "all tools" (agent falls back to ALL_TOOLS).
+            meta_data["enabled_tools"] = enabled_tools or []
+
+            # Structured business facts (injected only when the agent asks for them)
+            business_info = {
+                "phone": bi_phone.strip(),
+                "address": bi_address.strip(),
+                "hours": bi_hours.strip(),
+                "holidays": bi_holidays.strip(),
+                "payment": bi_payment.strip(),
+                "delivery": bi_delivery.strip(),
+                "warranty": bi_warranty.strip(),
+                "extra": bi_extra.strip(),
+            }
+            meta_data["business_info"] = {k: v for k, v in business_info.items() if v}
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
@@ -660,6 +691,185 @@ async def import_prices_yaml(
         logging.getLogger(__name__).error(f"Import Error: {e}")
         
     return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
+
+# --- Price table tooling: template / export / tabular import with column mapping ---
+
+PRICE_TEMPLATE_ROWS = [
+    {"category": "Телевізори", "name": "Діагностика", "price": "безкоштовно при ремонті"},
+    {"category": "Телевізори", "name": "Заміна підсвітки 32-43\"", "price": "1500-2500 грн"},
+    {"category": "Ноутбуки", "name": "Чистка від пилу + заміна термопасти", "price": "600 грн"},
+    {"category": "Ноутбуки", "name": "Заміна клавіатури", "price": "від 800 грн"},
+    {"category": "Смартфони", "name": "Заміна екрану", "price": "залежить від моделі"},
+]
+
+
+def _slugify(title: str) -> str:
+    import re as _re
+    slug = _re.sub(r"[^\w]+", "-", (title or "").strip().lower(), flags=_re.UNICODE).strip("-")
+    return slug or "import"
+
+
+def _rows_to_file(rows: list, fmt: str, filename_base: str):
+    """Serialize [{category,name,price}] to xlsx/csv/yaml StreamingResponse."""
+    import io
+    from fastapi.responses import StreamingResponse as _SR
+
+    if fmt == "csv":
+        import csv as _csv
+        buf = io.StringIO()
+        writer = _csv.writer(buf)
+        writer.writerow(["category", "name", "price"])
+        for r in rows:
+            writer.writerow([r["category"], r["name"], r["price"]])
+        data = buf.getvalue().encode("utf-8-sig")
+        media, ext = "text/csv", "csv"
+    elif fmt == "yaml":
+        cats = {}
+        for r in rows:
+            cats.setdefault(r["category"], []).append({"name": r["name"], "price": r["price"]})
+        doc = {"categories": [
+            {"slug": _slugify(title), "title": title, "services": services}
+            for title, services in cats.items()
+        ]}
+        data = yaml.safe_dump(doc, allow_unicode=True, sort_keys=False).encode("utf-8")
+        media, ext = "application/x-yaml", "yaml"
+    else:  # xlsx
+        from openpyxl import Workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Прайс"
+        ws.append(["category", "name", "price"])
+        for r in rows:
+            ws.append([r["category"], r["name"], r["price"]])
+        bio = io.BytesIO()
+        wb.save(bio)
+        data = bio.getvalue()
+        media, ext = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
+
+    return _SR(
+        iter([data]), media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.{ext}"'}
+    )
+
+
+@router.get("/knowledge/prices/template")
+async def download_price_template(
+    fmt: str = "xlsx",
+    user: User = Depends(get_current_user)
+):
+    """Downloadable example price file so the user sees the expected format."""
+    return _rows_to_file(PRICE_TEMPLATE_ROWS, fmt, "price_template")
+
+
+@router.get("/knowledge/prices/export")
+async def export_prices(
+    fmt: str = "xlsx",
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export the tenant's current price list (xlsx/csv/yaml)."""
+    from app.models.services import ServiceCategory, ServicePrice
+    rows = []
+    if tenant_id:
+        res = await db.execute(
+            select(ServicePrice, ServiceCategory.title)
+            .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
+            .where(ServicePrice.tenant_id == tenant_id)
+            .order_by(ServiceCategory.title, ServicePrice.name)
+        )
+        for price, cat_title in res.all():
+            rows.append({"category": cat_title or "", "name": price.name, "price": price.price})
+    return _rows_to_file(rows, fmt, "prices_export")
+
+
+def _parse_table_upload(content: bytes, filename: str):
+    """Parse xlsx/csv bytes into (columns, rows-of-dicts). Values as strings."""
+    import io
+    import pandas as pd
+    ext = filename.split(".")[-1].lower() if "." in filename else ""
+    if ext in ("xlsx", "xls"):
+        df = pd.read_excel(io.BytesIO(content), dtype=str)
+    else:
+        df = pd.read_csv(io.BytesIO(content), dtype=str, sep=None, engine="python", encoding="utf-8-sig")
+    df = df.fillna("")
+    df.columns = [str(c).strip() for c in df.columns]
+    return list(df.columns), df.to_dict(orient="records")
+
+
+@router.post("/knowledge/prices/import_table")
+async def import_prices_table(
+    file: UploadFile = File(...),
+    mode: str = Form("preview"),
+    name_col: str = Form(None),
+    price_col: str = Form(None),
+    category_col: str = Form(None),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Import prices from any xlsx/csv schema.
+    mode=preview: return detected columns + first rows so the UI can ask for mapping.
+    mode=commit: upsert prices using the user-chosen column mapping.
+    """
+    if not tenant_id or not file.filename:
+        return {"status": "error", "detail": "Не вибрано тенант або файл"}
+
+    content = await file.read()
+    try:
+        columns, records = _parse_table_upload(content, file.filename)
+    except Exception as e:
+        return {"status": "error", "detail": f"Не вдалося прочитати файл: {e}"}
+
+    if mode == "preview" or not name_col or not price_col:
+        return {"status": "ok", "columns": columns, "rows": records[:5], "total": len(records)}
+
+    from app.models.services import ServiceCategory, ServicePrice
+    imported, skipped = 0, 0
+    cat_cache = {}
+    try:
+        for rec in records:
+            name = str(rec.get(name_col, "")).strip()
+            price = str(rec.get(price_col, "")).strip()
+            if not name or not price:
+                skipped += 1
+                continue
+            cat_title = str(rec.get(category_col, "")).strip() if category_col else ""
+            if not cat_title:
+                cat_title = "Імпорт"
+
+            if cat_title not in cat_cache:
+                slug = _slugify(cat_title)
+                res_c = await db.execute(select(ServiceCategory).where(
+                    ServiceCategory.tenant_id == tenant_id, ServiceCategory.slug == slug))
+                cat = res_c.scalars().first()
+                if not cat:
+                    cat = ServiceCategory(tenant_id=tenant_id, slug=slug, title=cat_title)
+                    db.add(cat)
+                    await db.flush()
+                cat_cache[cat_title] = cat
+            cat = cat_cache[cat_title]
+
+            # Upsert by (category, name): update price if the row already exists.
+            res_p = await db.execute(select(ServicePrice).where(
+                ServicePrice.tenant_id == tenant_id,
+                ServicePrice.category_id == cat.id,
+                ServicePrice.name == name))
+            existing = res_p.scalars().first()
+            if existing:
+                existing.price = price
+            else:
+                db.add(ServicePrice(tenant_id=tenant_id, category_id=cat.id, name=name, price=price))
+            imported += 1
+        await db.commit()
+        return {"status": "ok", "imported": imported, "skipped": skipped}
+    except Exception as e:
+        await db.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"Table import error: {e}")
+        return {"status": "error", "detail": str(e)}
+
 
 class FeedUrlRequest(BaseModel):
     url: str
@@ -1080,155 +1290,56 @@ async def test_chat_api(
         logger.error("No tenant selected in test_chat_api")
         return {"response": "Помилка: не вибрано тенант", "debug_trace": []}
         
+    # The sandbox runs the REAL pipeline (the same one Telegram uses) and streams
+    # its trace events live. No duplicated logic — what you see here is exactly
+    # what happens in production channels.
     async def event_generator():
-        start_time = time.time()
-        
-        def emit_trace(step, status, details, duration="-"):
+        import asyncio
+        from app.core.pipeline import process_message_pipeline
+
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def trace(step, status, details, duration="-"):
             logger.info(f"[{step}] {status} | {details}")
-            event = {
+            queue.put_nowait({
                 "type": "trace",
                 "step": step,
                 "status": status,
                 "details": details,
-                "time": str(duration) if isinstance(duration, str) else f"{duration}s"
-            }
-            return f"data: {json.dumps(event)}\n\n"
+                "time": str(duration)
+            })
 
-        async with async_session_maker() as db:
-            # Fetch settings first to know the model
-            res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
-            settings = res.scalars().first()
-            
-            from app.config import settings as global_settings
-            raw_base = settings.meta.get("llm_base_url") if settings and settings.meta else ""
-            base_url_info = raw_base if raw_base else f"{global_settings.LMSTUDIO_URL} (Локальна мережа/Дефолт)"
-            model_info = settings.llm_model if settings and settings.llm_model else "gemma-4"
-
-            # 1. Intent Recognition (LLM Router)
-            from app.core.intents import detect_intent
-            intent_start = time.time()
-        
-            yield emit_trace("СИСТЕМА (КОНФІГ)", "Ініціалізація", f"Сервер LLM: {base_url_info}\nМодель LLM: {model_info}")
-            yield emit_trace("RAW REQUEST (Gateway -> Router)", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
-            
-            intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
-            intent = intent_data.get("intent", "GENERAL")
-            search_query = intent_data.get("query", "")
-            error_msg = intent_data.get("error", "")
-            intent_usage = intent_data.get("usage", {"total_tokens": 0})
-            intent_time = round(time.time() - intent_start, 2)
-            
-            raw_router_response = json.dumps(intent_data, indent=2, ensure_ascii=False)
-            
-            if intent == "ERROR":
-                yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM.\nСервер: {base_url_info}\nМодель: {model_info}\nПомилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
-                yield f"data: {json.dumps({'type': 'token', 'content': 'Вибачте, сталася системна помилка (LLM недоступна).'})}\n\n"
-                return
-                
-            yield emit_trace("LLM ROUTER: DECISION", "Успішно", f"Сирий JSON від моделі-маршрутизатора:\n{raw_router_response}\n\nВитрачено токенів: {intent_usage['total_tokens']}.", intent_time)
-            yield emit_trace("SYSTEM LOGIC (Маршрутизація)", "Вибір гілки", f"Подальший етап обробки: {intent}\nЗгенерований запит: {search_query if search_query else 'немає'}")
-            
-            # 2. Fetch Data (SQL Prices, Q&A, Web Search, or Microservices)
-            from app.models.services import ServicePrice
-            import asyncio
-            
-            qa_facts = []
-            rag_docs = []
-            prices = []
-            sys_prompt_addition = ""
-            
-            if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
-                yield emit_trace("MICROSERVICE (CRM API)", "Пропущено", "CRM integration not configured")
-                
-            elif intent == "WEB_SEARCH" and search_query:
-                from app.core.tools import search_internet
-                yield emit_trace("EXTERNAL API (DuckDuckGo)", "Виконується", f"Формую GET запит до html.duckduckgo.com/html/\nQuery: {search_query}")
-                search_start = time.time()
-                search_result = await asyncio.to_thread(search_internet, search_query, max_results=3)
-                search_time = round(time.time() - search_start, 2)
-                yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
-                
-                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
-                
-            else:
-                sys_prompt_addition = ""
-                rag_docs = []
-                
-                from app.models.tenant import KnowledgeType
-                res_kt = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.code == intent))
-                knowledge_type = res_kt.scalars().first()
-                handler = knowledge_type.handler if knowledge_type else "fallback"
-                
-                if handler == "qa_handler":
-                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
-                    sql_start = time.time()
-                    res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
-                    prices = res_price.scalars().all()
-                    sql_time = round(time.time() - sql_start, 2)
-                    
-                    if prices:
-                        raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
-                        yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
-                        
-                        tpl_price_data = settings.meta.get("tpl_price_data", "\n[Price List Data]:\n") if settings and settings.meta else "\n[Price List Data]:\n"
-                        sys_prompt_addition = tpl_price_data + raw_prices
-                    else:
-                        yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
-                else:
-                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пропущено", f"Не завантажуємо прайси для інтенту '{intent}' (handler: {handler})")
-                    
-                res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
-                qa_facts = res_qa.scalars().all()
-                
-                yield emit_trace("VECTOR DB (Qdrant RAG)", "Пошук векторів", f"Генерую embeddings для '{msg.text}' та шукаю в колекції '{tenant_id}'")
-                rag_start = time.time()
-                from app.core.rag import search_knowledge
-                top_k = int(settings.rag_top_k) if settings and settings.rag_top_k else 3
-                threshold = float(settings.rag_score_threshold) if settings and settings.rag_score_threshold else 0.5
-                rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=top_k, threshold=threshold)
-                rag_time = round(time.time() - rag_start, 2)
-                
-                doc_details = f"Знайдено FAQ рядків (SQL): {len(qa_facts)}.\nЗнайдено RAG чанків (Qdrant): {len(rag_docs)}.\n\nRAW RAG CHUNKS:\n" + "\n---\n".join(rag_docs)
-                yield emit_trace("VECTOR DB (Qdrant RAG)", "Знайдено метрики", doc_details, rag_time)
-            
-            from app.core.prompt_builder import build_system_prompt
-            sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
-            sys_prompt += sys_prompt_addition
-            
-            temp = float(settings.temperature) if settings and settings.temperature else 0.7
-            max_toks = int(settings.max_tokens) if settings and settings.max_tokens else 1024
-            model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
-            
-            messages_to_send = [
-                {"role": "system", "content": sys_prompt}
-            ]
-            
-            if msg.history:
-                for h in msg.history:
-                    messages_to_send.append({"role": h.get("role", "user"), "content": h.get("content", "")})
-            else:
-                messages_to_send.append({"role": "user", "content": msg.text})
-            
-            raw_messages_json = json.dumps(messages_to_send, indent=2, ensure_ascii=False)
-            yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\nМакс токенів: {max_toks}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
-            
+        async def run_pipeline():
             try:
-                base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
-                api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
-                model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
-                
-                from app.core.llm import chat_stream
-                
-                full_response = ""
-                async for token in chat_stream(messages_to_send, model=model_name, temperature=temp, max_tokens=max_toks, base_url=base_url, api_key=api_key):
-                    full_response += token
-                    # Think tokens from models like DeepSeek can be filtered, but `chat_stream` doesn't filter them yet.
-                    # Here we just pass them through to frontend, frontend can handle or we just send it.
-                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                
-                gen_time = round(time.time() - start_time, 2)
-                yield emit_trace("Генерація LLM", "Успішно", f"Відповідь згенерована ({len(full_response)} символів)", gen_time)
+                async with async_session_maker() as db:
+                    from app.config import settings as global_settings
+                    res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+                    settings = res.scalars().first()
+                    raw_base = settings.meta.get("llm_base_url") if settings and settings.meta else ""
+                    base_url_info = raw_base if raw_base else f"{global_settings.LMSTUDIO_URL} (Локальна мережа/Дефолт)"
+                    model_info = settings.llm_model if settings and settings.llm_model else "gemma-4"
+                    trace("СИСТЕМА (КОНФІГ)", "Ініціалізація", f"Сервер LLM: {base_url_info}\nМодель LLM: {model_info}")
+                    trace("RAW REQUEST", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
+
+                    response_text = await process_message_pipeline(
+                        msg.text, msg.history, tenant_id, db, trace=trace
+                    )
+                    queue.put_nowait({"type": "token", "content": response_text})
             except Exception as e:
-                yield emit_trace("Генерація LLM", "Помилка", str(e))
-                yield f"data: {json.dumps({'type': 'token', 'content': 'Помилка підключення до LLM.'})}\n\n"
+                logger.exception("Sandbox pipeline error")
+                queue.put_nowait({"type": "trace", "step": "PIPELINE", "status": "Помилка", "details": str(e), "time": "-"})
+                queue.put_nowait({"type": "token", "content": "Помилка обробки запиту."})
+            finally:
+                queue.put_nowait(None)  # sentinel: stream finished
+
+        task = asyncio.create_task(run_pipeline())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
     return StreamingResponse(event_generator(), media_type="text/event-stream")

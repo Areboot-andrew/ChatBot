@@ -23,6 +23,45 @@
             </form>
         </div>
 
+        <!-- Блок табличного імпорту/експорту (XLSX/CSV) -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
+            <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт / Експорт таблиці (XLSX, CSV)</h2>
+            <p class="text-sm text-gray-400 mb-4">
+                Завантажте прайс у будь-якій схемі — система покаже знайдені колонки, ви вкажете, де назва, ціна та категорія.
+            </p>
+            <div class="flex flex-wrap gap-2 mb-4 text-sm">
+                <a href="/admin/knowledge/prices/template?fmt=xlsx" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg">Скачати шаблон XLSX</a>
+                <a href="/admin/knowledge/prices/template?fmt=csv" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg">Шаблон CSV</a>
+                <a href="/admin/knowledge/prices/template?fmt=yaml" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg">Шаблон YAML</a>
+                <span class="flex-1"></span>
+                <a href="/admin/knowledge/prices/export?fmt=xlsx" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Експорт XLSX</a>
+                <a href="/admin/knowledge/prices/export?fmt=csv" class="bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Експорт CSV</a>
+            </div>
+            <div class="flex gap-4 items-center">
+                <input type="file" id="table-file" accept=".xlsx,.xls,.csv" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg cursor-pointer bg-gray-800 focus:outline-none p-2">
+                <button onclick="previewTable()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">Аналізувати файл</button>
+            </div>
+            <div id="mapping-block" class="hidden mt-4 space-y-3">
+                <div class="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                        <label class="text-gray-400 block mb-1">Колонка з назвою послуги *</label>
+                        <select id="map-name" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Колонка з ціною *</label>
+                        <select id="map-price" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Колонка категорії (опц.)</label>
+                        <select id="map-category" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                </div>
+                <div class="bg-gray-950 border border-gray-800 rounded p-3 text-xs text-gray-400 font-mono overflow-auto max-h-48" id="table-preview"></div>
+                <button onclick="commitTable()" id="btn-commit-table" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Імпортувати в каталог</button>
+                <span id="table-import-result" class="text-sm ml-2"></span>
+            </div>
+        </div>
+
         <!-- Блок Динамічної Синхронізації (JSON Feed) -->
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6 mt-6">
             <h2 class="text-lg font-semibold text-gray-200 mb-2 flex justify-between items-center">
@@ -198,6 +237,73 @@ async function syncFeed() {
         alert('Помилка: ' + err.message);
         btn.innerText = originalText;
         btn.disabled = false;
+    }
+}
+
+// --- Табличний імпорт (XLSX/CSV) з мапінгом колонок ---
+async function previewTable() {
+    const fileInput = document.getElementById('table-file');
+    if (!fileInput.files.length) { alert('Виберіть файл'); return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('mode', 'preview');
+    const res = await fetch('/admin/knowledge/prices/import_table', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.status !== 'ok') { alert('Помилка: ' + data.detail); return; }
+
+    const fill = (id, withEmpty) => {
+        const sel = document.getElementById(id);
+        sel.innerHTML = withEmpty ? '<option value="">— немає —</option>' : '';
+        data.columns.forEach(c => {
+            const o = document.createElement('option');
+            o.value = c; o.textContent = c;
+            sel.appendChild(o);
+        });
+    };
+    fill('map-name', false); fill('map-price', false); fill('map-category', true);
+
+    // Автовгадування колонок за типовими назвами
+    const guess = (sel, names) => {
+        const el = document.getElementById(sel);
+        const hit = data.columns.find(c => names.some(n => c.toLowerCase().includes(n)));
+        if (hit) el.value = hit;
+    };
+    guess('map-name', ['назв', 'послуг', 'name', 'service']);
+    guess('map-price', ['цін', 'price', 'варт', 'грн']);
+    guess('map-category', ['категор', 'category', 'розділ', 'тип']);
+
+    document.getElementById('table-preview').textContent =
+        'Рядків у файлі: ' + data.total + '\n\n' + JSON.stringify(data.rows, null, 2);
+    document.getElementById('mapping-block').classList.remove('hidden');
+}
+
+async function commitTable() {
+    const fileInput = document.getElementById('table-file');
+    if (!fileInput.files.length) { alert('Виберіть файл'); return; }
+    const nameCol = document.getElementById('map-name').value;
+    const priceCol = document.getElementById('map-price').value;
+    if (!nameCol || !priceCol) { alert('Вкажіть колонки назви та ціни'); return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('mode', 'commit');
+    fd.append('name_col', nameCol);
+    fd.append('price_col', priceCol);
+    const catCol = document.getElementById('map-category').value;
+    if (catCol) fd.append('category_col', catCol);
+
+    const btn = document.getElementById('btn-commit-table');
+    btn.disabled = true; btn.innerText = 'Імпортую...';
+    const res = await fetch('/admin/knowledge/prices/import_table', { method: 'POST', body: fd });
+    const data = await res.json();
+    btn.disabled = false; btn.innerText = 'Імпортувати в каталог';
+    const out = document.getElementById('table-import-result');
+    if (data.status === 'ok') {
+        out.textContent = '✔ Імпортовано: ' + data.imported + ', пропущено: ' + data.skipped;
+        out.className = 'text-sm ml-2 text-green-400';
+        setTimeout(() => window.location.reload(), 1200);
+    } else {
+        out.textContent = '✖ ' + data.detail;
+        out.className = 'text-sm ml-2 text-red-400';
     }
 }
 </script>
