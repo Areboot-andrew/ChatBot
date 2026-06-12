@@ -1030,12 +1030,19 @@ async def test_chat_api(
             }
             return f"data: {json.dumps(event)}\n\n"
 
-        # Must use our own DB session since FastAPI dependency session closes when function returns
         async with async_session_maker() as db:
+            # Fetch settings first to know the model
+            res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+            settings = res.scalars().first()
+            
+            base_url_info = settings.meta.get("llm_base_url") if settings and settings.meta else "Офіційний API"
+            model_info = settings.llm_model if settings and settings.llm_model else "gemma-4"
+
             # 1. Intent Recognition (LLM Router)
             from app.core.intents import detect_intent
             intent_start = time.time()
         
+            yield emit_trace("СИСТЕМА (КОНФІГ)", "Ініціалізація", f"Сервер LLM: {base_url_info}\nМодель LLM: {model_info}")
             yield emit_trace("RAW REQUEST (Gateway -> Router)", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
             
             intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
@@ -1048,17 +1055,16 @@ async def test_chat_api(
             raw_router_response = json.dumps(intent_data, indent=2, ensure_ascii=False)
             
             if intent == "ERROR":
-                yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM. Помилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
+                yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM.\nСервер: {base_url_info}\nМодель: {model_info}\nПомилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
                 yield f"data: {json.dumps({'type': 'token', 'content': 'Вибачте, сталася системна помилка (LLM недоступна).'})}\n\n"
                 return
                 
             yield emit_trace("LLM ROUTER: DECISION", "Успішно", f"Сирий JSON від моделі-маршрутизатора:\n{raw_router_response}\n\nВитрачено токенів: {intent_usage['total_tokens']}.", intent_time)
-            
-            res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
-            settings = res.scalars().first()
+            yield emit_trace("SYSTEM LOGIC (Маршрутизація)", "Вибір гілки", f"Подальший етап обробки: {intent}\nЗгенерований запит: {search_query if search_query else 'немає'}")
             
             # 2. Fetch Data (SQL Prices, Q&A, Web Search, or Microservices)
             from app.models.services import ServicePrice
+            import asyncio
             
             qa_facts = []
             rag_docs = []
@@ -1076,7 +1082,7 @@ async def test_chat_api(
                 from app.core.tools import search_internet
                 yield emit_trace("EXTERNAL API (DuckDuckGo)", "Виконується", f"Формую GET запит до html.duckduckgo.com/html/\nQuery: {search_query}")
                 search_start = time.time()
-                search_result = search_internet(search_query, max_results=3)
+                search_result = await asyncio.to_thread(search_internet, search_query, max_results=3)
                 search_time = round(time.time() - search_start, 2)
                 yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
                 
