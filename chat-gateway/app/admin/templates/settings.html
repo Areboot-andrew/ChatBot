@@ -25,12 +25,14 @@
             
             <div class="mb-6 p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
                 <label for="quick_setup" class="block mb-2 text-sm font-bold text-blue-400">Швидке налаштування провайдера (Шаблони)</label>
-                <select id="quick_setup" class="bg-gray-900 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <option value="">-- Виберіть провайдера зі списку --</option>
-                    <option value="local">🖥️ Локальна модель (LM Studio / Ollama) - Безкоштовно, Працює на вашому сервері</option>
-                    <option value="pollinations">🌍 Pollinations.ai - ПОВНІСТЮ БЕЗКОШТОВНО (Без реєстрацій і ключів)</option>
-                    <option value="openrouter_free">🌐 OpenRouter (Безкоштовні моделі Llama 3) - Потрібен API Ключ</option>
-                    <option value="groq">⚡ Groq (Найшвидший) - Потрібен безкоштовний API Ключ</option>
+                <select name="quick_setup" id="quick_setup" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <option value="" selected>-- Виберіть провайдера зі списку --</option>
+                    <option value="local">🖥️ Локальна модель (LM Studio / Ollama) - Безкоштовно</option>
+                    <option value="pollinations">🌍 Pollinations.ai - ПОВНІСТЮ БЕЗКОШТОВНО (Без реєстрацій)</option>
+                    <option value="openrouter_free">🌐 OpenRouter (Безкоштовні моделі) - Потрібен API Ключ</option>
+                    <option value="groq">⚡ Groq (Блискавично швидкий) - Безкоштовний API Ключ</option>
+                    <option value="deepseek">🐋 DeepSeek (Дуже розумний і дешевий) - Потрібен API Ключ</option>
+                    <option value="together">🚀 Together AI (Сотні Open-Source моделей) - Потрібен API Ключ</option>
                     <option value="openai">🤖 OpenAI (ChatGPT) - Платний API Ключ</option>
                 </select>
                 <p class="mt-1 text-xs text-gray-400" id="quick_setup_hint">Виберіть шаблон, щоб автоматично заповнити поля нижче.</p>
@@ -41,17 +43,22 @@
                     <label for="llm_model" class="block mb-2 text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
                     <input type="text" list="model_suggestions" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <datalist id="model_suggestions">
-                        <!-- OpenRouter Free Models -->
+                        <!-- OpenRouter Models -->
                         <option value="meta-llama/llama-3-8b-instruct:free">OpenRouter: Llama 3 8B (Безкоштовно)</option>
                         <option value="google/gemma-7b-it:free">OpenRouter: Gemma 7B (Безкоштовно)</option>
-                        <option value="mistralai/mistral-7b-instruct:free">OpenRouter: Mistral 7B (Безкоштовно)</option>
+                        <option value="anthropic/claude-3-haiku">OpenRouter: Claude 3 Haiku (Платна)</option>
                         <!-- Groq Models -->
                         <option value="llama3-8b-8192">Groq: Llama 3 8B</option>
                         <option value="llama3-70b-8192">Groq: Llama 3 70B</option>
+                        <!-- DeepSeek -->
+                        <option value="deepseek-chat">DeepSeek: Chat (V3)</option>
+                        <option value="deepseek-reasoner">DeepSeek: Reasoner (R1)</option>
+                        <!-- Together AI -->
+                        <option value="meta-llama/Llama-3-8b-chat-hf">Together: Llama 3 8B</option>
                         <!-- Local/Ollama Models -->
                         <option value="gemma-4">Локальна: gemma-4</option>
-                        <!-- Pollinations -->
-                        <option value="openai">Pollinations: openai</option>
+                        <!-- OpenAI -->
+                        <option value="gpt-4o-mini">OpenAI: GPT-4o Mini</option>
                     </datalist>
                 </div>
                 <div>
@@ -77,11 +84,12 @@
                     <input type="password" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо API публічне і не вимагає ключа, впишіть будь-що (напр. 'free').</p>
                 </div>
-                <div class="md:col-span-2 flex items-center gap-4 mt-2">
-                    <button type="button" id="btn_test_conn" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm transition">
-                        ⚡ Перевірити з'єднання
+                <div class="mt-4 flex justify-end items-center gap-4">
+                    <div id="conn_status" class="text-sm"></div>
+                    <button type="button" id="btn_test_conn" class="text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-600 focus:ring-4 focus:outline-none focus:ring-gray-800 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center transition">
+                        <svg class="w-4 h-4 mr-2 text-yellow-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
+                        Перевірити з'єднання
                     </button>
-                    <span id="conn_status" class="text-sm"></span>
                 </div>
             </div>
         </div>
@@ -109,14 +117,14 @@
                     <label for="escalation_policy" class="block mb-2 text-sm font-medium text-gray-300">Стратегія</label>
                     <select name="escalation_policy" id="escalation_policy" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         <option value="handoff" {% if settings and settings.escalation_policy == 'handoff' %}selected{% endif %}>Передати оператору (Handoff) + Дати телефон</option>
-                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (Serper) - Тільки для технічних параметрів</option>
+                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (DuckDuckGo) - Тільки для технічних параметрів</option>
                         <option value="info" {% if settings and settings.escalation_policy == 'info' %}selected{% endif %}>Просто вибачитись і зупинитись</option>
                     </select>
                 </div>
                 <div>
                     <label for="fallback_sites" class="block mb-2 text-sm font-medium text-gray-300">Довірені сайти для резервного пошуку (через кому)</label>
                     <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.get('fallback_sites', '') if settings and settings.meta else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний Google.</p>
+                    <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний пошук.</p>
                 </div>
             </div>
         </div>
@@ -156,6 +164,12 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (val === 'groq') {
             hint.textContent = 'Groq обрано. Переконайтеся, що ввели дійсний API ключ.';
             hint.className = 'mt-1 text-xs text-yellow-400';
+        } else if (val === 'deepseek') {
+            hint.textContent = 'DeepSeek API обрано. Введіть ваш ключ від платформи DeepSeek.';
+            hint.className = 'mt-1 text-xs text-blue-400';
+        } else if (val === 'together') {
+            hint.textContent = 'Together AI обрано. Доступні швидкі Open Source моделі.';
+            hint.className = 'mt-1 text-xs text-blue-400';
         } else if (val === 'openai') {
             hint.textContent = 'OpenAI обрано. Переконайтеся, що ввели дійсний платний API ключ.';
             hint.className = 'mt-1 text-xs text-yellow-400';
@@ -174,6 +188,10 @@ document.addEventListener('DOMContentLoaded', function() {
         qs.value = 'openrouter_free';
     } else if (baseUrl.value.includes('groq.com')) {
         qs.value = 'groq';
+    } else if (baseUrl.value.includes('api.deepseek.com')) {
+        qs.value = 'deepseek';
+    } else if (baseUrl.value.includes('api.together.xyz')) {
+        qs.value = 'together';
     } else if (baseUrl.value.includes('api.openai.com')) {
         qs.value = 'openai';
     }
@@ -254,6 +272,14 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (val === 'groq') {
             model.value = 'llama3-8b-8192';
             baseUrl.value = 'https://api.groq.com/openai/v1';
+            apiKey.value = '';
+        } else if (val === 'deepseek') {
+            model.value = 'deepseek-chat';
+            baseUrl.value = 'https://api.deepseek.com/v1';
+            apiKey.value = '';
+        } else if (val === 'together') {
+            model.value = 'meta-llama/Llama-3-8b-chat-hf';
+            baseUrl.value = 'https://api.together.xyz/v1';
             apiKey.value = '';
         } else if (val === 'openai') {
             model.value = 'gpt-4o-mini';
