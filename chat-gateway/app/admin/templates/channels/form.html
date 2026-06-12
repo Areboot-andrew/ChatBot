@@ -32,7 +32,7 @@
         <!-- Поля для UserBot -->
         <div id="field-userbot" class="channel-field hidden space-y-4">
             <div class="bg-yellow-900/20 border border-yellow-700/50 p-4 rounded-lg text-sm text-yellow-300">
-                <strong>Увага!</strong> Використання особистого акаунта для бота (UserBot) вимагає <code>API_ID</code>, <code>API_HASH</code> (отримати на my.telegram.org) та <code>Session String</code> (генерується окремим скриптом авторизації).
+                <strong>Увага!</strong> Потрібні <code>API_ID</code> та <code>API_HASH</code> з <a href="https://my.telegram.org" target="_blank" class="underline">my.telegram.org</a> (розділ "API development tools"). Session String можна згенерувати прямо тут нижче — код підтвердження прийде в Telegram на цей акаунт. Рекомендуємо окремий робочий номер.
             </div>
             <div>
                 <label for="api_id" class="block mb-2 text-sm font-medium text-gray-300">API ID</label>
@@ -44,9 +44,89 @@
             </div>
             <div>
                 <label for="session_string" class="block mb-2 text-sm font-medium text-gray-300">Session String</label>
-                <textarea name="session_string" id="session_string" rows="3" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Довгий рядок сесії...">{{ channel.credentials.session_string if channel and 'session_string' in channel.credentials else '' }}</textarea>
+                <textarea name="session_string" id="session_string" rows="3" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Згенеруйте нижче або вставте готовий...">{{ channel.credentials.session_string if channel and 'session_string' in channel.credentials else '' }}</textarea>
+            </div>
+
+            <!-- Генератор сесії прямо з панелі -->
+            <div class="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-3">
+                <p class="text-sm font-medium text-gray-300">Згенерувати Session String</p>
+                <p class="text-xs text-gray-500">Заповніть API ID та API HASH вище, введіть номер — Telegram надішле код на цей акаунт.</p>
+                <div class="flex gap-3">
+                    <input type="tel" id="gen_phone" placeholder="+380661701282" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                    <button type="button" onclick="userbotSendCode()" id="btn-send-code" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap">Надіслати код</button>
+                </div>
+                <div id="gen-step2" class="hidden space-y-3">
+                    <div class="flex gap-3">
+                        <input type="text" id="gen_code" placeholder="Код з Telegram" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                        <input type="password" id="gen_password" placeholder="Пароль 2FA (якщо є)" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                    </div>
+                    <button type="button" onclick="userbotConfirmCode()" id="btn-confirm-code" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">Підтвердити і вставити</button>
+                </div>
+                <p id="gen-status" class="text-xs"></p>
             </div>
         </div>
+
+        <script>
+            let userbotLoginToken = null;
+
+            async function userbotSendCode() {
+                const apiId = document.getElementById('api_id').value.trim();
+                const apiHash = document.getElementById('api_hash').value.trim();
+                const phone = document.getElementById('gen_phone').value.trim();
+                const status = document.getElementById('gen-status');
+                if (!apiId || !apiHash || !phone) {
+                    status.textContent = 'Заповніть API ID, API HASH і номер телефону';
+                    status.className = 'text-xs text-red-400';
+                    return;
+                }
+                const btn = document.getElementById('btn-send-code');
+                btn.disabled = true; btn.textContent = 'Надсилаю...';
+                const fd = new FormData();
+                fd.append('api_id', apiId); fd.append('api_hash', apiHash); fd.append('phone', phone);
+                const res = await fetch('/admin/channels/userbot/send_code', { method: 'POST', body: fd });
+                const data = await res.json();
+                btn.disabled = false; btn.textContent = 'Надіслати код';
+                if (data.status === 'ok') {
+                    userbotLoginToken = data.token;
+                    document.getElementById('gen-step2').classList.remove('hidden');
+                    status.textContent = 'Код надіслано в Telegram на цей акаунт. Введіть його нижче.';
+                    status.className = 'text-xs text-green-400';
+                } else {
+                    status.textContent = 'Помилка: ' + data.detail;
+                    status.className = 'text-xs text-red-400';
+                }
+            }
+
+            async function userbotConfirmCode() {
+                const status = document.getElementById('gen-status');
+                const code = document.getElementById('gen_code').value.trim();
+                if (!userbotLoginToken || !code) {
+                    status.textContent = 'Спочатку отримайте код і введіть його';
+                    status.className = 'text-xs text-red-400';
+                    return;
+                }
+                const btn = document.getElementById('btn-confirm-code');
+                btn.disabled = true; btn.textContent = 'Перевіряю...';
+                const fd = new FormData();
+                fd.append('token', userbotLoginToken);
+                fd.append('code', code);
+                fd.append('password', document.getElementById('gen_password').value);
+                const res = await fetch('/admin/channels/userbot/confirm_code', { method: 'POST', body: fd });
+                const data = await res.json();
+                btn.disabled = false; btn.textContent = 'Підтвердити і вставити';
+                if (data.status === 'ok') {
+                    document.getElementById('session_string').value = data.session_string;
+                    status.textContent = '✔ Session String згенеровано і вставлено. Тепер натисніть "Зберегти".';
+                    status.className = 'text-xs text-green-400';
+                } else if (data.status === 'need_password') {
+                    status.textContent = 'На акаунті ввімкнена двофакторка — введіть пароль 2FA і підтвердіть ще раз.';
+                    status.className = 'text-xs text-yellow-400';
+                } else {
+                    status.textContent = 'Помилка: ' + data.detail;
+                    status.className = 'text-xs text-red-400';
+                }
+            }
+        </script>
 
         <script>
             function toggleFields() {

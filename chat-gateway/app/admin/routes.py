@@ -420,6 +420,62 @@ async def edit_channel(
     return RedirectResponse(url="/admin/channels", status_code=303)
 
 
+# --- UserBot session generation from the panel (no terminal needed) ---
+# Pending Telethon logins between "send code" and "confirm code" requests.
+_userbot_logins = {}
+
+
+@router.post("/channels/userbot/send_code")
+async def userbot_send_code(
+    api_id: str = Form(...),
+    api_hash: str = Form(...),
+    phone: str = Form(...),
+    user: User = Depends(get_current_user),
+):
+    from telethon import TelegramClient
+    from telethon.sessions import StringSession
+    try:
+        client = TelegramClient(StringSession(), int(api_id.strip()), api_hash.strip())
+        await client.connect()
+        sent = await client.send_code_request(phone.strip())
+        login_token = str(uuid.uuid4())
+        _userbot_logins[login_token] = {
+            "client": client,
+            "phone": phone.strip(),
+            "phone_code_hash": sent.phone_code_hash,
+        }
+        return {"status": "ok", "token": login_token}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+@router.post("/channels/userbot/confirm_code")
+async def userbot_confirm_code(
+    token: str = Form(...),
+    code: str = Form(...),
+    password: str = Form(""),
+    user: User = Depends(get_current_user),
+):
+    from telethon.errors import SessionPasswordNeededError
+    data = _userbot_logins.get(token)
+    if not data:
+        return {"status": "error", "detail": "Сесія логіну прострочена. Надішліть код ще раз."}
+    client = data["client"]
+    try:
+        try:
+            await client.sign_in(data["phone"], code.strip(), phone_code_hash=data["phone_code_hash"])
+        except SessionPasswordNeededError:
+            if not password:
+                return {"status": "need_password"}
+            await client.sign_in(password=password)
+        session_string = client.session.save()
+        await client.disconnect()
+        _userbot_logins.pop(token, None)
+        return {"status": "ok", "session_string": session_string}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
 async def _register_telegram_webhook(channel_id: uuid.UUID, token: str):
     """Auto-register the Telegram webhook for a bot channel (spec §2.2)."""
     if not token:
