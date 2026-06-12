@@ -5,24 +5,32 @@ logger = logging.getLogger(__name__)
 
 def search_internet(query: str, max_results: int = 3) -> str:
     """
-    Performs a web search using DuckDuckGo and returns a formatted string of the best snippets.
+    Performs a web search using DuckDuckGo HTML Lite and returns a formatted string of the best snippets.
     """
+    import httpx
+    import urllib.parse
+    import re
     logger.info(f"Searching internet for: {query}")
     try:
-        ddgs = DDGS()
-        results = ddgs.text(query, max_results=max_results)
-        
-        if not results:
-            return "Результатів в інтернеті не знайдено."
+        data = urllib.parse.urlencode({'q': query})
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
+            resp = client.post("https://html.duckduckgo.com/html/", content=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+            resp.raise_for_status()
             
-        snippets = []
-        for i, res in enumerate(results):
-            title = res.get("title", "")
-            body = res.get("body", "")
-            href = res.get("href", "")
-            snippets.append(f"Джерело {i+1}: {title}\nURL: {href}\nФрагмент: {body}")
+            html = resp.text
+            snippets_raw = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
             
-        return "\n\n".join(snippets)
+            if not snippets_raw:
+                return "Результатів в інтернеті не знайдено."
+                
+            snippets = []
+            for i in range(min(max_results, len(snippets_raw))):
+                text = re.sub(r'<[^>]+>', '', snippets_raw[i]).strip()
+                text = text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+                snippets.append(f"Фрагмент {i+1}: {text}")
+                
+            return "\n\n".join(snippets)
     except Exception as e:
         logger.error(f"Error during web search: {e}")
         return f"Помилка пошуку в інтернеті: {e}"
