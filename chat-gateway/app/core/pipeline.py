@@ -89,7 +89,8 @@ async def process_message_pipeline(
         res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
         prices = res_price.scalars().all()
         if prices:
-            sys_prompt_addition = "\n[Price List Data]:\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+            tpl_price_data = settings.meta.get("tpl_price_data", "\n[Price List Data]:\n") if settings and settings.meta else "\n[Price List Data]:\n"
+            sys_prompt_addition = tpl_price_data + "\n".join([f"- {p.name}: {p.price}" for p in prices])
             
         # SQL QA
         res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
@@ -105,7 +106,8 @@ async def process_message_pipeline(
     elif handler == "web_search_handler":
         if search_query:
             search_result = search_internet(search_query, max_results=3)
-            sys_prompt_addition = f"\n[Web Search Results for '{search_query}']:\n{search_result}"
+            tpl_web_search = settings.meta.get("tpl_web_search", "\n[Web Search Results for '{query}']:\n") if settings and settings.meta else "\n[Web Search Results for '{query}']:\n"
+            sys_prompt_addition = tpl_web_search.replace("{query}", search_query) + search_result
             
     elif handler == "site_search":
         target_url = knowledge_type.meta.get("target_url") if knowledge_type.meta else ""
@@ -116,14 +118,17 @@ async def process_message_pipeline(
                 final_url = target_url.replace("{query}", quote(search_query or text))
                 from app.core.tools import fetch_and_parse_url
                 site_content = fetch_and_parse_url(final_url)
-                sys_prompt_addition = f"\n[Site Search Results ({final_url})]:\n{site_content}"
+                tpl_site_search = settings.meta.get("tpl_site_search", "\n[Site Search Results ({url})]:\n") if settings and settings.meta else "\n[Site Search Results ({url})]:\n"
+                sys_prompt_addition = tpl_site_search.replace("{url}", final_url) + site_content
             else:
                 # Use DuckDuckGo with site:
                 search_result = search_internet(f"site:{target_url} {search_query or text}", max_results=3)
-                sys_prompt_addition = f"\n[Site Search Results ({target_url})]:\n{search_result}"
+                tpl_site_search = settings.meta.get("tpl_site_search", "\n[Site Search Results ({url})]:\n") if settings and settings.meta else "\n[Site Search Results ({url})]:\n"
+                sys_prompt_addition = tpl_site_search.replace("{url}", target_url) + search_result
                 
     elif handler == "escalate":
-        sys_prompt_addition = "\n[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator."
+        tpl_escalate = settings.meta.get("tpl_escalate_instruction", "\n[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator.") if settings and settings.meta else "\n[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator."
+        sys_prompt_addition = tpl_escalate
         
     elif handler == "fallback" or handler == "qa_handler":
         # Check Qdrant just in case, even for fallback
@@ -145,13 +150,15 @@ async def process_message_pipeline(
                 search_result = search_internet(f"({sites_query}) {search_query or text}", max_results=3)
                 
                 if search_result and "no results" not in search_result.lower():
-                    sys_prompt_addition = f"\n[Trusted Sites Data ({fallback_sites})]:\n{search_result}"
+                    tpl_trusted = settings.meta.get("tpl_trusted_search", "\n[Trusted Sites Data ({sites})]:\n") if settings and settings.meta else "\n[Trusted Sites Data ({sites})]:\n"
+                    sys_prompt_addition = tpl_trusted.replace("{sites}", fallback_sites) + search_result
                     found_in_waterfall = True
                     
             # Step 2: General Internet
             if not found_in_waterfall:
                 search_result = search_internet(f"{search_query or text}", max_results=3)
-                sys_prompt_addition = f"\n[General Web Search Results]:\n{search_result}"
+                tpl_general = settings.meta.get("tpl_general_search", "\n[General Web Search Results]:\n") if settings and settings.meta else "\n[General Web Search Results]:\n"
+                sys_prompt_addition = tpl_general + search_result
                 
     # 4. Build Prompt
     sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
