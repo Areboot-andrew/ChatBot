@@ -80,9 +80,11 @@ async def test_chat(request: ChatRequest):
     }
 
 from app.channels.telegram import router as telegram_router
+from app.channels.webchat import router as webchat_router
 
 app.include_router(admin_router)
 app.include_router(telegram_router)
+app.include_router(webchat_router)
 
 # Mount static files
 import os

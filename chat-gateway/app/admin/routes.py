@@ -300,9 +300,11 @@ async def create_channel_form(
     db: AsyncSession = Depends(get_db)
 ):
     tenants = await get_all_tenants(db)
+    from app.config import settings as app_settings
     return templates.TemplateResponse(request=request, name="channels/form.html", context={
-        "request": request, "user": user, "tenants": tenants, 
-        "current_tenant_id": tenant_id, "channel": None
+        "request": request, "user": user, "tenants": tenants,
+        "current_tenant_id": tenant_id, "channel": None,
+        "public_base_url": app_settings.PUBLIC_BASE_URL.rstrip("/")
     })
 
 @router.post("/channels/create")
@@ -331,9 +333,11 @@ async def create_channel(
         }
     elif type == 'telegram':
         creds_json = {"token": credentials}
+    elif type == 'webchat':
+        creds_json = {"allowed_origins": credentials}
     else:
         creds_json = {"config": credentials}
-    
+
     new_channel = Channel(
         tenant_id=tenant_id,
         name=name,
@@ -368,8 +372,10 @@ async def edit_channel_form(
     channel = res.scalars().first()
     if not channel:
         return RedirectResponse(url="/admin/channels", status_code=303)
+    from app.config import settings as app_settings
     return templates.TemplateResponse(request=request, name="channels/form.html", context={
-        "request": request, "user": user, "tenants": tenants, "current_tenant_id": tenant_id, "channel": channel
+        "request": request, "user": user, "tenants": tenants, "current_tenant_id": tenant_id, "channel": channel,
+        "public_base_url": app_settings.PUBLIC_BASE_URL.rstrip("/")
     })
 
 @router.post("/channels/{channel_id}/edit")
@@ -402,9 +408,11 @@ async def edit_channel(
             }
         elif type == 'telegram':
             creds_json = {"token": credentials}
+        elif type == 'webchat':
+            creds_json = {"allowed_origins": credentials}
         else:
             creds_json = {"config": credentials}
-            
+
         channel.name = name
         channel.type = type
         channel.credentials = creds_json

@@ -29,6 +29,22 @@
             <p class="mt-1 text-xs text-gray-400">Отримується у @BotFather.</p>
         </div>
 
+        <!-- Поля для Webchat (сайт) -->
+        <div id="field-webchat" class="channel-field hidden space-y-4">
+            <div>
+                <label for="webchat_origins" class="block mb-2 text-sm font-medium text-gray-300">Дозволені домени (через кому)</label>
+                <input type="text" id="webchat_origins" value="{{ channel.credentials.allowed_origins if channel and 'allowed_origins' in channel.credentials else '' }}" oninput="document.getElementById('credentials').value=this.value" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="texno.plus, www.texno.plus">
+                <p class="mt-1 text-xs text-gray-400">Віджет працюватиме тільки на цих сайтах. Порожньо = будь-який сайт (не рекомендується для продакшну).</p>
+            </div>
+            {% if channel and channel.type == 'webchat' %}
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Код для вставки на сайт (перед &lt;/body&gt;)</label>
+                <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 font-mono text-xs text-green-400 break-all" id="embed-snippet">&lt;script src="{{ public_base_url }}/widget.js" data-channel="{{ channel.id }}" defer&gt;&lt;/script&gt;</div>
+                <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('embed-snippet').textContent).then(()=>this.textContent='✔ Скопійовано')" class="mt-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-xs">Скопіювати</button>
+            </div>
+            {% endif %}
+        </div>
+
         <!-- Поля для UserBot -->
         <div id="field-userbot" class="channel-field hidden space-y-4">
             <div class="bg-yellow-900/20 border border-yellow-700/50 p-4 rounded-lg text-sm text-yellow-300">
@@ -132,10 +148,14 @@
             function toggleFields() {
                 const type = document.getElementById('type').value;
                 document.querySelectorAll('.channel-field').forEach(el => el.classList.add('hidden'));
-                
+
                 if (type === 'telegram_userbot') {
                     document.getElementById('field-userbot').classList.remove('hidden');
                     document.getElementById('credentials').required = false;
+                } else if (type === 'webchat') {
+                    document.getElementById('field-webchat').classList.remove('hidden');
+                    document.getElementById('credentials').required = false;
+                    document.getElementById('credentials').value = document.getElementById('webchat_origins').value;
                 } else {
                     document.getElementById('field-bot-token').classList.remove('hidden');
                     document.getElementById('credentials').required = true;
