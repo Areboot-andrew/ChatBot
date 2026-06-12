@@ -21,6 +21,9 @@
         <li class="mr-2">
             <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="docs">Документи (Мануали)</button>
         </li>
+        <li class="mr-2">
+            <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="business">Бізнес-факти</button>
+        </li>
     </ul>
 </div>
 
@@ -191,6 +194,33 @@
 </div>
 
 <!-- Upload Modal -->
+<!-- Tab Content: Business Facts -->
+<div id="tab-business" class="tab-pane hidden">
+    <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
+        <p class="text-sm text-gray-400 mb-4">Контакти та умови бізнесу. Бот підтягує їх <b>тільки коли клієнт питає</b> (адресу, графік, оплату) — вони не висять у кожному запиті і не з'їдають контекст.</p>
+        <form action="/admin/knowledge/business_info" method="POST">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {% for code, label, ph in [
+                    ('phone', 'Телефон', '066-170-12-82'),
+                    ('address', 'Адреса', 'м. Львів, вул. ...'),
+                    ('hours', 'Години роботи', 'Пн-Пт 10:00-19:00, Сб 10:00-15:00'),
+                    ('holidays', 'Графік на свята', 'На новорічні свята: 31.12 до 14:00...'),
+                    ('payment', 'Способи оплати', 'картка, готівка, наложка, крипта'),
+                    ('delivery', 'Доставка/видача', 'самовивіз або Нова Пошта'),
+                    ('warranty', 'Гарантія', '1-6 місяців залежно від запчастини'),
+                    ('extra', 'Інше (довільне)', 'Безкоштовна діагностика при ремонті')
+                ] %}
+                <div>
+                    <label class="block mb-1 text-sm font-medium text-gray-300">{{ label }}</label>
+                    <input type="text" name="bi_{{ code }}" value="{{ business_info.get(code, '') if business_info else '' }}" placeholder="{{ ph }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+                </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition">Зберегти бізнес-факти</button>
+        </form>
+    </div>
+</div>
+
 <div id="uploadModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
     <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-xl w-full max-w-md">
         <div class="flex justify-between items-center p-4 border-b border-gray-800">

@@ -146,28 +146,12 @@
             </div>
         </div>
 
-        <!-- Business Info -->
+        <!-- Web Search Provider -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Бізнес-факти (Контакти та умови)</h3>
-            <p class="text-sm text-gray-400 mb-3">Структуровані дані бізнесу. Бот підтягує їх <b>тільки коли клієнт питає</b> (адресу, графік, оплату) — вони не висять у кожному запиті і не з'їдають контекст.</p>
-            {% set bi = settings.meta.get('business_info', {}) if settings and settings.meta else {} %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {% for code, label, ph in [
-                    ('phone', 'Телефон', '066-170-12-82'),
-                    ('address', 'Адреса', 'м. Львів, вул. ...'),
-                    ('hours', 'Години роботи', 'Пн-Пт 10:00-19:00, Сб 10:00-15:00'),
-                    ('holidays', 'Графік на свята', 'На новорічні свята: 31.12 до 14:00...'),
-                    ('payment', 'Способи оплати', 'картка, готівка, наложка, крипта'),
-                    ('delivery', 'Доставка/видача', 'самовивіз або Нова Пошта'),
-                    ('warranty', 'Гарантія', '1-6 місяців залежно від запчастини'),
-                    ('extra', 'Інше (довільне)', 'Безкоштовна діагностика при ремонті')
-                ] %}
-                <div>
-                    <label class="block mb-1 text-sm font-medium text-gray-300">{{ label }}</label>
-                    <input type="text" name="bi_{{ code }}" value="{{ bi.get(code, '') }}" placeholder="{{ ph }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-                </div>
-                {% endfor %}
-            </div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Пошук в інтернеті</h3>
+            <p class="text-sm text-gray-400 mb-3">За замовчуванням бот шукає через DuckDuckGo (безкоштовно, без ключа). Якщо вказати ключ <a href="https://serper.dev" target="_blank" class="text-blue-400 hover:underline">Serper.dev</a> — пошук піде через справжній Google (2500 запитів безкоштовно). Знайдені сторінки бот у будь-якому разі відкриває і читає повністю.</p>
+            <label for="serper_api_key" class="block mb-2 text-sm font-medium text-gray-300">Serper API Key (опційно)</label>
+            <input type="password" name="serper_api_key" id="serper_api_key" autocomplete="off" value="{{ settings.meta.get('serper_api_key', '') if settings and settings.meta else '' }}" placeholder="Залиште порожнім для DuckDuckGo" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
         </div>
 
         <!-- Marketing Protocols -->

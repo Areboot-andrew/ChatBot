@@ -453,14 +453,7 @@ async def update_settings(
     engine: str = Form("agent"),
     agent_max_iterations: str = Form("4"),
     enabled_tools: List[str] = Form([]),
-    bi_phone: str = Form(""),
-    bi_address: str = Form(""),
-    bi_hours: str = Form(""),
-    bi_holidays: str = Form(""),
-    bi_payment: str = Form(""),
-    bi_delivery: str = Form(""),
-    bi_warranty: str = Form(""),
-    bi_extra: str = Form(""),
+    serper_api_key: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -492,19 +485,7 @@ async def update_settings(
             meta_data["agent_max_iterations"] = agent_max_iterations
             # Empty selection means "all tools" (agent falls back to ALL_TOOLS).
             meta_data["enabled_tools"] = enabled_tools or []
-
-            # Structured business facts (injected only when the agent asks for them)
-            business_info = {
-                "phone": bi_phone.strip(),
-                "address": bi_address.strip(),
-                "hours": bi_hours.strip(),
-                "holidays": bi_holidays.strip(),
-                "payment": bi_payment.strip(),
-                "delivery": bi_delivery.strip(),
-                "warranty": bi_warranty.strip(),
-                "extra": bi_extra.strip(),
-            }
-            meta_data["business_info"] = {k: v for k, v in business_info.items() if v}
+            meta_data["serper_api_key"] = serper_api_key.strip()
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
@@ -530,25 +511,68 @@ async def knowledge_base(
     qa_pairs = []
     logic_schemas = []
     documents = []
+    business_info = {}
     if tenant_id:
         res_t = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = res_t.scalars().first()
-        
+
         res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).order_by(QaPair.question))
         qa_pairs = res_qa.scalars().all()
-        
+
         res_logic = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id).order_by(KnowledgeType.label))
         logic_schemas = res_logic.scalars().all()
-        
+
         res_docs = await db.execute(select(KbDocument).where(KbDocument.tenant_id == tenant_id).order_by(KbDocument.updated_at.desc()))
         documents = res_docs.scalars().all()
 
+        res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+        bot_settings_row = res_s.scalars().first()
+        if bot_settings_row and bot_settings_row.meta:
+            business_info = bot_settings_row.meta.get("business_info", {}) or {}
+
     return templates.TemplateResponse(request=request, name="knowledge/index.html", context={
-        "request": request, "user": user, "tenants": tenants, 
+        "request": request, "user": user, "tenants": tenants,
         "current_tenant_id": tenant_id, "tenant": tenant,
         "qa_pairs": qa_pairs, "logic_schemas": logic_schemas,
-        "documents": documents
+        "documents": documents, "business_info": business_info
     })
+
+
+@router.post("/knowledge/business_info")
+async def update_business_info(
+    bi_phone: str = Form(""),
+    bi_address: str = Form(""),
+    bi_hours: str = Form(""),
+    bi_holidays: str = Form(""),
+    bi_payment: str = Form(""),
+    bi_delivery: str = Form(""),
+    bi_warranty: str = Form(""),
+    bi_extra: str = Form(""),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant_id:
+        res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+        settings = res.scalars().first()
+        if settings:
+            meta_data = settings.meta if settings.meta else {}
+            business_info = {
+                "phone": bi_phone.strip(),
+                "address": bi_address.strip(),
+                "hours": bi_hours.strip(),
+                "holidays": bi_holidays.strip(),
+                "payment": bi_payment.strip(),
+                "delivery": bi_delivery.strip(),
+                "warranty": bi_warranty.strip(),
+                "extra": bi_extra.strip(),
+            }
+            meta_data["business_info"] = {k: v for k, v in business_info.items() if v}
+            settings.meta = meta_data
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(settings, "meta")
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge", status_code=303)
 
 @router.post("/knowledge/docs/upload")
 async def docs_upload(

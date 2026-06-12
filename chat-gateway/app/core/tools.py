@@ -52,48 +52,90 @@ def search_internet(query: str, max_results: int = 3) -> str:
         logger.error(f"Error during web search: {e}")
         return f"Search error: {e}"
 
-def web_research(query: str, max_pages: int = 3, page_chars: int = 4000) -> str:
-    """
-    Deep web research for the agent: search DuckDuckGo, rank result links by
-    relevance to the query (token overlap in title/snippet/url), then actually
-    OPEN the best pages and extract their full readable text — not just snippets.
-    """
+def _serper_search(query: str, serper_key: str) -> tuple:
+    """Google search via Serper.dev. Returns (candidates, answer_box_text)."""
+    import httpx
+    candidates = []
+    answer_text = ""
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.post(
+            "https://google.serper.dev/search",
+            json={"q": query, "num": 10},
+            headers={"X-API-KEY": serper_key, "Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    box = data.get("answerBox") or {}
+    if box:
+        answer_text = box.get("answer") or box.get("snippet") or ""
+    kg = data.get("knowledgeGraph") or {}
+    if not answer_text and kg.get("description"):
+        answer_text = kg["description"]
+    # Google order is already relevance-ranked; keep it (higher score first).
+    organic = data.get("organic") or []
+    for i, item in enumerate(organic[:10]):
+        candidates.append((10 - i, item.get("link", ""), item.get("title", ""), item.get("snippet", "")))
+    return candidates, answer_text
+
+
+def _ddg_search(query: str) -> list:
+    """DuckDuckGo HTML search. Returns candidates ranked by token overlap."""
     import httpx
     import urllib.parse
     import re
-    logger.info(f"Web research for: {query}")
+    data = urllib.parse.urlencode({'q': query})
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
+        resp = client.post("https://html.duckduckgo.com/html/", content=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        resp.raise_for_status()
+        html = resp.text
+
+    urls_raw = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.IGNORECASE)
+    titles_raw = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+    snippets_raw = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+    if not urls_raw:
+        return []
+
+    def clean(s: str) -> str:
+        s = re.sub(r'<[^>]+>', '', s)
+        return s.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').strip()
+
+    q_tokens = set(w for w in re.findall(r'[\w\d]+', query.lower(), re.UNICODE) if len(w) >= 3)
+    candidates = []
+    for i, url in enumerate(urls_raw[:10]):
+        title = clean(titles_raw[i]) if i < len(titles_raw) else ""
+        snippet = clean(snippets_raw[i]) if i < len(snippets_raw) else ""
+        haystack = f"{title} {snippet} {url}".lower()
+        score = sum(1 for t in q_tokens if t in haystack)
+        candidates.append((score, url, title, snippet))
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    return candidates
+
+
+def web_research(query: str, max_pages: int = 3, page_chars: int = 4000, serper_key: str = None) -> str:
+    """
+    Deep web research for the agent: search (Google via Serper when a key is
+    configured, DuckDuckGo otherwise), rank result links by relevance, then
+    actually OPEN the best pages and extract their full readable text — not
+    just snippets.
+    """
+    logger.info(f"Web research ({'serper' if serper_key else 'ddg'}) for: {query}")
+    answer_text = ""
     try:
-        data = urllib.parse.urlencode({'q': query})
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
-            resp = client.post("https://html.duckduckgo.com/html/", content=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-            resp.raise_for_status()
-            html = resp.text
-
-        # Parse result blocks: url + title + snippet
-        urls_raw = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.IGNORECASE)
-        titles_raw = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
-        snippets_raw = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
-
-        if not urls_raw:
+        candidates = []
+        if serper_key:
+            try:
+                candidates, answer_text = _serper_search(query, serper_key)
+            except Exception as e:
+                logger.warning(f"Serper search failed, falling back to DDG: {e}")
+        if not candidates:
+            candidates = _ddg_search(query)
+        if not candidates:
             return "No search results found."
 
-        def clean(s: str) -> str:
-            s = re.sub(r'<[^>]+>', '', s)
-            return s.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').strip()
-
-        q_tokens = set(w for w in re.findall(r'[\w\d]+', query.lower(), re.UNICODE) if len(w) >= 3)
-
-        candidates = []
-        for i, url in enumerate(urls_raw[:10]):
-            title = clean(titles_raw[i]) if i < len(titles_raw) else ""
-            snippet = clean(snippets_raw[i]) if i < len(snippets_raw) else ""
-            haystack = f"{title} {snippet} {url}".lower()
-            score = sum(1 for t in q_tokens if t in haystack)
-            candidates.append((score, url, title, snippet))
-        candidates.sort(key=lambda c: c[0], reverse=True)
-
         parts = []
+        if answer_text:
+            parts.append(f"=== GOOGLE ANSWER BOX:\n{answer_text}")
         opened = 0
         for score, url, title, snippet in candidates:
             if opened >= max_pages:

@@ -179,6 +179,38 @@ async def run_agent(
     tools_block = "\n".join([TOOL_DESCRIPTIONS[t] for t in enabled_tools if t in TOOL_DESCRIPTIONS])
     router_protocol = ROUTER_PROTOCOL.replace("{tools_block}", tools_block).replace("{max_iter}", str(max_iter))
 
+    # Tenant routing hints from the "Схема Логіки (Інтенти)" page: each enabled
+    # KnowledgeType row becomes a hint line, so adding a step in the panel
+    # teaches the agent which tool to use for which trigger phrases.
+    _HANDLER_TO_TOOL = {
+        "qa_handler": "search_catalog / search_knowledge",
+        "web_search_handler": "web_research",
+        "site_search": "open_url",
+        "escalate": "escalate",
+    }
+    try:
+        from app.models.tenant import KnowledgeType
+        res_kt = await db.execute(
+            select(KnowledgeType)
+            .where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.enabled == True)
+            .order_by(KnowledgeType.priority)
+        )
+        hint_lines = []
+        for kt in res_kt.scalars().all():
+            tool_hint = _HANDLER_TO_TOOL.get(kt.handler)
+            if not tool_hint:
+                continue
+            if kt.handler == "site_search" and kt.meta and kt.meta.get("target_url"):
+                tool_hint = f"open_url ({kt.meta['target_url']})"
+            patterns = ""
+            if kt.intent_patterns:
+                patterns = " Trigger phrases: " + ", ".join(kt.intent_patterns[:6]) + "."
+            hint_lines.append(f"- {kt.label or kt.code}: use {tool_hint}.{patterns}")
+        if hint_lines:
+            router_protocol += "\n[TENANT ROUTING HINTS]\n" + "\n".join(hint_lines)
+    except Exception as e:
+        logger.warning(f"Could not load routing hints: {e}")
+
     persona = settings.system_prompt if settings and settings.system_prompt else "You are a helpful assistant. Answer in Ukrainian."
     business_rules = settings.business_rules if settings and settings.business_rules else ""
 
@@ -261,17 +293,18 @@ async def run_agent(
             result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
         elif action == "web_research":
             q = query or text
+            serper_key = meta.get("serper_api_key") or None
             # Tenant trusted sites first (panel: "Довірені сайти"), then open web.
             fallback_sites = meta.get("fallback_sites", "")
             result = ""
             if fallback_sites:
                 sites = [s.strip() for s in fallback_sites.split(",") if s.strip()]
                 sites_q = " OR ".join([f"site:{s}" for s in sites])
-                result = await asyncio.to_thread(web_research, f"({sites_q}) {q}")
+                result = await asyncio.to_thread(web_research, f"({sites_q}) {q}", 3, 4000, serper_key)
                 if "No search results" in result or "could not extract" in result.lower():
                     result = ""
             if not result:
-                result = await asyncio.to_thread(web_research, q)
+                result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
         elif action == "open_url":
             result = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
         elif action == "get_business_info":
