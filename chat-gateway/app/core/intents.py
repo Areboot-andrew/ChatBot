@@ -17,15 +17,16 @@ async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: Asyn
     
     sys_prompt = """
     You are an intent router for a technical repair chatbot.
-    Analyze the user's message and return a JSON object with:
+    Analyze the user's message IN THE CONTEXT of the conversation history.
+    Return a JSON object with:
     - "intent": one of ["CHECK_REPAIR_STATUS", "WEB_SEARCH", "RAG_SEARCH", "GENERAL"]
     - "query": a precise English technical search query if search is needed, otherwise empty.
     
     Rules for intents:
-    - "CHECK_REPAIR_STATUS": if the user explicitly asks about the status of their repair (e.g., "що з моїм телефоном", "статус ремонту").
-    - "WEB_SEARCH": if the user asks for technical specs of a specific model, pinouts, compatibility (like "чи підійде сокет ам3 на biostar", "характеристики"), or external facts not related to our shop.
-    - "RAG_SEARCH": if the user asks about our prices, address, working hours, warranties, or how to drop off a device.
-    - "GENERAL": for casual greetings or simple small talk ("привіт", "дякую").
+    - "CHECK_REPAIR_STATUS": if the user explicitly asks about the status of their repair.
+    - "WEB_SEARCH": if the user asks for technical specs, pinouts, or compatibility (like "чи підійде сокет", "характеристики Biostar"). CRITICAL: If the user just types a model name (e.g. "Biostar A78MD") or bumps the chat ("ти тут?"), look at the history! If they were asked to provide a model to check compatibility, you MUST choose WEB_SEARCH and generate the query (e.g. "Biostar A78MD CPU compatibility socket").
+    - "RAG_SEARCH": if the user asks about our prices, address, working hours, warranties.
+    - "GENERAL": ONLY for casual greetings or small talk that has NO technical context.
     
     Output strictly valid JSON and nothing else.
     """
