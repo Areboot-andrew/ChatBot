@@ -20,6 +20,7 @@ def search_internet(query: str, max_results: int = 3) -> str:
             
             html = resp.text
             snippets_raw = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
+            urls_raw = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.IGNORECASE)
             
             if not snippets_raw:
                 return "Результатів в інтернеті не знайдено."
@@ -28,9 +29,23 @@ def search_internet(query: str, max_results: int = 3) -> str:
             for i in range(min(max_results, len(snippets_raw))):
                 text = re.sub(r'<[^>]+>', '', snippets_raw[i]).strip()
                 text = text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
-                snippets.append(f"Фрагмент {i+1}: {text}")
+                url = urls_raw[i] if i < len(urls_raw) else ""
+                snippets.append(f"Джерело {i+1}: {url}\nФрагмент: {text}")
                 
-            return "\n\n".join(snippets)
+            result_text = "\n\n".join(snippets)
+            
+            # Fetch the first page for deep context
+            if urls_raw:
+                try:
+                    deep_text = fetch_and_parse_url(urls_raw[0])
+                    if deep_text and "Помилка" not in deep_text and "Не вдалося" not in deep_text:
+                        result_text += f"\n\n--- ДОДАТКОВИЙ ПАРСИНГ ПЕРШОГО САЙТУ ({urls_raw[0]}) ---\n"
+                        # Limit to 2000 chars to save tokens and avoid prompt bloat
+                        result_text += deep_text[:2000] 
+                except Exception as ex:
+                    logger.warning(f"Could not deep parse top URL: {ex}")
+                    
+            return result_text
     except Exception as e:
         logger.error(f"Error during web search: {e}")
         return f"Помилка пошуку в інтернеті: {e}"
