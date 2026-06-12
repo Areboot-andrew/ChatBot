@@ -1,0 +1,358 @@
+[0] <USER_REQUEST>
+привіт прочитай що і як ми маємо робити паралельнно веди файл що зроблено і виправлень або корекцій. ip lmm 192.168.1.84 (там стоіть lmstudio) сайт буде лежати як і всі сайти і контейнерр з ними на 192.168.1.11 . давай читай і кажи з чого будемо розпочинати питай відразу що треба
+</US
+[12] <USER_REQUEST>
+власний шлюз. будемо деплоїти все в докер щоб менше махатись. база постедж . домен буде bot.texno.plus ми в однійц підмережі тому тестувати можна прямо звідси. ще яекі питання???
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:22:17+03:00.
+</ADDITIONAL_M
+[13] <USER_REQUEST>
+(Dify опиши 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:19:35+03:00.
+</ADDITIONAL_METADATA>
+[18] <USER_REQUEST>
+так і буде обслуговувати два сайти і кілька телеграм каналів. один сайт з продажу комплектуючих пк інший сервісний центр
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:25:11+03:00.
+</ADDITIONAL_METADATA>
+[21] <USER_REQUEST>
+таблиці мають динамічно розширюватись в базі по мірі росту
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:27:01+03:00.
+</ADDITIONAL_METADATA>
+[29] <USER_REQUEST>
+так надалі маємо організувати підбір товарів пропонувати щось по акції купити і так далі. тому база має бути додатково готова до нових можливостей знань
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:29:49+03:00.
+</ADDITIONAL_METADATA>
+[39] <USER_REQUEST>
+і намтупний етап це яещо додамо ще один інтернет магазин зі своєю специфікою щоб я легко додав базу знань . парсинг пошук по базі вся логіка має бути заточена на економію контексту. чіткість відповідям і так далі. це все мало в мд бути описаним. 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+
+[47] <USER_REQUEST>
+дороби план і переходимо до архітектури
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:37:46+03:00.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Claude Opus 4.6 (Thinking) to Gemini 3.1 Pro (Low). No need
+[69] <USER_REQUEST>
+наступний етап
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:39:28+03:00.
+</ADDITIONAL_METADATA>
+[102] <USER_REQUEST>
+всі перевірки роби
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:41:26+03:00.
+</ADDITIONAL_METADATA>
+[108] <USER_REQUEST>
+докер запустив
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T14:42:30+03:00.
+</ADDITIONAL_METADATA>
+[180] <USER_REQUEST>
+давай наступний етап
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:15:12+03:00.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.1 Pro (Low) to Claude Opus 4.6 (Thinking). No need to comment on this
+[205] <USER_REQUEST>
+продовжи
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:17:23+03:00.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Claude Opus 4.6 (Thinking) to Gemini 3.1 Pro (Low). No need to comment on this change if t
+[246] <USER_REQUEST>
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:20:56+03:00.
+</ADDITIONAL_METADATA>
+[264] <USER_REQUEST>
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:23:30+03:00.
+</ADDITIONAL_METADATA>
+[282] <USER_REQUEST>
+ти якісь хардкорні дані боту часом не прописав??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:30:00+03:00.
+</ADDITIONAL_METADATA>
+[288] <USER_REQUEST>
+дивно бо я там маю вшитий промпт і він на нього не відреагував ... в lmstudio
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:34:26+03:00.
+</ADDITIONAL_METADATA>
+[294] <USER_REQUEST>
+Просто поглянь я закинув в диекторію проекту тестовий свій файл хтмл який керував його роботою колись гуглив і так далі. було цікаво. я думаю нам таке десь потім теж би могло пригодитись. поглянь
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:37:12+03:0
+[303] <USER_REQUEST>
+це як додаткова функція до нашого плану мд його не міняємо поки. запиши це десь
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:39:27+03:00.
+</ADDITIONAL_METADATA>
+[309] <USER_REQUEST>
+дивись прайси можуть бути json там і характеристики будуть як і вxml  просто текстом так і запитання відповіді можеуьб різні бути. нам би якось це продумати. важливі речі .. особливо що деякі речі рв ремонт не беремо інші тре узгоджувати як і продаж... по різному. плюс варто навчити м
+[329] <USER_REQUEST>
+інструкцію поведінки якщо немає то гуглимо чи даєсо телефон менеджера чи мишемо в чат менеджеру чи інші при винекненні неувязок. я подібне робив в файлі тому що скидав тобі ну продумаємо якось це в налаштуваннях логіку
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2
+[338] <USER_REQUEST>
+тексти тільки не хардкорити клієнот немає себе відчувати що спілкується з ботом
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:47:51+03:00.
+</ADDITIONAL_METADATA>
+[368] <USER_REQUEST>
+створи поки тестову структуру з можливістю повного редагування і схемою логіки в адмінці повністю редаговану не захардкорену
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T15:50:53+03:00.
+</ADDITIONAL_METADATA>
+[396] <USER_REQUEST>
+там де обробники на бекенді ми маємо мати якісь ключі в якій базі знань шукати якщо не знайшов де далі шукати чи гуглити якась така логіка і тим потрібно керувати не хардкорити і бот немає відповідати шаблонно відповідь вона має слугувати як приклад а фразу він має творити сам відпові
+[416] <USER_REQUEST>
+добре але шукати має не лмм а парсер пошук=овий чи ні не так в нас в плані було?7
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:02:53+03:00.
+</ADDITIONAL_METADATA>
+[419] <USER_REQUEST>
+давай пишемо по плану і потім підредагуємо. незабувай вести нотатки і фікси
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:04:08+03:00.
+</ADDITIONAL_METADATA>
+[446] <USER_REQUEST>
+Це неможливо налаштувати там потрібно знати що є в базі які поля типи а я іх немаю як і унікальні коди 
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:07:56+03:00.
+</ADDITIONAL_METADATA>
+[458] <USER_REQUEST>
+тоді мені потрібно там бачити структури бази які там категорії і типи щоб якось це все повязувати . воно стає надто складне
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:09:59+03:00.
+</ADDITIONAL_METADATA>
+[464] <USER_REQUEST>
+скільки коштує, яка ціна"  наприклад якщо клієнт так не напише тоді що?? або зробить помилу або фраза буде російською?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:11:15+03:00.
+</ADDITIONAL_METADATA>
+[470] <USER_REQUEST>
+так роби по плану
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T16:12:24+03:00.
+</ADDITIONAL_METADATA>
+[516] <USER_REQUEST>
+я тобі дам посилання "C:\Users\user\Desktop\technoplus-service"  це мій сат сервісу зпарси звідти дані про ціни і базу знань і заповни базу тестовим шаблоном і заодно зроби схуму файлів які б я міг правити тобто правильну структуру того файла
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The 
+[566] <USER_REQUEST>
+ам буде зручніше редагувати прайси та питання в єдиному JSON/YAML        Я рекомендую окремі SQL таблиці для прайсів     а Qdrant база знань більше має бути як типу чого якась річ не ремонтується або невигідно якщо  не описано в faq базі.... така якось логіка поки. головне щоб все мож
+[632] <USER_REQUEST>
+ти імпортуй і розроби в адмінці щоб я це імпортоване міг редагувати зручно
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:15:44+03:00.
+</ADDITIONAL_METADATA>
+[698] <USER_REQUEST>
+https://github.com/Areboot-andrew/ChatBot.git   я створив репо давай зробимо ще гіт нормально вже готовим для деплою тестового щоб з мому міг працбвати
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:18:43+03:00.
+</ADDITIONAL_METADATA>
+[716] <USER_REQUEST>
+бази треба для докера збірки через куліфай як інакше тестити??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:19:56+03:00.
+</ADDITIONAL_METADATA>
+[731] <USER_REQUEST>
+texnoplus_kompi_multi_client_lmm_decides (6).html
+Initial commit for Chat Gateway   цей файл не треба на гіт
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:20:59+03:00.
+</ADDITIONAL_METADATA>
+[743] <USER_REQUEST>
+тобто colify сам збере всі бази до купи і проект??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:22:22+03:00.
+</ADDITIONAL_METADATA>
+[746] <USER_REQUEST>
+SECRET_KEY (придумати якийсь довгий пароль для шифрування сесій).
+ADMIN_DEFAULT_PASSWORD (якщо хочете, щоб пароль адміна був не admin123).  ці поля env зроби поки щоб я  не гадав які назви потрібні
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:24:01+0
+[755] <USER_REQUEST>
+SECRET_KEY (з підказкою, що його треба замінити)
+ADMIN_DEFAULT_PASSWORD (за замовчуванням admin123)
+FERNET_KEY (для шифрування токенів месенджерів)
+LMSTUDIO_URL та назви моделей. я немаю значень
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:24:52+03
+[761] <USER_REQUEST>
+дай одним списком
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:25:38+03:00.
+</ADDITIONAL_METADATA>
+[764] <USER_REQUEST>
+продовжуємо  схему робимо пайплан або ноди?? памятаєш ?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:27:28+03:00.
+</ADDITIONAL_METADATA>
+[776] <USER_REQUEST>
+я тут не дуже зрозумів... маю на увазі там де база знань додати такого типу налаштування . тобто в нас вже є певна логіка тому іі вже треба промалювати десь там на вкладці як ти вважаєш?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:30:52+03:00.
+</ADDI
+[788] <USER_REQUEST>
+поки розробляємо додай справа в тест чат пісочницю роботу бота що він робить і як передаються на які наші сервіст відповіді щось по типу того як я тобі файл давав той хтмл
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:33:19+03:00.
+</ADDITIONAL_METADATA
+[794] <USER_REQUEST>
+бо я навіть не розумію чи є конект з лмм чи немає що вона отримує і так далі
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:34:06+03:00.
+</ADDITIONAL_METADATA>
+[829] <USER_REQUEST>
+ну і робота наших мікросервісів
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:36:01+03:00.
+</ADDITIONAL_METADATA>
+[838] <USER_REQUEST>
+ти документ ведеш наших змін доопрацювань і архітектури ендпоінти і так далі??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:37:43+03:00.
+</ADDITIONAL_METADATA>
+[850] <USER_REQUEST>
+створи схему json для прайсу і бази знань з інтернет магазину який бот буде обслуговувати. категорія, товар, ціна , наявність, опис, характеристики, (по зарактеристикам будемо шуукати сумістність)  наявність та посилання на сторінку итовару. і фото товару. (це буде адреса напевне поси
+[856] <USER_REQUEST>
+ні це будуть запчастини до пк
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:43:04+03:00.
+</ADDITIONAL_METADATA>
+[862] <USER_REQUEST>
+сайт kompi.com.ua    а нашого сервісного центру texno.plus
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:44:08+03:00.
+</ADDITIONAL_METADATA>
+[868] <USER_REQUEST>
+я небачу чи є конект з kmm чи завантажена модель і так далі
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:45:26+03:00.
+</ADDITIONAL_METADATA>
+[891] <USER_REQUEST>
+всі заглушки зроби робочими
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:47:23+03:00.
+</ADDITIONAL_METADATA>
+[903] <USER_REQUEST>
+ou are “шалений Гіві”, a live repair-and-hardware master for texnoplus repair service and kompi hardware store.
+
+MAIN LANGUAGE
+- Always answer clients in Ukrainian.
+- The internal rules are written in English only to keep behavior structured.
+- Speak short, dry, technical, human. Not 
+[909] <USER_REQUEST>
+не хардкорь ціни і назви в моделей в промпті чи приладів модель отримувати буде гаючинації
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:54:51+03:00.
+</ADDITIONAL_METADATA>
+[915] <USER_REQUEST>
+старий промпт той що я скинув ти зберіг??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:55:56+03:00.
+</ADDITIONAL_METADATA>
+[921] <USER_REQUEST>
+ок. продовжуємо по плану
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:56:46+03:00.
+</ADDITIONAL_METADATA>
+[941] <USER_REQUEST>
+я завантажу згодом робимо роботу
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T17:58:09+03:00.
+</ADDITIONAL_METADATA>
+[1009] <USER_REQUEST>
+на гіт?
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T18:01:01+03:00.
+</ADDITIONAL_METADATA>
+[1012] <USER_REQUEST>
+нам потрібно ще буде посилання на файл прайс обовязково щоб система динамічно оновлювала наявність і нові товари
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T18:02:04+03:00.
+</ADDITIONAL_METADATA>
+[1024] <USER_REQUEST>
+трохи перервемось я тестую в чат пісочниці бота проте процес його роботи що куди звідки бере і так далі не відображається
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T18:03:30+03:00.
+</ADDITIONAL_METADATA>
+[1057] <USER_REQUEST>
+зараз прайси питання і таке інше все підключено?? таксамо як і спробии шукати в різних місцях знань??
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T18:05:39+03:00.
+</ADDITIONAL_METADATA>
+[1060] <USER_REQUEST>
+повертаємось.. посилання буде на JSON  але все решта залишаємо це має бути як опція. і коли бот підтяне файл я мушу в адмінці бачити його парс структуру щоб розуміти чи все правильно залізе в базу. і тоді щлб він за потреби оновлював чи як...
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The 
+[1067] <USER_REQUEST>
+знову перевемось  я ж тобі дав дані для свого сервісу що бот питає модель?? вона не настільки важлива. там і питання відповіді були і також опис робіт по категоріям пройдись заповни
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-10T18:10:31+03:00.
+</ADDITIONA

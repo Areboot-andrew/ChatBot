@@ -412,8 +412,8 @@ async def update_settings(
     marketing_rules: str = Form(""),
     escalation_policy: str = Form("handoff"),
     fallback_sites: str = Form(""),
-    escalation_prompt: str = Form(...),
-    fallback_text: str = Form(...),
+    escalation_prompt: str = Form(""),
+    fallback_text: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
