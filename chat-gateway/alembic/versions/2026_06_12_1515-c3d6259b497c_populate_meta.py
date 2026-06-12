@@ -25,29 +25,18 @@ def upgrade() -> None:
     SET meta = CASE WHEN meta IS NULL THEN '{}'::jsonb ELSE meta END || 
     jsonb_build_object(
         'tpl_business_header', '--- [БІЗНЕС ПРАВИЛА ТА ОБМЕЖЕННЯ] ---\nТи ПОВИНЕН неухильно дотримуватись наступних правил. Ніколи не порушуй їх:',
-        'tpl_marketing_header', '--- [МАРКЕТИНГОВІ ПРОТОКОЛИ] ---\nЯкщо це доречно і природно звучить у контексті діалогу, спробуй застосувати ці настанови (ненав'язливо):',
+        'tpl_marketing_header', '--- [МАРКЕТИНГОВІ ПРОТОКОЛИ] ---\nЯкщо це доречно і природно звучить у контексті діалогу, спробуй застосувати ці настанови (ненав''язливо):',
         'tpl_escalation_header', '--- [ПОЛІТИКА ЕСКАЛАЦІЇ] ---\nЯкщо у тебе немає інформації для відповіді на питання клієнта, не вигадуй. Замість цього використай цю настанову своїми словами:',
         'tpl_qa_header', '--- [ТОЧНІ ФАКТИ (Q&A)] ---\nВикористай ці затверджені відповіді:',
         'tpl_rag_header', '--- [ДОКУМЕНТИ / БАЗА ЗНАНЬ] ---\nВикористай наступні уривки документів для формування відповіді:',
-        'tpl_evaluation_rules', '--- [RULES FOR CONTEXT EVALUATION] ---\nCritically evaluate any data provided from the internet or knowledge base.\nIf the injected context does not contain the specific answer or technical specs needed to fulfill the user's request, YOU MUST state that the information is missing. DO NOT hallucinate missing details.',
+        'tpl_evaluation_rules', '--- [RULES FOR CONTEXT EVALUATION] ---\nCritically evaluate any data provided from the internet or knowledge base.\nIf the injected context does not contain the specific answer or technical specs needed to fulfill the user''s request, YOU MUST state that the information is missing. DO NOT hallucinate missing details.',
         'tpl_footer', '--- [КІНЕЦЬ СИСТЕМНИХ ІНСТРУКЦІЙ] ---',
-        'tpl_price_data', '
-[Price List Data]:
-',
-        'tpl_web_search', '
-[Web Search Results for ''{query}'']:
-',
-        'tpl_site_search', '
-[Site Search Results ({url})]:
-',
-        'tpl_trusted_search', '
-[Trusted Sites Data ({sites})]:
-',
-        'tpl_general_search', '
-[General Web Search Results]:
-',
-        'tpl_escalate_instruction', '
-[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator.'
+        'tpl_price_data', '\n[Price List Data]:\n',
+        'tpl_web_search', '\n[Web Search Results for ''{query}'']:\n',
+        'tpl_site_search', '\n[Site Search Results ({url})]:\n',
+        'tpl_trusted_search', '\n[Trusted Sites Data ({sites})]:\n',
+        'tpl_general_search', '\n[General Web Search Results]:\n',
+        'tpl_escalate_instruction', '\n[INSTRUCTION]: The user wants to speak with a human agent. Inform them that you are transferring the conversation to a live operator.'
     );
     """)
 
