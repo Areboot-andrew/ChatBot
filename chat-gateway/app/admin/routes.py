@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
 import uuid
+import logging
 
 from app.database import get_db
 from app.admin.auth import verify_password, create_session, delete_session
@@ -343,10 +344,13 @@ async def create_channel(
     )
     db.add(new_channel)
     await db.commit()
+    await db.refresh(new_channel)
     if type == 'telegram_userbot':
         import asyncio
         from app.channels.telegram_userbot import userbot_manager
         asyncio.create_task(userbot_manager.restart())
+    elif type == 'telegram' and enabled:
+        await _register_telegram_webhook(new_channel.id, creds_json.get("token", ""))
     return RedirectResponse(url="/admin/channels", status_code=303)
 
 @router.get("/channels/{channel_id}/edit", response_class=HTMLResponse)
@@ -411,7 +415,30 @@ async def edit_channel(
             import asyncio
             from app.channels.telegram_userbot import userbot_manager
             asyncio.create_task(userbot_manager.restart())
+        elif type == 'telegram' and enabled:
+            await _register_telegram_webhook(channel.id, creds_json.get("token", ""))
     return RedirectResponse(url="/admin/channels", status_code=303)
+
+
+async def _register_telegram_webhook(channel_id: uuid.UUID, token: str):
+    """Auto-register the Telegram webhook for a bot channel (spec §2.2)."""
+    if not token:
+        return
+    import httpx
+    from app.config import settings as app_settings
+    webhook_url = f"{app_settings.PUBLIC_BASE_URL.rstrip('/')}/webhook/telegram/{channel_id}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{token}/setWebhook",
+                json={"url": webhook_url})
+            data = resp.json()
+            if not data.get("ok"):
+                logging.getLogger(__name__).error(f"setWebhook failed for channel {channel_id}: {data}")
+            else:
+                logging.getLogger(__name__).info(f"Webhook registered: {webhook_url}")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"setWebhook error for channel {channel_id}: {e}")
 # --- SETTINGS ---
 @router.get("/settings", response_class=HTMLResponse)
 async def bot_settings(

@@ -35,15 +35,31 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 text = update.message.text
                 chat_id = update.message.chat.id
                 tenant_id = channel.tenant_id
-                
+
                 # Fetch history from Redis
                 from app.core.history import HistoryManager
                 history = await HistoryManager.get_history("telegram", str(chat_id))
-                
-                await bot.send_chat_action(chat_id=chat_id, action="typing")
-                
-                # Process through core pipeline
-                response_text = await process_message_pipeline(text, history, tenant_id, db)
+
+                # Keep "typing..." alive while the agent works (the status expires
+                # after ~5s, agent loops can take much longer).
+                import asyncio
+                async def _keep_typing():
+                    try:
+                        while True:
+                            await bot.send_chat_action(chat_id=chat_id, action="typing")
+                            await asyncio.sleep(4)
+                    except asyncio.CancelledError:
+                        pass
+                typing_task = asyncio.create_task(_keep_typing())
+
+                # Process through core pipeline (chat_key enables agent memory)
+                try:
+                    response_text = await process_message_pipeline(
+                        text, history, tenant_id, db,
+                        chat_key=f"telegram:{channel_id}:{chat_id}"
+                    )
+                finally:
+                    typing_task.cancel()
                 
                 # Update history
                 await HistoryManager.add_message("telegram", str(chat_id), "user", text)
