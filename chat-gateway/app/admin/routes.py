@@ -1148,7 +1148,12 @@ async def test_chat_api(
                 sys_prompt_addition = ""
                 rag_docs = []
                 
-                if intent == "PRICE_INQUIRY":
+                from app.models.tenant import KnowledgeType
+                res_kt = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.code == intent))
+                knowledge_type = res_kt.scalars().first()
+                handler = knowledge_type.handler if knowledge_type else "fallback"
+                
+                if handler == "qa_handler":
                     yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
                     sql_start = time.time()
                     res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
@@ -1158,11 +1163,13 @@ async def test_chat_api(
                     if prices:
                         raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
                         yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
-                        sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
+                        
+                        tpl_price_data = settings.meta.get("tpl_price_data", "\n[Price List Data]:\n") if settings and settings.meta else "\n[Price List Data]:\n"
+                        sys_prompt_addition = tpl_price_data + raw_prices
                     else:
                         yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
                 else:
-                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пропущено", "Не завантажуємо прайси для інтенту " + intent)
+                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пропущено", f"Не завантажуємо прайси для інтенту '{intent}' (handler: {handler})")
                     
                 res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
                 qa_facts = res_qa.scalars().all()
