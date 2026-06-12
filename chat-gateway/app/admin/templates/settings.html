@@ -47,7 +47,7 @@
                             Завантажити список моделей (API)
                         </button>
                     </div>
-                    <input type="text" list="model_suggestions" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="text" autocomplete="off" data-lpignore="true" data-1p-ignore="true" list="model_suggestions" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <datalist id="model_suggestions">
                         <!-- OpenRouter Models -->
                         <option value="meta-llama/llama-3-8b-instruct:free">OpenRouter: Llama 3 8B (Безкоштовно)</option>
@@ -82,12 +82,12 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-800">
                 <div>
                     <label for="llm_base_url" class="block mb-2 text-sm font-medium text-gray-300">Кастомний API URL (Базовий шлях)</label>
-                    <input type="text" name="llm_base_url" id="llm_base_url" value="{{ settings.meta.get('llm_base_url', '') if settings and settings.meta else '' }}" placeholder="https://api.groq.com/openai/v1" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="text" autocomplete="off" data-lpignore="true" data-1p-ignore="true" name="llm_base_url" id="llm_base_url" value="{{ settings.meta.get('llm_base_url', '') if settings and settings.meta else '' }}" placeholder="https://api.groq.com/openai/v1" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Залиште пустим для використання локального сервера.</p>
                 </div>
                 <div>
                     <label for="llm_api_key" class="block mb-2 text-sm font-medium text-gray-300">API Ключ</label>
-                    <input type="password" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <input type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо API публічне і не вимагає ключа, впишіть будь-що (напр. 'free').</p>
                 </div>
                 <div class="mt-4 flex justify-end items-center gap-4">
