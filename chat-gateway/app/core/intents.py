@@ -24,7 +24,7 @@ async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: Asyn
     
     Rules for intents:
     - "CHECK_REPAIR_STATUS": if the user explicitly asks about the status of their repair.
-    - "WEB_SEARCH": if the user asks for technical specs, pinouts, or compatibility (like "чи підійде сокет", "характеристики Biostar"). CRITICAL: If the user just types a model name (e.g. "Biostar A78MD") or bumps the chat ("ти тут?"), look at the history! If they were asked to provide a model to check compatibility, you MUST choose WEB_SEARCH and generate the query (e.g. "Biostar A78MD CPU compatibility socket").
+    - "WEB_SEARCH": if the user asks for technical specs, pinouts, or compatibility. CRITICAL: If the user asks about compatibility between parts (e.g. "Biostar A78MD + fx6300"), you MUST generate a query that explicitly asks for sockets and specs to avoid false matches (e.g. "Biostar A78MD socket specs AND AMD FX-6300 socket specs"). If the user just types a model name, check history.
     - "RAG_SEARCH": if the user asks about our prices, address, working hours, warranties.
     - "GENERAL": ONLY for casual greetings or small talk that has NO technical context.
     

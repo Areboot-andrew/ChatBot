@@ -1088,7 +1088,7 @@ async def test_chat_api(
                 search_time = round(time.time() - search_start, 2)
                 yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
                 
-                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
+                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}\n\nУВАГА: Якщо вище немає ТОЧНОЇ інформації про сумісність або збіг сокетів (наприклад, AM3+ та FM2+), НЕ вигадуй сумісність! Скажіть клієнту, що ці деталі не сумісні, або що неможливо точно сказати без специфікацій."
                 
             else:
                 # 2.2 SQL / Qdrant Fallbacks
