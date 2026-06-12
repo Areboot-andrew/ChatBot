@@ -10,32 +10,22 @@ logger = logging.getLogger(__name__)
 
 async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: AsyncSession) -> dict:
     """
-    Analyzes the user's message dynamically based on KnowledgeType rules.
+    Analyzes the user's message and routes it to the correct subsystem.
     """
-    res = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.enabled == True))
-    intents = res.scalars().all()
-    
     res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
     settings = res_s.scalars().first()
     
-    rules = []
-    codes = []
-    for i in intents:
-        codes.append(i.code)
-        patterns_str = ", ".join(i.intent_patterns) if i.intent_patterns else "будь-які інші запити"
-        rules.append(f'- "{i.code}": якщо користувач питає: {patterns_str}')
-        
-    codes_str = '", "'.join(codes)
-    rules_str = "\n".join(rules)
-    
-    sys_prompt = f"""
-    You are an intent router for a bot.
+    sys_prompt = """
+    You are an intent router for a technical repair chatbot.
     Analyze the user's message and return a JSON object with:
-    - "intent": one of ["{codes_str}"]
+    - "intent": one of ["CHECK_REPAIR_STATUS", "WEB_SEARCH", "RAG_SEARCH", "GENERAL"]
     - "query": a precise English technical search query if search is needed, otherwise empty.
     
-    Rules:
-    {rules_str}
+    Rules for intents:
+    - "CHECK_REPAIR_STATUS": if the user explicitly asks about the status of their repair (e.g., "що з моїм телефоном", "статус ремонту").
+    - "WEB_SEARCH": if the user asks for technical specs of a specific model, pinouts, compatibility (like "чи підійде сокет ам3 на biostar", "характеристики"), or external facts not related to our shop.
+    - "RAG_SEARCH": if the user asks about our prices, address, working hours, warranties, or how to drop off a device.
+    - "GENERAL": for casual greetings or simple small talk ("привіт", "дякую").
     
     Output strictly valid JSON and nothing else.
     """
