@@ -53,11 +53,11 @@ def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None, rag
         
         parts.append("")
         
-    tpl_evaluation_rules = meta.get("tpl_evaluation_rules", "--- [АБСОЛЮТНЕ ПРАВИЛО: ЗАБОРОНА ГАЛЮЦИНАЦІЙ] ---\n1. Якщо питання стосується технічних характеристик, сумісності, наявності чи цін — використовуй ВИКЛЮЧНО дані з блоків вище (Web Search, Прайс, FAQ).\n2. Якщо в наданих текстах НЕМАЄ прямої відповіді — СУВОРО ЗАБОРОНЕНО вигадувати її з власної пам'яті.\n3. Якщо даних немає, дай відповідь у своєму стилі, щось на кшталт: \"Не маю точних технічних даних по цьому залізу, треба дивитись по факту\" або запропонуй клієнту надати точну модель.\n4. НІЯКИХ припущень щодо сумісності. Або 100% підтвердження в контексті, або ти не знаєш.")
+    tpl_evaluation_rules = meta.get("tpl_evaluation_rules", "--- [ABSOLUTE RULE: HALLUCINATION BAN] ---\n1. If the question is about technical specs, compatibility, availability, or prices - use ONLY the data from the blocks above (Web Search, Price, FAQ).\n2. If there is NO direct answer in the provided context - YOU ARE STRICTLY FORBIDDEN from inventing it from your own memory.\n3. If data is missing, answer in your style, something like: \"I don't have exact technical data on this hardware, I need to see it\" or ask the client to provide the exact model.\n4. NO assumptions about compatibility. Either 100% confirmation in context, or you don't know.")
     parts.append(tpl_evaluation_rules)
     parts.append("")
         
-    tpl_footer = meta.get("tpl_footer", "--- [КІНЕЦЬ СИСТЕМНИХ ІНСТРУКЦІЙ] ---")
+    tpl_footer = meta.get("tpl_footer", "--- [END OF SYSTEM INSTRUCTIONS] ---")
     parts.append(tpl_footer)
     
     return "\n".join(parts)
