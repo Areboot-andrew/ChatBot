@@ -260,7 +260,18 @@ async def run_agent(
         elif action == "search_knowledge":
             result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
         elif action == "web_research":
-            result = await asyncio.to_thread(web_research, query or text)
+            q = query or text
+            # Tenant trusted sites first (panel: "Довірені сайти"), then open web.
+            fallback_sites = meta.get("fallback_sites", "")
+            result = ""
+            if fallback_sites:
+                sites = [s.strip() for s in fallback_sites.split(",") if s.strip()]
+                sites_q = " OR ".join([f"site:{s}" for s in sites])
+                result = await asyncio.to_thread(web_research, f"({sites_q}) {q}")
+                if "No search results" in result or "could not extract" in result.lower():
+                    result = ""
+            if not result:
+                result = await asyncio.to_thread(web_research, q)
         elif action == "open_url":
             result = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
         elif action == "get_business_info":
@@ -287,6 +298,15 @@ async def run_agent(
     context_block = build_context_block()
     if context_block:
         sys_prompt += "\n\n" + context_block
+        # Tenant-editable anti-hallucination rules (panel: "Правила оцінки контексту")
+        eval_rules = meta.get("tpl_evaluation_rules")
+        if eval_rules:
+            sys_prompt += "\n\n" + eval_rules
+    # Tenant-editable escalation guidance (panel: "Настанова ескалації") — what to
+    # say when the needed fact was not found anywhere.
+    escalation_prompt = settings.escalation_prompt if settings and settings.escalation_prompt else ""
+    if escalation_prompt:
+        sys_prompt += "\n\n[IF THE ANSWER IS MISSING FROM THE FACTS]\nUse this guidance in your own words: " + escalation_prompt
     sys_prompt += "\n\n" + ANSWER_PROTOCOL
 
     temp = 0.7
