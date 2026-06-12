@@ -34,9 +34,15 @@ async def chat(
     usage_data = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     try:
         if base_url:
+            extra_headers = {}
+            if "openrouter.ai" in base_url:
+                extra_headers["HTTP-Referer"] = getattr(settings, "PUBLIC_BASE_URL", "https://chat.texno.plus")
+                extra_headers["X-Title"] = "ChatGateway"
+                
             dynamic_client = AsyncOpenAI(
                 base_url=base_url,
-                api_key=api_key or "not-needed"
+                api_key=api_key or "not-needed",
+                default_headers=extra_headers if extra_headers else None
             )
             response = await dynamic_client.chat.completions.create(
                 model=model,
@@ -86,9 +92,15 @@ async def chat_stream(
     """Sends a streaming chat completion request and yields tokens."""
     try:
         if base_url:
+            extra_headers = {}
+            if "openrouter.ai" in base_url:
+                extra_headers["HTTP-Referer"] = getattr(settings, "PUBLIC_BASE_URL", "https://chat.texno.plus")
+                extra_headers["X-Title"] = "ChatGateway"
+
             dynamic_client = AsyncOpenAI(
                 base_url=base_url,
-                api_key=api_key or "not-needed"
+                api_key=api_key or "not-needed",
+                default_headers=extra_headers if extra_headers else None
             )
             response = await dynamic_client.chat.completions.create(
                 model=model,
