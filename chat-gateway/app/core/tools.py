@@ -38,7 +38,7 @@ def search_internet(query: str, max_results: int = 3) -> str:
             if urls_raw:
                 try:
                     deep_text = fetch_and_parse_url(urls_raw[0])
-                    if deep_text and "Помилка" not in deep_text and "Не вдалося" not in deep_text:
+                    if deep_text and "Error fetching URL" not in deep_text and "Could not extract" not in deep_text:
                         result_text += f"\n\n--- ДОДАТКОВИЙ ПАРСИНГ ПЕРШОГО САЙТУ ({urls_raw[0]}) ---\n"
                         # Limit to 2000 chars to save tokens and avoid prompt bloat
                         result_text += deep_text[:2000] 
