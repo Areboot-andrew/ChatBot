@@ -1123,6 +1123,7 @@ async def test_chat_api(
             sys_prompt += sys_prompt_addition
             
             temp = float(settings.temperature) if settings and settings.temperature else 0.7
+            max_toks = int(settings.max_tokens) if settings and settings.max_tokens else 1024
             model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
             
             messages_to_send = [
@@ -1136,7 +1137,7 @@ async def test_chat_api(
                 messages_to_send.append({"role": "user", "content": msg.text})
             
             raw_messages_json = json.dumps(messages_to_send, indent=2, ensure_ascii=False)
-            yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
+            yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\nМакс токенів: {max_toks}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
             
             try:
                 base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
@@ -1146,7 +1147,7 @@ async def test_chat_api(
                 from app.core.llm import chat_stream
                 
                 full_response = ""
-                async for token in chat_stream(messages_to_send, model=model_name, temperature=temp, base_url=base_url, api_key=api_key):
+                async for token in chat_stream(messages_to_send, model=model_name, temperature=temp, max_tokens=max_toks, base_url=base_url, api_key=api_key):
                     full_response += token
                     # Think tokens from models like DeepSeek can be filtered, but `chat_stream` doesn't filter them yet.
                     # Here we just pass them through to frontend, frontend can handle or we just send it.
