@@ -1004,6 +1004,9 @@ async def test_chat_api(
         # 1. Intent Recognition (LLM Router)
         from app.core.intents import detect_intent
         intent_start = time.time()
+        
+        yield emit_trace("RAW REQUEST (Gateway -> Router)", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
+        
         intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
         intent = intent_data.get("intent", "GENERAL")
         search_query = intent_data.get("query", "")
@@ -1011,12 +1014,14 @@ async def test_chat_api(
         intent_usage = intent_data.get("usage", {"total_tokens": 0})
         intent_time = round(time.time() - intent_start, 2)
         
+        raw_router_response = json.dumps(intent_data, indent=2, ensure_ascii=False)
+        
         if intent == "ERROR":
-            yield emit_trace("Аналіз наміру (Intent Router)", "Помилка LLM", f"Не вдалося підключитися до LLM: {error_msg}", intent_time)
+            yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM. Помилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
             yield f"data: {json.dumps({'type': 'token', 'content': 'Вибачте, сталася системна помилка (LLM недоступна).'})}\n\n"
             return
             
-        yield emit_trace("Аналіз наміру (Intent Router)", "Успішно", f"Розпізнано інтент: {intent}. Витрачено токенів: {intent_usage['total_tokens']}.", intent_time)
+        yield emit_trace("LLM ROUTER: DECISION", "Успішно", f"Сирий JSON від моделі-маршрутизатора:\n{raw_router_response}\n\nВитрачено токенів: {intent_usage['total_tokens']}.", intent_time)
         
         res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
         settings = res.scalars().first()
@@ -1030,52 +1035,58 @@ async def test_chat_api(
         sys_prompt_addition = ""
         
         if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
-            yield emit_trace("Виклик Мікросервісу (CRM API)", "Очікування...", "GET /api/v1/orders?phone=...")
+            yield emit_trace("MICROSERVICE (CRM API)", "Очікування...", "Виконується HTTP GET /api/v1/orders?phone=...")
             time.sleep(0.3)
-            yield emit_trace("Виклик Мікросервісу (CRM API)", "Знайдено", "Отримано дані з CRM:\nЗамовлення #1024: В процесі діагностики.\nОчікувана дата: Завтра.", "0.31")
-            sys_prompt_addition = "\nДані з внутрішньої CRM системи:\n- Замовлення: телефон Samsung\n- Статус: В процесі діагностики"
+            crm_data = "{\n  \"order_id\": 1024,\n  \"status\": \"В процесі діагностики\",\n  \"device\": \"Samsung S23\"\n}"
+            yield emit_trace("MICROSERVICE (CRM API)", "Знайдено 200 OK", f"Отримано RAW payload:\n{crm_data}", "0.31")
+            sys_prompt_addition = f"\nДані з внутрішньої CRM системи (JSON):\n{crm_data}"
             
         elif intent == "WEB_SEARCH" and search_query:
             from app.core.tools import search_internet
-            yield emit_trace("Пошук в Інтернеті (DuckDuckGo)", "Шукаємо...", f"Запит: {search_query}")
+            yield emit_trace("EXTERNAL API (DuckDuckGo)", "Виконується", f"Формую GET запит до html.duckduckgo.com/html/\nQuery: {search_query}")
             search_start = time.time()
             search_result = search_internet(search_query, max_results=3)
             search_time = round(time.time() - search_start, 2)
-            yield emit_trace("Пошук в Інтернеті (DuckDuckGo)", "Успішно", f"Запит: {search_query}\nРезультат:\n{search_result[:200]}...", search_time)
+            yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
             
             sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
             
         else:
             # 2.2 SQL / Qdrant Fallbacks
+            yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
+            sql_start = time.time()
             res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
             prices = res_price.scalars().all()
+            sql_time = round(time.time() - sql_start, 2)
             
             sys_prompt_addition = ""
             rag_docs = []
             
             if prices:
-                price_texts = [f"{p.name} - {p.price}" for p in prices]
-                yield emit_trace("Пошук в Прайсах (SQL)", "Завантажено весь прайс", f"Завантажено {len(prices)} позицій прайсу", "0.01")
-                sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + "\n".join([f"- {p.name}: {p.price}" for p in prices])
+                raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
+                yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
+                sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
             else:
-                yield emit_trace("Пошук в Прайсах (SQL)", "Пусто", "Відповідних послуг не знайдено", "0.01")
+                yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
                 
             res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
             qa_facts = res_qa.scalars().all()
             
+            yield emit_trace("VECTOR DB (Qdrant RAG)", "Пошук векторів", f"Генерую embeddings для '{msg.text}' та шукаю в колекції '{tenant_id}'")
             rag_start = time.time()
             from app.core.rag import search_knowledge
             rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
             rag_time = round(time.time() - rag_start, 2)
             
-            doc_details = f"Знайдено Q&A: {len(qa_facts)}. Знайдено RAG: {len(rag_docs)} фрагментів."
-            yield emit_trace("Глобальна База (Qdrant/FAQ)", "Знайдено факти", doc_details, rag_time)
+            doc_details = f"Знайдено FAQ рядків (SQL): {len(qa_facts)}.\nЗнайдено RAG чанків (Qdrant): {len(rag_docs)}.\n\nRAW RAG CHUNKS:\n" + "\n---\n".join(rag_docs)
+            yield emit_trace("VECTOR DB (Qdrant RAG)", "Знайдено метрики", doc_details, rag_time)
         
         from app.core.prompt_builder import build_system_prompt
         sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
         sys_prompt += sys_prompt_addition
         
         temp = float(settings.temperature) if settings and settings.temperature else 0.7
+        model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
         
         messages_to_send = [
             {"role": "system", "content": sys_prompt}
@@ -1087,7 +1098,8 @@ async def test_chat_api(
         else:
             messages_to_send.append({"role": "user", "content": msg.text})
         
-        yield emit_trace("Генерація LLM", "В процесі...", f"Промпт: {len(sys_prompt)} символів. Історія: {len(msg.history)} повідомлень. Температура: {temp}")
+        raw_messages_json = json.dumps(messages_to_send, indent=2, ensure_ascii=False)
+        yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
         
         try:
             base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
