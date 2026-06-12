@@ -70,6 +70,48 @@ async def chat(
             return err_msg, usage_data
         return err_msg
 
+async def chat_stream(
+    messages: list, 
+    model: str = settings.LLM_MODEL, 
+    temperature: float = 0.7, 
+    max_tokens: int = 1024,
+    base_url: str = None,
+    api_key: str = None
+):
+    """Sends a streaming chat completion request and yields tokens."""
+    try:
+        if base_url:
+            dynamic_client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=api_key or "not-needed"
+            )
+            response = await dynamic_client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=60.0,
+                stream=True
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=60.0,
+                stream=True
+            )
+            
+        async for chunk in response:
+            if chunk.choices and len(chunk.choices) > 0:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+    except Exception as e:
+        logger.error(f"LLM Chat Stream Error: {e}")
+        yield "Вибачте, зараз я не можу відповісти."
+
 async def embed(text: str, model: str = settings.EMBED_MODEL) -> list[float]:
     """Generates embeddings using LM Studio."""
     try:
