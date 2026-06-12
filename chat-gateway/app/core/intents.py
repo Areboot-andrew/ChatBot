@@ -83,6 +83,16 @@ Rules:
             clean_json = "\n".join(clean_json.split("\n")[1:-1])
 
         data = json.loads(clean_json)
+        
+        # Normalize intent casing against valid intent_codes
+        raw_intent = data.get("intent", "GENERAL")
+        matched_intent = "GENERAL"
+        for code in intent_codes:
+            if code.lower() == str(raw_intent).lower():
+                matched_intent = code
+                break
+        data["intent"] = matched_intent
+        
         data["usage"] = usage_data
         logger.info(f"Detected intent: {data}")
         return data
