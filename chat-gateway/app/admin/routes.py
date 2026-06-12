@@ -414,6 +414,7 @@ async def update_settings(
     fallback_sites: str = Form(""),
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
+    tpl_evaluation_rules: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -437,6 +438,8 @@ async def update_settings(
             meta_data["llm_base_url"] = llm_base_url
             meta_data["llm_api_key"] = llm_api_key
             meta_data["fallback_sites"] = fallback_sites
+            if tpl_evaluation_rules:
+                meta_data["tpl_evaluation_rules"] = tpl_evaluation_rules
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
