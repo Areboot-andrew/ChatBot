@@ -1035,7 +1035,9 @@ async def test_chat_api(
             res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
             settings = res.scalars().first()
             
-            base_url_info = settings.meta.get("llm_base_url") if settings and settings.meta else "Офіційний API"
+            from app.config import settings as global_settings
+            raw_base = settings.meta.get("llm_base_url") if settings and settings.meta else ""
+            base_url_info = raw_base if raw_base else f"{global_settings.LMSTUDIO_URL} (Локальна мережа/Дефолт)"
             model_info = settings.llm_model if settings and settings.llm_model else "gemma-4"
 
             # 1. Intent Recognition (LLM Router)

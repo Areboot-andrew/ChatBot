@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # LLM Settings
-    LMSTUDIO_URL: str = "http://192.168.1.84:1234/v1"
+    LMSTUDIO_URL: str = "http://host.docker.internal:1234/v1"
     LLM_MODEL: str = "gemma-4"
     EMBED_MODEL: str = "bge-m3"
 
