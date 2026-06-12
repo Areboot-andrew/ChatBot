@@ -77,6 +77,12 @@
                     <input type="password" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо API публічне і не вимагає ключа, впишіть будь-що (напр. 'free').</p>
                 </div>
+                <div class="md:col-span-2 flex items-center gap-4 mt-2">
+                    <button type="button" id="btn_test_conn" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm transition">
+                        ⚡ Перевірити з'єднання
+                    </button>
+                    <span id="conn_status" class="text-sm"></span>
+                </div>
             </div>
         </div>
 
@@ -134,6 +140,39 @@ document.addEventListener('DOMContentLoaded', function() {
     const baseUrl = document.getElementById('llm_base_url');
     const apiKey = document.getElementById('llm_api_key');
     const hint = document.getElementById('quick_setup_hint');
+    const btnTest = document.getElementById('btn_test_conn');
+    const connStatus = document.getElementById('conn_status');
+
+    if(btnTest) {
+        btnTest.addEventListener('click', async function() {
+            connStatus.className = 'text-sm text-yellow-400';
+            connStatus.innerHTML = '<span class="animate-pulse">Очікування відповіді від моделі...</span>';
+            
+            try {
+                const res = await fetch('/admin/api/test-llm-connection', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model: model.value,
+                        base_url: baseUrl.value,
+                        api_key: apiKey.value
+                    })
+                });
+                
+                const data = await res.json();
+                if(data.status === 'success') {
+                    connStatus.className = 'text-sm text-green-400 font-medium';
+                    connStatus.textContent = '✔ ' + data.message;
+                } else {
+                    connStatus.className = 'text-sm text-red-400 font-medium';
+                    connStatus.textContent = '✖ ' + data.message;
+                }
+            } catch(e) {
+                connStatus.className = 'text-sm text-red-400 font-medium';
+                connStatus.textContent = '✖ Мережева помилка: ' + e.message;
+            }
+        });
+    }
 
     qs.addEventListener('change', function() {
         const val = this.value;

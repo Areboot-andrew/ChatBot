@@ -950,6 +950,29 @@ async def logic_edit(
             await db.commit()
     return RedirectResponse(url="/admin/knowledge", status_code=303)
 
+# --- TEST LLM CONNECTION ---
+class LLMConnectionTest(BaseModel):
+    model: str
+    base_url: str = None
+    api_key: str = None
+
+@router.post("/api/test-llm-connection")
+async def test_llm_connection_api(
+    data: LLMConnectionTest,
+    user: User = Depends(get_current_user)
+):
+    from app.core.llm import chat
+    messages = [{"role": "user", "content": "Ping. Reply only with 'Pong'."}]
+    try:
+        base_url = data.base_url.strip() if data.base_url and data.base_url.strip() else None
+        api_key = data.api_key.strip() if data.api_key and data.api_key.strip() else None
+        model = data.model.strip() if data.model and data.model.strip() else "gemma-4"
+        
+        response = await chat(messages, model=model, temperature=0.1, max_tokens=10, base_url=base_url, api_key=api_key, raise_error=True)
+        return {"status": "success", "message": f"Успішне підключення! Відповідь моделі: {response}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Помилка: {type(e).__name__} - {str(e)}"}
+
 # --- TEST CHAT ---
 class ChatMessage(BaseModel):
     text: str
