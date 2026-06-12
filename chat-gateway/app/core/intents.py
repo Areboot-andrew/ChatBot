@@ -51,7 +51,7 @@ async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: Asyn
         api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
         model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
         
-        response_text, usage_data = await chat(messages, model=model_name, temperature=0.1, base_url=base_url, api_key=api_key, return_usage=True)
+        response_text, usage_data = await chat(messages, model=model_name, temperature=0.1, base_url=base_url, api_key=api_key, return_usage=True, raise_error=True)
         
         clean_json = response_text.strip()
         if clean_json.startswith("```"):
@@ -62,5 +62,5 @@ async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: Asyn
         logger.info(f"Detected intent: {data}")
         return data
     except Exception as e:
-        logger.error(f"Intent detection failed: {e}. Raw response: {response_text if 'response_text' in locals() else 'None'}")
-        return {"intent": "ERROR", "error": str(e), "query": "", "usage": {"total_tokens": 0}}
+        logger.error(f"Intent detection failed: {e}")
+        return {"intent": "ERROR", "error": f"{type(e).__name__}: {str(e)}", "query": "", "usage": {"total_tokens": 0}}

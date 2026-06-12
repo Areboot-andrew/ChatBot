@@ -980,10 +980,10 @@ import json
 async def test_chat_api(
     msg: ChatMessage,
     user: User = Depends(get_current_user),
-    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
-    db: AsyncSession = Depends(get_db)
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id)
 ):
     import time
+    from app.database import async_session_maker
     
     if not tenant_id:
         return {"response": "Помилка: не вибрано тенант", "debug_trace": []}
@@ -1000,125 +1000,126 @@ async def test_chat_api(
                 "time": str(duration) if isinstance(duration, str) else f"{duration}s"
             }
             return f"data: {json.dumps(event)}\n\n"
+
+        # Must use our own DB session since FastAPI dependency session closes when function returns
+        async with async_session_maker() as db:
+            # 1. Intent Recognition (LLM Router)
+            from app.core.intents import detect_intent
+            intent_start = time.time()
+        
+            yield emit_trace("RAW REQUEST (Gateway -> Router)", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
             
-        # 1. Intent Recognition (LLM Router)
-        from app.core.intents import detect_intent
-        intent_start = time.time()
-        
-        yield emit_trace("RAW REQUEST (Gateway -> Router)", "Відправлено", f"Вхідний текст клієнта:\n'{msg.text}'\nІсторія ({len(msg.history)} повідомлень)")
-        
-        intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
-        intent = intent_data.get("intent", "GENERAL")
-        search_query = intent_data.get("query", "")
-        error_msg = intent_data.get("error", "")
-        intent_usage = intent_data.get("usage", {"total_tokens": 0})
-        intent_time = round(time.time() - intent_start, 2)
-        
-        raw_router_response = json.dumps(intent_data, indent=2, ensure_ascii=False)
-        
-        if intent == "ERROR":
-            yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM. Помилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
-            yield f"data: {json.dumps({'type': 'token', 'content': 'Вибачте, сталася системна помилка (LLM недоступна).'})}\n\n"
-            return
+            intent_data = await detect_intent(msg.text, msg.history, tenant_id, db)
+            intent = intent_data.get("intent", "GENERAL")
+            search_query = intent_data.get("query", "")
+            error_msg = intent_data.get("error", "")
+            intent_usage = intent_data.get("usage", {"total_tokens": 0})
+            intent_time = round(time.time() - intent_start, 2)
             
-        yield emit_trace("LLM ROUTER: DECISION", "Успішно", f"Сирий JSON від моделі-маршрутизатора:\n{raw_router_response}\n\nВитрачено токенів: {intent_usage['total_tokens']}.", intent_time)
-        
-        res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
-        settings = res.scalars().first()
-        
-        # 2. Fetch Data (SQL Prices, Q&A, Web Search, or Microservices)
-        from app.models.services import ServicePrice
-        
-        qa_facts = []
-        rag_docs = []
-        prices = []
-        sys_prompt_addition = ""
-        
-        if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
-            yield emit_trace("MICROSERVICE (CRM API)", "Очікування...", "Виконується HTTP GET /api/v1/orders?phone=...")
-            time.sleep(0.3)
-            crm_data = "{\n  \"order_id\": 1024,\n  \"status\": \"В процесі діагностики\",\n  \"device\": \"Samsung S23\"\n}"
-            yield emit_trace("MICROSERVICE (CRM API)", "Знайдено 200 OK", f"Отримано RAW payload:\n{crm_data}", "0.31")
-            sys_prompt_addition = f"\nДані з внутрішньої CRM системи (JSON):\n{crm_data}"
+            raw_router_response = json.dumps(intent_data, indent=2, ensure_ascii=False)
             
-        elif intent == "WEB_SEARCH" and search_query:
-            from app.core.tools import search_internet
-            yield emit_trace("EXTERNAL API (DuckDuckGo)", "Виконується", f"Формую GET запит до html.duckduckgo.com/html/\nQuery: {search_query}")
-            search_start = time.time()
-            search_result = search_internet(search_query, max_results=3)
-            search_time = round(time.time() - search_start, 2)
-            yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
-            
-            sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
-            
-        else:
-            # 2.2 SQL / Qdrant Fallbacks
-            yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
-            sql_start = time.time()
-            res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
-            prices = res_price.scalars().all()
-            sql_time = round(time.time() - sql_start, 2)
-            
-            sys_prompt_addition = ""
-            rag_docs = []
-            
-            if prices:
-                raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
-                yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
-                sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
-            else:
-                yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
+            if intent == "ERROR":
+                yield emit_trace("LLM ROUTER: FATAL", "Помилка LLM", f"Не вдалося підключитися до LLM. Помилка:\n{error_msg}\nСирий JSON:\n{raw_router_response}", intent_time)
+                yield f"data: {json.dumps({'type': 'token', 'content': 'Вибачте, сталася системна помилка (LLM недоступна).'})}\n\n"
+                return
                 
-            res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
-            qa_facts = res_qa.scalars().all()
+            yield emit_trace("LLM ROUTER: DECISION", "Успішно", f"Сирий JSON від моделі-маршрутизатора:\n{raw_router_response}\n\nВитрачено токенів: {intent_usage['total_tokens']}.", intent_time)
             
-            yield emit_trace("VECTOR DB (Qdrant RAG)", "Пошук векторів", f"Генерую embeddings для '{msg.text}' та шукаю в колекції '{tenant_id}'")
-            rag_start = time.time()
-            from app.core.rag import search_knowledge
-            rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
-            rag_time = round(time.time() - rag_start, 2)
+            res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+            settings = res.scalars().first()
             
-            doc_details = f"Знайдено FAQ рядків (SQL): {len(qa_facts)}.\nЗнайдено RAG чанків (Qdrant): {len(rag_docs)}.\n\nRAW RAG CHUNKS:\n" + "\n---\n".join(rag_docs)
-            yield emit_trace("VECTOR DB (Qdrant RAG)", "Знайдено метрики", doc_details, rag_time)
-        
-        from app.core.prompt_builder import build_system_prompt
-        sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
-        sys_prompt += sys_prompt_addition
-        
-        temp = float(settings.temperature) if settings and settings.temperature else 0.7
-        model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
-        
-        messages_to_send = [
-            {"role": "system", "content": sys_prompt}
-        ]
-        
-        if msg.history:
-            for h in msg.history:
-                messages_to_send.append({"role": h.get("role", "user"), "content": h.get("content", "")})
-        else:
-            messages_to_send.append({"role": "user", "content": msg.text})
-        
-        raw_messages_json = json.dumps(messages_to_send, indent=2, ensure_ascii=False)
-        yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
-        
-        try:
-            base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
-            api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
+            # 2. Fetch Data (SQL Prices, Q&A, Web Search, or Microservices)
+            from app.models.services import ServicePrice
+            
+            qa_facts = []
+            rag_docs = []
+            prices = []
+            sys_prompt_addition = ""
+            
+            if intent == "CHECK_REPAIR_STATUS" or "статус" in msg.text.lower():
+                yield emit_trace("MICROSERVICE (CRM API)", "Очікування...", "Виконується HTTP GET /api/v1/orders?phone=...")
+                time.sleep(0.3)
+                crm_data = "{\n  \"order_id\": 1024,\n  \"status\": \"В процесі діагностики\",\n  \"device\": \"Samsung S23\"\n}"
+                yield emit_trace("MICROSERVICE (CRM API)", "Знайдено 200 OK", f"Отримано RAW payload:\n{crm_data}", "0.31")
+                sys_prompt_addition = f"\nДані з внутрішньої CRM системи (JSON):\n{crm_data}"
+                
+            elif intent == "WEB_SEARCH" and search_query:
+                from app.core.tools import search_internet
+                yield emit_trace("EXTERNAL API (DuckDuckGo)", "Виконується", f"Формую GET запит до html.duckduckgo.com/html/\nQuery: {search_query}")
+                search_start = time.time()
+                search_result = search_internet(search_query, max_results=3)
+                search_time = round(time.time() - search_start, 2)
+                yield emit_trace("EXTERNAL API (DuckDuckGo)", "Парсинг HTML завершено", f"Знайдено фрагменти:\n{search_result}", search_time)
+                
+                sys_prompt_addition = f"\nДані з інтернету (DuckDuckGo пошук за запитом '{search_query}'):\n{search_result}"
+                
+            else:
+                # 2.2 SQL / Qdrant Fallbacks
+                yield emit_trace("SQL DATABASE (PostgreSQL)", "Виконується", f"SELECT * FROM service_prices WHERE tenant_id='{tenant_id}' LIMIT 100;")
+                sql_start = time.time()
+                res_price = await db.execute(select(ServicePrice).where(ServicePrice.tenant_id == tenant_id).limit(100))
+                prices = res_price.scalars().all()
+                sql_time = round(time.time() - sql_start, 2)
+                
+                sys_prompt_addition = ""
+                rag_docs = []
+                
+                if prices:
+                    raw_prices = "\n".join([f"- {p.name}: {p.price} грн" for p in prices])
+                    yield emit_trace("SQL DATABASE (PostgreSQL)", "OK", f"Завантажено {len(prices)} рядків з таблиці. RAW DATA:\n{raw_prices[:300]}...", sql_time)
+                    sys_prompt_addition = "\nДодаткова інформація з бази прайсів (ПРАЙС-ЛИСТ):\n" + raw_prices
+                else:
+                    yield emit_trace("SQL DATABASE (PostgreSQL)", "Пусто 0 rows", "Таблиця прайсів порожня або немає збігів", sql_time)
+                    
+                res_qa = await db.execute(select(QaPair).where(QaPair.tenant_id == tenant_id).limit(50))
+                qa_facts = res_qa.scalars().all()
+                
+                yield emit_trace("VECTOR DB (Qdrant RAG)", "Пошук векторів", f"Генерую embeddings для '{msg.text}' та шукаю в колекції '{tenant_id}'")
+                rag_start = time.time()
+                from app.core.rag import search_knowledge
+                rag_docs = await search_knowledge(msg.text, str(tenant_id), top_k=2)
+                rag_time = round(time.time() - rag_start, 2)
+                
+                doc_details = f"Знайдено FAQ рядків (SQL): {len(qa_facts)}.\nЗнайдено RAG чанків (Qdrant): {len(rag_docs)}.\n\nRAW RAG CHUNKS:\n" + "\n---\n".join(rag_docs)
+                yield emit_trace("VECTOR DB (Qdrant RAG)", "Знайдено метрики", doc_details, rag_time)
+            
+            from app.core.prompt_builder import build_system_prompt
+            sys_prompt = build_system_prompt(settings, qa_facts, rag_docs)
+            sys_prompt += sys_prompt_addition
+            
+            temp = float(settings.temperature) if settings and settings.temperature else 0.7
             model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
             
-            from app.core.llm import chat_stream
+            messages_to_send = [
+                {"role": "system", "content": sys_prompt}
+            ]
             
-            full_response = ""
-            async for token in chat_stream(messages_to_send, model=model_name, temperature=temp, base_url=base_url, api_key=api_key):
-                full_response += token
-                # Think tokens from models like DeepSeek can be filtered, but `chat_stream` doesn't filter them yet.
-                # Here we just pass them through to frontend, frontend can handle or we just send it.
-                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+            if msg.history:
+                for h in msg.history:
+                    messages_to_send.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+            else:
+                messages_to_send.append({"role": "user", "content": msg.text})
             
-            gen_time = round(time.time() - start_time, 2)
-            yield emit_trace("Генерація LLM", "Успішно", f"Відповідь згенерована ({len(full_response)} символів)", gen_time)
-        except Exception as e:
-            yield emit_trace("Генерація LLM", "Помилка", str(e))
-            yield f"data: {json.dumps({'type': 'token', 'content': 'Помилка підключення до LLM.'})}\n\n"
-
+            raw_messages_json = json.dumps(messages_to_send, indent=2, ensure_ascii=False)
+            yield emit_trace("LLM STREAM (Final Output)", "Будую пакет...", f"Формування JSON пакета для {model_name}...\nТемпература: {temp}\n\nСИРИЙ ПАКЕТ ДЛЯ ВІДПРАВКИ:\n{raw_messages_json}")
+            
+            try:
+                base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
+                api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
+                model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
+                
+                from app.core.llm import chat_stream
+                
+                full_response = ""
+                async for token in chat_stream(messages_to_send, model=model_name, temperature=temp, base_url=base_url, api_key=api_key):
+                    full_response += token
+                    # Think tokens from models like DeepSeek can be filtered, but `chat_stream` doesn't filter them yet.
+                    # Here we just pass them through to frontend, frontend can handle or we just send it.
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                
+                gen_time = round(time.time() - start_time, 2)
+                yield emit_trace("Генерація LLM", "Успішно", f"Відповідь згенерована ({len(full_response)} символів)", gen_time)
+            except Exception as e:
+                yield emit_trace("Генерація LLM", "Помилка", str(e))
+                yield f"data: {json.dumps({'type': 'token', 'content': 'Помилка підключення до LLM.'})}\n\n"
     return StreamingResponse(event_generator(), media_type="text/event-stream")

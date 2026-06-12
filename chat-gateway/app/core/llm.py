@@ -26,7 +26,8 @@ async def chat(
     max_tokens: int = 1024,
     base_url: str = None,
     api_key: str = None,
-    return_usage: bool = False
+    return_usage: bool = False,
+    raise_error: bool = False
 ):
     """Sends a chat completion request to LM Studio or a custom API."""
     usage_data = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -65,6 +66,8 @@ async def chat(
         return clean_content
     except Exception as e:
         logger.error(f"LLM Chat Error: {e}")
+        if raise_error:
+            raise e
         err_msg = "Вибачте, зараз я не можу відповісти. Зачекайте хвилинку або зверніться пізніше."
         if return_usage:
             return err_msg, usage_data
