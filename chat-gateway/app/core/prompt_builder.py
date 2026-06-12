@@ -53,7 +53,7 @@ def build_system_prompt(settings: BotSetting, qa_facts: List[QaPair] = None, rag
         
         parts.append("")
         
-    tpl_evaluation_rules = meta.get("tpl_evaluation_rules", "--- [RULES FOR CONTEXT EVALUATION] ---\nCritically evaluate any data provided from the internet or knowledge base.\nIf the injected context does not contain the specific answer or technical specs needed to fulfill the user's request, YOU MUST state that the information is missing. DO NOT hallucinate missing details.")
+    tpl_evaluation_rules = meta.get("tpl_evaluation_rules", "--- [АБСОЛЮТНЕ ПРАВИЛО: ЗАБОРОНА ГАЛЮЦИНАЦІЙ] ---\n1. Якщо питання стосується технічних характеристик, сумісності, наявності чи цін — використовуй ВИКЛЮЧНО дані з блоків вище (Web Search, Прайс, FAQ).\n2. Якщо в наданих текстах НЕМАЄ прямої відповіді — СУВОРО ЗАБОРОНЕНО вигадувати її з власної пам'яті.\n3. Якщо даних немає, дай відповідь у своєму стилі, щось на кшталт: \"Не маю точних технічних даних по цьому залізу, треба дивитись по факту\" або запропонуй клієнту надати точну модель.\n4. НІЯКИХ припущень щодо сумісності. Або 100% підтвердження в контексті, або ти не знаєш.")
     parts.append(tpl_evaluation_rules)
     parts.append("")
         
