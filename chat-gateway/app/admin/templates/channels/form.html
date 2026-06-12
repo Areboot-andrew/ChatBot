@@ -38,9 +38,18 @@
             </div>
             {% if channel and channel.type == 'webchat' %}
             <div>
-                <label class="block mb-2 text-sm font-medium text-gray-300">Код для вставки на сайт (перед &lt;/body&gt;)</label>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Варіант 1 — плаваюча кнопка (перед &lt;/body&gt;)</label>
+                <p class="text-xs text-gray-500 mb-2">Кнопка-чат у кутку сторінки. Нічого більше додавати не треба.</p>
                 <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 font-mono text-xs text-green-400 break-all" id="embed-snippet">&lt;script src="{{ public_base_url }}/widget.js" data-channel="{{ channel.id }}" defer&gt;&lt;/script&gt;</div>
                 <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('embed-snippet').textContent).then(()=>this.textContent='✔ Скопійовано')" class="mt-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-xs">Скопіювати</button>
+            </div>
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-300">Варіант 2 — вбудована форма на сторінці</label>
+                <p class="text-xs text-gray-500 mb-2">Поле вводу, кнопка і вікно відповідей прямо в потрібному місці сторінки. Постав порожній блок із потрібним id, а нижче — скрипт.</p>
+                <div class="bg-gray-950 border border-gray-800 rounded-lg p-3 font-mono text-xs text-green-400 break-all" id="embed-inline">&lt;div id="texno-chat"&gt;&lt;/div&gt;
+&lt;script src="{{ public_base_url }}/widget-inline.js" data-channel="{{ channel.id }}" data-target="texno-chat" defer&gt;&lt;/script&gt;</div>
+                <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('embed-inline').textContent).then(()=>this.textContent='✔ Скопійовано')" class="mt-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-xs">Скопіювати</button>
+                <p class="text-xs text-gray-500 mt-2">Якщо на сторінці кілька форм — зміни <code>texno-chat</code> на свій id у обох місцях (div і data-target).</p>
             </div>
             {% endif %}
         </div>
