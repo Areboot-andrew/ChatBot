@@ -46,6 +46,18 @@ async def detect_intent(text: str, history: list, tenant_id: uuid.UUID, db: Asyn
     all_codes_str = json.dumps(intent_codes)
     intents_block = "\n".join(intent_lines)
 
+    # Router rules are overridable per tenant via meta (no-hardcode project rule).
+    default_router_rules = """Rules:
+- Choose the most specific intent that matches the user's request.
+- If the user's message is a casual greeting, thanks, small talk, or off-topic chatter, use "GENERAL" and leave "query" empty. NEVER generate a search query for greetings or emotions.
+- Query rules (when a search IS needed):
+  * Write the query yourself in clean, precise ENGLISH for technical topics (specs, compatibility, repair data). NEVER copy the client's raw wording, typos, or transliteration.
+  * Always include the concrete device/model name. Pull the model from the conversation history if the client mentioned it earlier.
+  * For local price/stock/services queries use short Ukrainian product wording.
+  * No generic queries like "tv repair info". Be specific: "LG 65UN73006LA panel backlight replacement cost".
+- Output strictly valid JSON and nothing else."""
+    router_rules = (settings.meta.get("tpl_router_rules") if settings and settings.meta else None) or default_router_rules
+
     sys_prompt = f"""You are an intent router for a customer-facing chatbot.
 Analyze the user's message IN THE CONTEXT of the conversation history.
 Return a JSON object with:
@@ -55,11 +67,7 @@ Return a JSON object with:
 Available intents:
 {intents_block}
 
-Rules:
-- Choose the most specific intent that matches the user's request.
-- If the user's message is a casual greeting, small talk, or does not clearly match any specific intent, use "GENERAL".
-- If a search query is needed, formulate it as a clear, concise query in the language most appropriate for accurate results.
-- Output strictly valid JSON and nothing else."""
+{router_rules}"""
 
     messages = [{"role": "system", "content": sys_prompt}]
     if history:

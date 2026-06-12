@@ -35,3 +35,30 @@ class HistoryManager:
     async def clear_history(cls, channel_id: str, chat_id: str):
         key = cls._key(channel_id, chat_id)
         await redis_client.delete(key)
+
+
+class MemoryManager:
+    """Per-chat durable facts written by the agent loop (memory_patch)."""
+    TTL = 72 * 3600
+
+    @staticmethod
+    def _key(chat_key: str) -> str:
+        return f"memory:{chat_key}"
+
+    @classmethod
+    async def get_memory(cls, chat_key: str) -> dict:
+        raw = await redis_client.get(cls._key(chat_key))
+        if not raw:
+            return {}
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return {}
+
+    @classmethod
+    async def save_memory(cls, chat_key: str, memory: dict):
+        key = cls._key(chat_key)
+        if memory:
+            await redis_client.set(key, json.dumps(memory, ensure_ascii=False), ex=cls.TTL)
+        else:
+            await redis_client.delete(key)
