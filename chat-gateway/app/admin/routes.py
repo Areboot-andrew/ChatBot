@@ -983,15 +983,21 @@ async def test_chat_api(
     tenant_id: uuid.UUID = Depends(get_current_tenant_id)
 ):
     import time
+    import logging
     from app.database import async_session_maker
     
+    logger = logging.getLogger("TEST_CHAT")
+    logger.setLevel(logging.INFO)
+    
     if not tenant_id:
+        logger.error("No tenant selected in test_chat_api")
         return {"response": "Помилка: не вибрано тенант", "debug_trace": []}
         
     async def event_generator():
         start_time = time.time()
         
         def emit_trace(step, status, details, duration="-"):
+            logger.info(f"[{step}] {status} | {details}")
             event = {
                 "type": "trace",
                 "step": step,
