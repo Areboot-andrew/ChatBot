@@ -40,7 +40,13 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2">
-                    <label for="llm_model" class="block mb-2 text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="llm_model" class="block text-sm font-medium text-gray-300">Назва моделі (Model ID)</label>
+                        <button type="button" id="btn_fetch_models" class="hidden text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            Завантажити список з OpenRouter
+                        </button>
+                    </div>
                     <input type="text" list="model_suggestions" name="llm_model" id="llm_model" value="{{ settings.llm_model if settings and settings.llm_model else 'gemma-4' }}" placeholder="Наприклад: meta-llama/llama-3-8b-instruct:free" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <datalist id="model_suggestions">
                         <!-- OpenRouter Models -->
@@ -177,6 +183,14 @@ document.addEventListener('DOMContentLoaded', function() {
             hint.textContent = 'Виберіть шаблон, щоб автоматично заповнити поля нижче.';
             hint.className = 'mt-1 text-xs text-gray-400';
         }
+
+        if(btnFetchModels) {
+            if(baseUrl.value.includes('openrouter.ai')) {
+                btnFetchModels.classList.remove('hidden');
+            } else {
+                btnFetchModels.classList.add('hidden');
+            }
+        }
     }
 
     // Auto-detect provider on load based on baseUrl
@@ -251,6 +265,58 @@ document.addEventListener('DOMContentLoaded', function() {
             } catch(e) {
                 connStatus.className = 'text-sm text-red-400 font-medium';
                 connStatus.textContent = '✖ Мережева помилка: ' + e.message;
+            }
+        });
+    }
+
+    const btnFetchModels = document.getElementById('btn_fetch_models');
+    const modelSuggestions = document.getElementById('model_suggestions');
+
+    if(btnFetchModels) {
+        btnFetchModels.addEventListener('click', async function() {
+            const originalText = btnFetchModels.innerHTML;
+            btnFetchModels.innerHTML = '<span class="animate-pulse">⏳ Завантаження...</span>';
+            try {
+                const res = await fetch('https://openrouter.ai/api/v1/models');
+                const data = await res.json();
+                
+                modelSuggestions.innerHTML = '';
+                
+                let freeModels = [];
+                let paidModels = [];
+                
+                data.data.forEach(m => {
+                    if(m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0") {
+                        freeModels.push(m);
+                    } else {
+                        paidModels.push(m);
+                    }
+                });
+                
+                freeModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = '🎁 БЕЗКОШТОВНО: ' + m.name;
+                    modelSuggestions.appendChild(opt);
+                });
+                
+                paidModels.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = '💲 ПЛАТНА: ' + m.name;
+                    modelSuggestions.appendChild(opt);
+                });
+                
+                btnFetchModels.innerHTML = '<span class="text-green-400">✔ Оновлено (' + data.data.length + ' моделей)</span>';
+                
+                // Show a brief dropdown effect
+                model.focus();
+                model.value = '';
+                
+                setTimeout(() => { btnFetchModels.innerHTML = originalText; }, 3000);
+            } catch(e) {
+                btnFetchModels.innerHTML = '<span class="text-red-400">✖ Помилка завантаження</span>';
+                setTimeout(() => { btnFetchModels.innerHTML = originalText; }, 3000);
             }
         });
     }
