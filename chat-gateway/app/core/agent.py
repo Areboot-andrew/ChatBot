@@ -213,9 +213,11 @@ async def run_agent(
         sys_prompt += "\n\n" + router_protocol
 
         messages = [{"role": "system", "content": sys_prompt}]
-        for h in (history or [])[-6:]:
+        recent = (history or [])[-6:]
+        for h in recent:
             messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
-        messages.append({"role": "user", "content": text})
+        if not recent or recent[-1].get("content") != text or recent[-1].get("role") != "user":
+            messages.append({"role": "user", "content": text})
 
         t0 = time.time()
         raw, usage = await chat(
@@ -296,10 +298,9 @@ async def run_agent(
         pass
 
     messages = [{"role": "system", "content": sys_prompt}]
-    if history:
-        for h in history:
-            messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
-    else:
+    for h in (history or []):
+        messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+    if not history or history[-1].get("content") != text or history[-1].get("role") != "user":
         messages.append({"role": "user", "content": text})
 
     t0 = time.time()

@@ -279,10 +279,11 @@ async def process_message_pipeline(
 
     messages = [{"role": "system", "content": sys_prompt}]
 
-    if history:
-        for h in history:
-            messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
-    else:
+    for h in (history or []):
+        messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+    # Make sure the current message is present exactly once (some channels pass
+    # history without it, the sandbox passes history including it).
+    if not history or history[-1].get("content") != text or history[-1].get("role") != "user":
         messages.append({"role": "user", "content": text})
 
     # 5. Generate LLM Response

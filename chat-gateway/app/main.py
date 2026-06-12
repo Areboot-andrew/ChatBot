@@ -29,10 +29,20 @@ async def startup_event():
     from app.database import init_qdrant_collections
     await init_qdrant_collections()
     await seed_admin()
+    try:
+        from app.channels.telegram_userbot import userbot_manager
+        await userbot_manager.start_all()
+    except Exception as e:
+        logger.error(f"Userbot manager failed to start: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down Chat Gateway...")
+    try:
+        from app.channels.telegram_userbot import userbot_manager
+        await userbot_manager.stop_all()
+    except Exception as e:
+        logger.warning(f"Userbot manager shutdown error: {e}")
     await engine.dispose()
     await redis_client.close()
 

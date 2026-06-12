@@ -343,6 +343,10 @@ async def create_channel(
     )
     db.add(new_channel)
     await db.commit()
+    if type == 'telegram_userbot':
+        import asyncio
+        from app.channels.telegram_userbot import userbot_manager
+        asyncio.create_task(userbot_manager.restart())
     return RedirectResponse(url="/admin/channels", status_code=303)
 
 @router.get("/channels/{channel_id}/edit", response_class=HTMLResponse)
@@ -403,6 +407,10 @@ async def edit_channel(
         channel.greeting = greeting
         channel.enabled = enabled
         await db.commit()
+        if type == 'telegram_userbot':
+            import asyncio
+            from app.channels.telegram_userbot import userbot_manager
+            asyncio.create_task(userbot_manager.restart())
     return RedirectResponse(url="/admin/channels", status_code=303)
 # --- SETTINGS ---
 @router.get("/settings", response_class=HTMLResponse)
