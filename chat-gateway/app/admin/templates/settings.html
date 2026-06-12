@@ -143,6 +143,69 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnTest = document.getElementById('btn_test_conn');
     const connStatus = document.getElementById('conn_status');
 
+    function updateHint(val) {
+        if (val === 'local') {
+            hint.textContent = 'Локальна модель обрана (LM Studio / Ollama).';
+            hint.className = 'mt-1 text-xs text-green-400';
+        } else if (val === 'pollinations') {
+            hint.textContent = 'Публічне API Pollinations обрано. Реєстрація не потрібна.';
+            hint.className = 'mt-1 text-xs text-green-400';
+        } else if (val === 'openrouter_free') {
+            hint.textContent = 'OpenRouter обрано. Переконайтеся, що ввели дійсний API ключ.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else if (val === 'groq') {
+            hint.textContent = 'Groq обрано. Переконайтеся, що ввели дійсний API ключ.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else if (val === 'openai') {
+            hint.textContent = 'OpenAI обрано. Переконайтеся, що ввели дійсний платний API ключ.';
+            hint.className = 'mt-1 text-xs text-yellow-400';
+        } else {
+            hint.textContent = 'Виберіть шаблон, щоб автоматично заповнити поля нижче.';
+            hint.className = 'mt-1 text-xs text-gray-400';
+        }
+    }
+
+    // Auto-detect provider on load based on baseUrl
+    if (baseUrl.value === '' && apiKey.value === '') {
+        qs.value = 'local';
+    } else if (baseUrl.value.includes('pollinations.ai')) {
+        qs.value = 'pollinations';
+    } else if (baseUrl.value.includes('openrouter.ai')) {
+        qs.value = 'openrouter_free';
+    } else if (baseUrl.value.includes('groq.com')) {
+        qs.value = 'groq';
+    } else if (baseUrl.value.includes('api.openai.com')) {
+        qs.value = 'openai';
+    }
+    updateHint(qs.value);
+
+    // Also auto-trigger a background ping to check connection on load!
+    if(btnTest && qs.value !== "") {
+        connStatus.className = 'text-sm text-gray-500';
+        connStatus.textContent = 'Автоматична перевірка з\'єднання...';
+        
+        fetch('/admin/api/test-llm-connection', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                model: model.value,
+                base_url: baseUrl.value,
+                api_key: apiKey.value
+            })
+        }).then(res => res.json()).then(data => {
+            if(data.status === 'success') {
+                connStatus.className = 'text-sm text-green-400 font-medium';
+                connStatus.textContent = '✔ З\'єднання активне';
+            } else {
+                connStatus.className = 'text-sm text-red-400 font-medium';
+                connStatus.textContent = '✖ ' + data.message;
+            }
+        }).catch(e => {
+            connStatus.className = 'text-sm text-red-400 font-medium';
+            connStatus.textContent = '✖ Мережева помилка: ' + e.message;
+        });
+    }
+
     if(btnTest) {
         btnTest.addEventListener('click', async function() {
             connStatus.className = 'text-sm text-yellow-400';
@@ -180,36 +243,24 @@ document.addEventListener('DOMContentLoaded', function() {
             model.value = 'gemma-4';
             baseUrl.value = '';
             apiKey.value = '';
-            hint.textContent = 'Локальна модель обрана. Залиште URL і Ключ пустими.';
-            hint.className = 'mt-1 text-xs text-green-400';
         } else if (val === 'pollinations') {
             model.value = 'openai';
             baseUrl.value = 'https://text.pollinations.ai/openai';
             apiKey.value = 'free';
-            hint.textContent = 'Публічне API Pollinations обрано. Реєстрація не потрібна.';
-            hint.className = 'mt-1 text-xs text-green-400';
         } else if (val === 'openrouter_free') {
             model.value = 'meta-llama/llama-3-8b-instruct:free';
             baseUrl.value = 'https://openrouter.ai/api/v1';
             apiKey.value = '';
-            hint.textContent = 'Введіть ваш безкоштовний ключ OpenRouter нижче.';
-            hint.className = 'mt-1 text-xs text-yellow-400';
         } else if (val === 'groq') {
             model.value = 'llama3-8b-8192';
             baseUrl.value = 'https://api.groq.com/openai/v1';
             apiKey.value = '';
-            hint.textContent = 'Введіть ваш ключ Groq нижче.';
-            hint.className = 'mt-1 text-xs text-yellow-400';
         } else if (val === 'openai') {
             model.value = 'gpt-4o-mini';
             baseUrl.value = 'https://api.openai.com/v1';
             apiKey.value = '';
-            hint.textContent = 'Введіть ваш платний ключ OpenAI нижче.';
-            hint.className = 'mt-1 text-xs text-yellow-400';
-        } else {
-            hint.textContent = 'Виберіть шаблон, щоб автоматично заповнити поля нижче.';
-            hint.className = 'mt-1 text-xs text-gray-400';
         }
+        updateHint(val);
     });
 });
 </script>
