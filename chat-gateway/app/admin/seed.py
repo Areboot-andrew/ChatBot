@@ -126,7 +126,20 @@ async def seed_admin():
                 system_prompt=givi_prompt,
                 llm_model="gemma-4",
                 temperature="0.7",
-                max_tokens="1024"
+                max_tokens="1024",
+                meta={
+                    "engine": "agent",
+                    "agent_max_iterations": "4",
+                    "enabled_tools": [],  # empty = all tools enabled
+                    "business_info": {
+                        "phone": "066-170-12-82",
+                        "hours": "Пн-Пт 10:00-19:00, Сб 10:00-15:00",
+                        "payment": "картка, готівка, наложений платіж, крипта",
+                        "delivery": "самовивіз з сервісу або відправка Новою Поштою",
+                        "warranty": "1-6 місяців залежно від типу робіт та запчастини",
+                        "extra": "Діагностика безкоштовна за умови ремонту в нас",
+                    },
+                }
             )
             db.add(default_settings)
             await db.commit()
