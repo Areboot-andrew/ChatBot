@@ -973,6 +973,41 @@ async def test_llm_connection_api(
     except Exception as e:
         return {"status": "error", "message": f"Помилка: {type(e).__name__} - {str(e)}"}
 
+class FetchModelsRequest(BaseModel):
+    base_url: str
+    api_key: str = None
+
+@router.post("/api/fetch-models")
+async def fetch_models_api(
+    data: FetchModelsRequest,
+    user: User = Depends(get_current_user)
+):
+    import httpx
+    try:
+        base_url = data.base_url.strip() if data.base_url else ""
+        if not base_url:
+            from app.config import settings
+            base_url = settings.LMSTUDIO_URL
+            
+        # Ensure it ends with /v1 if missing (standard for OpenAI compatible APIs)
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+            
+        url = f"{base_url}/models"
+        
+        headers = {}
+        if data.api_key and data.api_key.strip():
+            headers["Authorization"] = f"Bearer {data.api_key.strip()}"
+            
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            models_data = resp.json()
+            
+        return {"status": "success", "data": models_data.get("data", [])}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # --- TEST CHAT ---
 class ChatMessage(BaseModel):
     text: str
