@@ -126,6 +126,28 @@ def _looks_business_info(text: str) -> bool:
     return any(tr in t for tr in _BUSINESS_INFO_TRIGGERS)
 
 
+_PART_WORDS = ("матриц", "дисплей", "екран", "модул", "акумулятор", "батаре", "акб",
+               "скло", "тачскрін", "запчаст", "корпус", "камер", "динамік", "роз'єм",
+               "шлейф", "плат", "крышк", "кришк")
+_BRANDS = ("iphone", "айфон", "samsung", "самсунг", "xiaomi", "ксіомі", "сяомі",
+           "huawei", "хуавей", "redmi", "poco", "oppo", "realme", "lg", "sony",
+           "nokia", "motorola", "honor", "tecno", "infinix", "pixel", "macbook", "ipad")
+
+
+def _looks_specific_part_query(text: str, history: list = None) -> bool:
+    """Asks for a part/price of a CONCRETE model (brand + part, or brand + number).
+    Such queries need the market price even if a generic catalog service exists."""
+    blob = (text or "").lower()
+    if history:
+        for h in history[-4:]:
+            blob += " " + str(h.get("content", "")).lower()
+    has_brand = any(b in blob for b in _BRANDS)
+    has_part = any(p in blob for p in _PART_WORDS)
+    has_number = bool(re.search(r"\b\d{1,4}\b", blob))
+    # brand + (part or a model number) → specific enough to need market price
+    return has_brand and (has_part or has_number)
+
+
 def _looks_substantive(text: str) -> bool:
     """Heuristic: is this a real service/info question (not a bare greeting)?"""
     t = (text or "").lower().strip()
@@ -508,7 +530,11 @@ async def run_agent(
                 # No exact internal hit -> the price list isn't proof we DON'T do
                 # it (e.g. blender = small appliance, listed on the site, not in
                 # the price table). Escalate to the site/web before answering.
-                if not catalog_hit and not knowledge_hit:
+                # Go to the market not only when nothing internal matched, but
+                # also when it's a specific model/part query (a generic catalog
+                # service is NOT the market price of that exact part).
+                need_market = (not catalog_hit and not knowledge_hit) or _looks_specific_part_query(text, history)
+                if need_market:
                     if parts_sites and "search_parts" in enabled_tools:
                         r = await _do_search_parts(text)
                         gathered.append(("search_parts", text, r))
@@ -519,6 +545,8 @@ async def run_agent(
                         gathered.append(("web_research", text, r))
                         actions_done.add("web_research")
                         emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:800])
+                    else:
+                        emit(f"AGENT GUARD #{iteration}", "Увага", "Потрібен інтернет-пошук, але web_research і search_parts ВИМКНЕНІ в Налаштуваннях")
                 continue
             break
 

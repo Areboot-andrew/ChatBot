@@ -78,38 +78,78 @@ def _serper_search(query: str, serper_key: str) -> tuple:
     return candidates, answer_text
 
 
-def _ddg_search(query: str) -> list:
-    """DuckDuckGo HTML search. Returns candidates ranked by token overlap."""
-    import httpx
-    import urllib.parse
+_UAS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+]
+
+# Sentinel returned when the search engine blocked us (anti-bot 202 / captcha)
+DDG_BLOCKED = "__DDG_BLOCKED__"
+
+
+def _clean_html(s: str) -> str:
     import re
-    data = urllib.parse.urlencode({'q': query})
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-    with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
-        resp = client.post("https://html.duckduckgo.com/html/", content=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
-        resp.raise_for_status()
-        html = resp.text
+    s = re.sub(r'<[^>]+>', '', s)
+    return s.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').strip()
 
-    urls_raw = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.IGNORECASE)
-    titles_raw = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
-    snippets_raw = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
-    if not urls_raw:
-        return []
 
-    def clean(s: str) -> str:
-        s = re.sub(r'<[^>]+>', '', s)
-        return s.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').strip()
-
+def _score_candidates(query, rows):
+    import re
     q_tokens = set(w for w in re.findall(r'[\w\d]+', query.lower(), re.UNICODE) if len(w) >= 3)
-    candidates = []
-    for i, url in enumerate(urls_raw[:10]):
-        title = clean(titles_raw[i]) if i < len(titles_raw) else ""
-        snippet = clean(snippets_raw[i]) if i < len(snippets_raw) else ""
-        haystack = f"{title} {snippet} {url}".lower()
-        score = sum(1 for t in q_tokens if t in haystack)
-        candidates.append((score, url, title, snippet))
-    candidates.sort(key=lambda c: c[0], reverse=True)
-    return candidates
+    out = []
+    for url, title, snippet in rows[:10]:
+        hay = f"{title} {snippet} {url}".lower()
+        out.append((sum(1 for t in q_tokens if t in hay), url, title, snippet))
+    out.sort(key=lambda c: c[0], reverse=True)
+    return out
+
+
+def _ddg_search(query):
+    """DuckDuckGo search with retries, UA rotation and html+lite fallback.
+    Returns a list of candidates, or DDG_BLOCKED if the engine blocked us."""
+    import httpx, re, random, time
+    blocked = False
+    for attempt in range(3):
+        ua = _UAS[attempt % len(_UAS)]
+        hdr = {"User-Agent": ua, "Accept": "text/html,application/xhtml+xml",
+               "Accept-Language": "uk,en;q=0.9", "Referer": "https://duckduckgo.com/"}
+        # endpoint 1: html
+        try:
+            with httpx.Client(timeout=12.0, follow_redirects=True, headers=hdr) as c:
+                r = c.post("https://html.duckduckgo.com/html/",
+                           data={"q": query, "kl": "ua-uk"})
+            html = r.text
+            if r.status_code == 200 and "result__url" in html:
+                urls = re.findall(r'class="result__url"[^>]*href="([^"]+)"', html, re.I)
+                titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.I | re.S)
+                snips = re.findall(r'class="result__snippet[^"]*"[^>]*>(.*?)</a>', html, re.I | re.S)
+                rows = [(urls[i], _clean_html(titles[i]) if i < len(titles) else "",
+                         _clean_html(snips[i]) if i < len(snips) else "") for i in range(len(urls))]
+                if rows:
+                    return _score_candidates(query, rows)
+            else:
+                blocked = True
+        except Exception as e:
+            logger.warning(f"DDG html attempt {attempt}: {e}")
+        # endpoint 2: lite
+        try:
+            with httpx.Client(timeout=12.0, follow_redirects=True, headers=hdr) as c:
+                r = c.post("https://lite.duckduckgo.com/lite/", data={"q": query, "kl": "ua-uk"})
+            html = r.text
+            if r.status_code == 200:
+                pairs = re.findall(r'<a[^>]+href="(https?://[^"]+)"[^>]*class=[\'"]result-link[\'"][^>]*>(.*?)</a>', html, re.I | re.S)
+                snips = re.findall(r'class=[\'"]result-snippet[\'"][^>]*>(.*?)</td>', html, re.I | re.S)
+                rows = [(pairs[i][0], _clean_html(pairs[i][1]),
+                         _clean_html(snips[i]) if i < len(snips) else "") for i in range(len(pairs))]
+                if rows:
+                    return _score_candidates(query, rows)
+            else:
+                blocked = True
+        except Exception as e:
+            logger.warning(f"DDG lite attempt {attempt}: {e}")
+        time.sleep(0.6 + random.random())
+    return DDG_BLOCKED if blocked else []
 
 
 def web_research(query: str, max_pages: int = 3, page_chars: int = 4000, serper_key: str = None) -> str:
@@ -130,6 +170,9 @@ def web_research(query: str, max_pages: int = 3, page_chars: int = 4000, serper_
                 logger.warning(f"Serper search failed, falling back to DDG: {e}")
         if not candidates:
             candidates = _ddg_search(query)
+        if candidates == DDG_BLOCKED:
+            return ("ПОШУК ЗАБЛОКОВАНО: DuckDuckGo тимчасово блокує запити (анти-бот). "
+                    "Додайте Serper API ключ у Налаштування → Пошук в інтернеті для стабільного пошуку через Google.")
         if not candidates:
             return "No search results found."
 
