@@ -530,12 +530,31 @@ async def run_agent(
 
     # External part-price logic/labelling (panel field). Default at module level.
     parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
+    # Direct price-site search URL templates with {query} (panel). The model
+    # provides a normalized query; we build the URL and parse the results page.
+    price_search_urls = [u.strip() for u in (meta.get("price_search_urls") or "").splitlines() if u.strip()]
+
+    async def _direct_price_sites(q: str) -> str:
+        from urllib.parse import quote
+        parts = []
+        for tpl in price_search_urls[:4]:
+            url = tpl.replace("{query}", quote(q)) if "{query}" in tpl else tpl
+            text = await asyncio.to_thread(fetch_and_parse_url, url, 1500)
+            if text and not text.startswith("Error fetching URL") and "Could not extract" not in text:
+                parts.append(f"=== ПРЯМИЙ ПОШУК ({url}):\n{text}")
+        return "\n\n".join(parts)
 
     async def _do_search_parts(q: str) -> str:
-        """Market price of a part from external supplier sites first, then open
-        web. Treatment/labelling comes from the editable parts_instruction."""
-        res = await _do_web_research(q, sites=parts_sites)  # parts sites first, web fallback
+        """Market price of a part: direct price-site search URLs first, then the
+        parts sites via search, then open web. Labelling = parts_instruction."""
         header = "[EXTERNAL PART PRICES — MARKET, NOT OURS. How to treat: " + parts_instruction + "]\n"
+        # 1) direct search on configured price sites (sait/search?q={query})
+        if price_search_urls:
+            direct = await _direct_price_sites(q)
+            if direct:
+                return header + direct
+        # 2) parts sites via search engine, then 3) open web
+        res = await _do_web_research(q, sites=parts_sites)
         if not res or "No search results" in res or "ПОШУК ЗАБЛОКОВАНО" in res:
             return header + (res or "ринкову ціну не знайдено.")
         return header + res

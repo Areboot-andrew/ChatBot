@@ -711,6 +711,7 @@ async def update_settings(
     enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),
+    price_search_urls: str = Form(""),
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
     agent_decision_rules: str = Form(""),
@@ -753,6 +754,7 @@ async def update_settings(
             meta_data["enabled_tools"] = enabled_tools or []
             meta_data["serper_api_key"] = serper_api_key.strip()
             meta_data["parts_sites"] = parts_sites.strip()
+            meta_data["price_search_urls"] = price_search_urls.strip()
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
@@ -780,7 +782,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "rag_top_k", "rag_score_threshold"]
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
                      "agent_decision_rules", "answer_style", "parts_instruction",
-                     "parts_sites", "fallback_sites", "tpl_evaluation_rules",
+                     "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
                      "price_triggers", "capability_triggers", "business_info_triggers",
                      "brand_words", "part_words", "catalog_synonyms", "business_info",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)

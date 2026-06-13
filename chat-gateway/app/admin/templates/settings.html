@@ -216,6 +216,10 @@
             <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: brain.com.ua, allo.ua, rozetka.com.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
             <p class="mt-1 text-xs text-gray-500">Коли деталі немає в нашому прайсі, бот шукає ринкову ціну запчастини саме на цих сайтах і подає її клієнту як <b>сторонню ринкову ціну</b> (деталь треба купувати), а не як нашу.</p>
 
+            <label for="price_search_urls" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти-прайси з прямим пошуком (URL-шаблони, по одному на рядок)</label>
+            <textarea name="price_search_urls" id="price_search_urls" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="https://brain.com.ua/search/?q={query}&#10;https://hotline.ua/sr/?q={query}">{{ settings.meta.get('price_search_urls', '') if settings and settings.meta else '' }}</textarea>
+            <p class="mt-1 text-xs text-gray-500">Якщо сайт має пошук через URL — впишіть шаблон із <code>{query}</code>. Бот підставить нормалізований запит (модель/деталь), відкриє сторінку і спарсить ціни. Це швидше і точніше за гугл; гугл лишається запасним.</p>
+
             <label for="parts_instruction" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Логіка пошуку запчастин (редагується, керує роутом)</label>
             <textarea name="parts_instruction" id="parts_instruction" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Опишіть словами порядок і як подавати ціну...">{{ settings.meta.get('parts_instruction', '') if settings and settings.meta else '' }}</textarea>
             <p class="mt-1 text-xs text-gray-500">Опишіть словами логіку: спершу Сайти запчастин (парсинг) → потім гугл; для конкретної моделі — гуглити одразу потрібну запчастину, ціни орієнтовно від-до, плюс наша робота. Цей текст керує поведінкою бота — не код. Порожньо = розумний дефолт.</p>
