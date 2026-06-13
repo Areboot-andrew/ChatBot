@@ -19,7 +19,19 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 - Never invent a number, range, availability, specification, compatibility statement, URL, source, schedule, policy, or service capability.
 - Mention a price only when price_requested=true. A problem description, model name, or part name alone is not a price request.
 - If all allowed sources fail, answer according to the selected route's no-result guidance and the tenant escalation policy.
-- Save only durable conversation facts in memory_patch: exact item/model, chosen option, intake/order stage, or explicit client preference. Never save raw search output."""
+- Apply the editable client-conduct policy before normal routing. Direct abuse aimed at the business/person is different from emotional criticism of a device, price or situation.
+- Save only durable conversation facts in memory_patch: exact item/model, chosen option, intake/order stage, explicit client preference, and conduct state required by the conduct policy. Never save raw search output."""
+
+
+DEFAULT_CONDUCT_POLICY = """Client conduct policy:
+- Normal frustration, slang, swearing about a broken device, product, manufacturer, price or situation is not abuse. Continue helping and match the energy with controlled humor.
+- Level 0: normal conversation. Be lively, direct and lightly playful when appropriate.
+- Level 1: the client uses a direct personal insult, degrading language aimed at the master/business, hostile spam, or an explicit threat. Do not research. Reply firmly in the tenant persona, tell them to speak normally, and clearly warn that one more direct attack will end this chat. Set memory_patch {"_conduct_warning":"1"}.
+- Level 2: after _conduct_warning=1, the client repeats direct abuse, refuses the boundary, threatens again, or continues hostile spam. Do not research. Set memory_patch {"_session_banned":"1"}. The final reply must be exactly the configured ban message, with no extra text.
+- Never ban for disagreement, a negative review, a complaint, criticism, caps lock, impatience, ordinary profanity not aimed at a person, or one ambiguous phrase.
+- Never provoke first, use discriminatory slurs, threaten, reveal private data, or imitate the client's most extreme wording. Escalation means firmer boundaries, not uncontrolled abuse.
+- A sincere return to the repair question after a warning is allowed. Keep the warning state, answer normally, and ban only if direct abuse is repeated.
+- Once _session_banned=1 exists, the engine suppresses every later reply in that same session. Do not attempt to reverse it."""
 
 
 DEFAULT_ANSWER_STYLE = """--- WRITE ONLY THE CLIENT-FACING REPLY ---
@@ -68,20 +80,20 @@ ROUTE_PROMPTS = {
     "catalog": {
         "tool_name": "search_catalog",
         "source_description": "This is the business's internal catalog of categories, products/services and internal prices. A broad category may confirm that the business handles an item type, but only a matching row may support a concrete product/service price.",
-        "reasoning": "Use this route for business availability, assortment, services and internal prices. Distinguish availability from price. Extract the exact item type, model if relevant, requested operation/product and whether the client explicitly requested a price.",
-        "query_prompt": "Build a concise semantic catalog phrase with the item type and requested product/service. Include the exact model only when it narrows the relevant row. Include price intent only when the client asked for it. Prefer a meaningful phrase over unrelated synonyms.",
+        "reasoning": "Use this route for business availability, assortment, services and internal prices. Distinguish availability from price. Evaluate capability in this order: exact model/service match; otherwise verified device/product category match; otherwise a matching common operation within that category. Absence of an exact model row is not a refusal. Extract the item type, model if relevant, requested operation/product and whether the client explicitly requested a price.",
+        "query_prompt": "Build a concise semantic catalog phrase with the verified item type and requested product/service. Include the exact model only when it narrows the relevant row. If the model is unfamiliar, identify its generic category through the web route first, then search the catalog by that category and operation. Include price intent only when the client asked for it. Prefer a meaningful phrase over unrelated synonyms.",
         "result_validation_prompt": "Compare complete phrases. The category and row must describe the same item/device type and requested product/service. Reject a row from another category even if it shares words such as screen, matrix, battery, board, bouquet or composition. A category match can prove broad availability but cannot prove a specific price. A price is valid only from a matching internal row.",
-        "next_step_prompt": "For availability, a matching enabled category or service phrase may be sufficient. For a concrete price, require a matching internal row; otherwise continue to the configured external-price route only when business rules allow external orientation. Do not expose unrelated rows.",
+        "next_step_prompt": "For availability, a matching enabled category or a matching common operation inside the verified category may support conditional intake even without an exact model row. State that final feasibility depends on construction/inspection when appropriate. For a concrete price, require a matching internal row; otherwise continue to the configured external-price route only when business rules allow external orientation. Do not expose unrelated rows.",
         "no_result_prompt": "Do not conclude that the business does not handle the request merely because an exact catalog row is absent. Use the next configured business/site/knowledge route. If all routes fail, state that the exact availability or price needs confirmation; mention price only when it was requested.",
         "fallback_action": "google",
     },
     "web_search": {
         "tool_name": "web_research",
         "source_description": "This route searches the configured trusted sites and then the public web, opens pages and returns untrusted third-party text. It is suitable for current specifications, identifying an unfamiliar item, public documentation and other external facts. It is not automatically a source of this business's prices or policies.",
-        "reasoning": "Use this route only when the required fact is external/current or the item must be identified before another business decision. Keep the original client goal active; web results must not switch the subject.",
-        "query_prompt": "Write a precise natural search phrase. Include exact manufacturer/model/revision and the requested property or task. Use the language most likely to find authoritative pages. For local price research include country/currency and exact item; for technical specifications prefer official terminology.",
+        "reasoning": "Use this route only when the required fact is external/current or an unfamiliar/possibly misspelled item must be identified before another business decision. Identification is not the final capability decision: establish manufacturer, exact model, generic device/product type, form factor or size class when relevant, then return to the internal catalog route. Keep the original client goal active; web results must not switch the subject.",
+        "query_prompt": "Write a precise natural search phrase. For identification use the client's probable manufacturer/model plus words such as official, product type or specifications; normalize obvious transliteration but do not silently replace an uncertain name. For a requested property include exact manufacturer/model/revision and that property. Use the language most likely to find authoritative pages. For local price research include country/currency and exact item; for technical specifications prefer official terminology.",
         "result_validation_prompt": "Accept only phrases that identify the same item/model and directly support the requested fact. Prefer official/manufacturer documentation for specifications. For prices require a concrete matching offer with currency and source URL. Reject snippets about another model, accessories, SEO text, generated summaries without support and stale or ambiguous claims.",
-        "next_step_prompt": "If an authoritative matching phrase answers the question, mark sufficient. If the item is identified but a business fact is still needed, return to the appropriate internal route. If evidence conflicts, mark insufficient and do not choose a value by guessing.",
+        "next_step_prompt": "If an authoritative matching phrase answers the question, mark sufficient. For identification, return concise verified facts such as exact model and generic type, then direct the router back to the internal catalog/capability route. Identification alone never proves that this business repairs/sells it. If evidence conflicts, mark insufficient and do not choose a value by guessing.",
         "no_result_prompt": "State that the exact external information could not be verified now. Do not invent a specification, price, shop or link. Ask for an exact model/link only if it would make a new search materially different.",
         "fallback_action": "decline",
     },

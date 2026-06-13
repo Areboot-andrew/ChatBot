@@ -202,7 +202,7 @@ async def create_tenant(
     await db.refresh(new_tenant)
     
     from app.core.prompt_defaults import (
-        DEFAULT_ANSWER_STYLE, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES,
+        DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES,
         DEFAULT_PARTS_INSTRUCTION, ROUTE_PROMPTS,
     )
     from app.core.agent import _CATALOG_SYNONYMS
@@ -221,6 +221,8 @@ async def create_tenant(
             "enabled_tools": [],
             "agent_decision_rules": DEFAULT_DECISION_RULES,
             "answer_style": DEFAULT_ANSWER_STYLE,
+            "conduct_policy": DEFAULT_CONDUCT_POLICY,
+            "ban_message": "Вітаю, вас забанено.",
             "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
             "tpl_evaluation_rules": DEFAULT_EVALUATION_RULES,
             "catalog_synonyms": "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items()),
@@ -725,6 +727,8 @@ async def update_settings(
     price_search_urls: str = Form(""),
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
+    conduct_policy: str = Form(""),
+    ban_message: str = Form("Вітаю, вас забанено."),
     agent_decision_rules: str = Form(""),
     catalog_synonyms: str = Form(""),
     router_json_mode: str = Form("on"),
@@ -765,6 +769,8 @@ async def update_settings(
             meta_data["price_search_urls"] = price_search_urls.strip()
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
+            meta_data["conduct_policy"] = conduct_policy.strip()
+            meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
             meta_data["catalog_synonyms"] = catalog_synonyms.strip()
             meta_data["router_json_mode"] = (router_json_mode == "on")
@@ -790,7 +796,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
-                     "agent_decision_rules", "answer_style", "parts_instruction",
+                     "agent_decision_rules", "answer_style", "conduct_policy", "ban_message", "parts_instruction",
                      "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
                      "catalog_synonyms", "business_info", "router_json_mode",
                      "tpl_escalate_instruction",

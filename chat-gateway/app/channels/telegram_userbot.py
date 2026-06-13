@@ -98,18 +98,22 @@ class UserbotManager:
                     response = await process_message_pipeline(
                         text, history, tenant_id, db, chat_key=chat_key, trace=collect)
                 # Typing time roughly proportional to answer length, capped.
-                await asyncio.sleep(min(1 + len(response) * 0.04, 8))
+                if response:
+                    await asyncio.sleep(min(1 + len(response) * 0.04, 8))
 
             await HistoryManager.add_message(hist_channel, chat_id, "user", text)
-            await HistoryManager.add_message(hist_channel, chat_id, "assistant", response)
+            if response:
+                await HistoryManager.add_message(hist_channel, chat_id, "assistant", response)
 
             from app.core.transcript import log_message
             from app.database import async_session_maker
             async with async_session_maker() as logdb:
                 await log_message(logdb, tenant_id, channel_id, chat_id, "user", text)
-                await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response, meta={"trace": trace_steps})
+                if response:
+                    await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response, meta={"trace": trace_steps})
 
-            await event.respond(response)
+            if response:
+                await event.respond(response)
         except Exception:
             logger.exception(f"Userbot channel {channel_id}: error handling message")
 

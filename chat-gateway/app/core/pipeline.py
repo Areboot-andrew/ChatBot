@@ -89,6 +89,9 @@ async def process_message_pipeline(
         from app.core.agent import run_agent
         from app.core.history import MemoryManager
         memory = await MemoryManager.get_memory(chat_key) if chat_key else {}
+        if memory.get("_session_banned") == "1":
+            emit("SESSION", "Заблоковано", "Ця сесія забанена; відповідь приглушено.")
+            return ""
         try:
             answer, new_memory = await run_agent(
                 text, history, tenant_id, db, settings, trace=trace, memory=memory

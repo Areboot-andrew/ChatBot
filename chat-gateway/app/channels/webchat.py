@@ -129,10 +129,12 @@ async def webchat_message(channel_id: uuid.UUID, request: Request):
             chat_key=f"{hist_channel}:{session_id}", trace=collect,
         )
         await log_message(db, channel.tenant_id, channel.id, session_id, "user", text)
-        await log_message(db, channel.tenant_id, channel.id, session_id, "assistant", response_text, meta={"trace": steps})
+        if response_text:
+            await log_message(db, channel.tenant_id, channel.id, session_id, "assistant", response_text, meta={"trace": steps})
 
     await HistoryManager.add_message(hist_channel, session_id, "user", text)
-    await HistoryManager.add_message(hist_channel, session_id, "assistant", response_text)
+    if response_text:
+        await HistoryManager.add_message(hist_channel, session_id, "assistant", response_text)
 
     return JSONResponse({"response": response_text}, headers=_cors_headers(origin))
 

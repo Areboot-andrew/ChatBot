@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.llm import chat
 from app.core.prompt_defaults import (
     DEFAULT_ANSWER_STYLE,
+    DEFAULT_CONDUCT_POLICY,
     DEFAULT_DECISION_RULES,
     DEFAULT_PARTS_INSTRUCTION,
 )
@@ -279,6 +280,20 @@ _CATALOG_SYNONYMS = {
     "самсунг": ["samsung"], "ксіомі": ["xiaomi"], "сяомі": ["xiaomi"],
     "хуавей": ["huawei"], "ноут": ["ноутбук", "laptop"], "макбук": ["macbook"],
     "модуль": ["дисплейний модуль", "матриц", "дисплей"],
+    "босе": ["bose"], "боус": ["bose"], "маршал": ["marshall"],
+    "мейджор": ["major"], "джбл": ["jbl"], "соні": ["sony"],
+    "епл": ["apple"], "леново": ["lenovo"], "асус": ["asus"],
+    "ейсер": ["acer"], "делл": ["dell"], "хп": ["hp"],
+    "навушники": ["гарнітура", "headphones", "earbuds"],
+    "колонка": ["акустика", "speaker"], "колонки": ["акустика", "speakers"],
+    "павербанк": ["powerbank", "зовнішній акумулятор"],
+    "зарядна": ["зарядна станція", "power station"],
+    "пилосос": ["порохотяг"], "кавоварка": ["кавомашина", "кавовий апарат"],
+    "гніздо": ["роз'єм", "порт"], "порт": ["роз'єм", "гніздо"],
+    "тайпсі": ["type-c", "usb-c"], "typec": ["type-c", "usb-c"],
+    "мікроюсб": ["micro-usb"], "залив": ["чистка після залиття", "корозія"],
+    "гріється": ["перегрів", "чистка", "термоінтерфейс"],
+    "хрипить": ["динамік", "акустика"], "звук": ["динамік", "мікрофон", "аудіо"],
 }
 
 
@@ -466,6 +481,8 @@ async def run_agent(
 
     tools_block = "\n".join([TOOL_DESCRIPTIONS[t] for t in enabled_tools if t in TOOL_DESCRIPTIONS])
     decision_rules = (meta.get("agent_decision_rules") or "").strip() or DEFAULT_DECISION_RULES
+    conduct_policy = (meta.get("conduct_policy") or "").strip() or DEFAULT_CONDUCT_POLICY
+    decision_rules += "\n\n" + conduct_policy
     router_protocol = (ROUTER_PROTOCOL
                        .replace("{tools_block}", tools_block)
                        .replace("{decision_rules}", decision_rules)
@@ -735,6 +752,12 @@ async def run_agent(
         visible = {k: v for k, v in memory.items() if not k.startswith("_")}
         if visible:
             parts.append("[CHAT MEMORY]\n" + "\n".join([f"- {k}: {v}" for k, v in visible.items()]))
+        conduct_state = {
+            k: memory[k] for k in ("_conduct_warning", "_session_banned") if memory.get(k)
+        }
+        if conduct_state:
+            parts.append("[SESSION CONTROL STATE — internal, never quote]\n" +
+                         "\n".join([f"- {k}: {v}" for k, v in conduct_state.items()]))
         if gathered:
             facts = []
             for action, query, result in gathered:
@@ -808,10 +831,15 @@ async def run_agent(
         patch = decision.get("memory_patch") or {}
         if isinstance(patch, dict):
             for k, v in patch.items():
+                key = str(k)
+                if key in ("_conduct_warning", "_session_banned"):
+                    if _as_bool(v):
+                        memory[key] = "1"
+                    continue
                 if v is None or v == "":
-                    memory.pop(str(k), None)
+                    memory.pop(key, None)
                 else:
-                    memory[str(k)] = str(v)
+                    memory[key] = str(v)
 
         emit(f"AGENT ROUTER #{iteration}", "Рішення",
              f"route={route_code}, action={action}\nquestion: {question}\nneeded_fact: {needed_fact}\nquery: '{query}'\nprice_requested: {_as_bool(decision.get('price_requested', False))}\nreason: {decision.get('reason', '')}\nmemory_patch: {json.dumps(patch, ensure_ascii=False)}\nТокени: {usage.get('total_tokens', 0)}",
@@ -874,6 +902,11 @@ async def run_agent(
         if escalated:
             break
 
+    if memory.get("_session_banned") == "1":
+        ban_message = (meta.get("ban_message") or "Вітаю, вас забанено.").strip()
+        emit("AGENT ANSWER", "Сесію заблоковано", ban_message)
+        return ban_message, memory
+
     # --- FINAL ANSWER MODE ---
     sys_prompt = persona
     if business_rules:
@@ -896,6 +929,11 @@ async def run_agent(
     # Tone of the final reply — editable per tenant (panel), default in code.
     answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
     sys_prompt += "\n\n" + answer_style
+    sys_prompt += "\n\n[CLIENT CONDUCT POLICY]\n" + conduct_policy
+    if memory.get("_conduct_warning") == "1":
+        sys_prompt += ("\n\n[SESSION CONDUCT STATE]\n"
+                       "A direct-abuse warning is active. If this turn created the warning, state the boundary and ban warning clearly. "
+                       "If the client returned to a normal business question, answer it normally without repeating the warning.")
 
     temp = 0.7
     max_tokens = 1024

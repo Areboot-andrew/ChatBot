@@ -65,13 +65,16 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 
                 # Update history
                 await HistoryManager.add_message("telegram", str(chat_id), "user", text)
-                await HistoryManager.add_message("telegram", str(chat_id), "assistant", response_text)
+                if response_text:
+                    await HistoryManager.add_message("telegram", str(chat_id), "assistant", response_text)
 
                 from app.core.transcript import log_message
                 await log_message(db, tenant_id, channel_id, str(chat_id), "user", text)
-                await log_message(db, tenant_id, channel_id, str(chat_id), "assistant", response_text, meta={"trace": trace_steps})
+                if response_text:
+                    await log_message(db, tenant_id, channel_id, str(chat_id), "assistant", response_text, meta={"trace": trace_steps})
                 
-                await bot.send_message(chat_id=chat_id, text=response_text)
+                if response_text:
+                    await bot.send_message(chat_id=chat_id, text=response_text)
                 
         except Exception as e:
             logger.error(f"Error processing telegram update: {e}")

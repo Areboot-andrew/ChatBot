@@ -141,6 +141,16 @@
 
         <!-- Agent Engine -->
         <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Реакція на грубість і бан сесії</h3>
+            <p class="text-sm text-gray-400 mb-3">Англомовний промпт визначає, що є прямою образою, коли попереджати та коли банити. Після бану двигун технічно припиняє відповіді в цій сесії.</p>
+            <textarea name="conduct_policy" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Level 1: warn after direct personal abuse. Level 2: ban after repeated abuse...">{{ settings.meta.get('conduct_policy', '') if settings and settings.meta else '' }}</textarea>
+            <label for="ban_message" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Останнє повідомлення перед тишею</label>
+            <input name="ban_message" id="ban_message" value="{{ settings.meta.get('ban_message', 'Вітаю, вас забанено.') if settings and settings.meta else 'Вітаю, вас забанено.' }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+            <p class="mt-1 text-xs text-gray-500">Надсилається один раз. На всі наступні повідомлення цієї сесії бот уже не відповідає.</p>
+        </div>
+
+        <!-- Agent Engine -->
+        <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>
             <p class="text-sm text-gray-400 mb-3">Агентний режим: модель сама вирішує, де шукати дані (каталог → база знань → інтернет), робить кілька кроків на бекфоні і тільки потім відповідає клієнту. Класичний режим — старий одношаговий маршрутизатор.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
