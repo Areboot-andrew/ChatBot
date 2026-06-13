@@ -144,14 +144,34 @@ async def _tool_list_categories(tenant_id: uuid.UUID, db: AsyncSession) -> str:
         "\n".join([f"- {t} ({n} послуг)" for t, n in rows])
 
 
+# Everyday word -> technical synonyms used in the price list. Expands search
+# tokens so "екран"/"розбитий екран" still finds "заміна матриці".
+_CATALOG_SYNONYMS = {
+    "екран": ["матриц", "дисплей"], "екрану": ["матриц", "дисплей"],
+    "дисплей": ["матриц"], "скло": ["тачскрін", "матриц"],
+    "батарея": ["акумулятор", "акб"], "батарею": ["акумулятор", "акб"],
+    "акб": ["акумулятор"], "зарядка": ["роз'єм", "живлення"],
+    "зарядки": ["роз'єм", "живлення"], "кнопка": ["шлейф"], "кнопки": ["шлейф"],
+}
+
+
+def _expand_tokens(tokens: list) -> list:
+    out = list(tokens)
+    for t in tokens:
+        for syn in _CATALOG_SYNONYMS.get(t, []):
+            if syn not in out:
+                out.append(syn)
+    return out
+
+
 async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession) -> str:
     """
     Targeted, paginated catalog search (keeps context small):
-    1. exact-ish match by service name (ILIKE tokens);
+    1. exact-ish match by service name (ILIKE tokens + synonyms);
     2. else match by category title -> return that category's services;
     3. else return the category list so the model can drill down step by step.
     """
-    tokens = _query_tokens(query)
+    tokens = _expand_tokens(_query_tokens(query))
     if not tokens:
         return await _tool_list_categories(tenant_id, db)
 
