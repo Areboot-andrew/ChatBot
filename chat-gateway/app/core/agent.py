@@ -261,10 +261,11 @@ _CATALOG_SYNONYMS = {
 }
 
 
-def _expand_tokens(tokens: list) -> list:
+def _expand_tokens(tokens: list, synonyms: dict = None) -> list:
+    syn_map = synonyms if synonyms is not None else _CATALOG_SYNONYMS
     out = list(tokens)
     for t in tokens:
-        for syn in _CATALOG_SYNONYMS.get(t, []):
+        for syn in syn_map.get(t, []):
             if syn not in out:
                 out.append(syn)
     return out
@@ -279,15 +280,16 @@ _CATALOG_STOPWORDS = {
 }
 
 
-async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession) -> str:
+async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession, synonyms: dict = None) -> str:
     """
     Targeted, paginated catalog search (keeps context small):
     1. exact-ish match by service name (ILIKE meaningful tokens + synonyms);
     2. else find the matching CATEGORY and return only its services;
     3. else return the category list so the model can drill down step by step.
     """
+    syn = synonyms if synonyms is not None else _CATALOG_SYNONYMS
     raw = _query_tokens(query)
-    tokens = _expand_tokens([t for t in raw if t not in _CATALOG_STOPWORDS])
+    tokens = _expand_tokens([t for t in raw if t not in _CATALOG_STOPWORDS], syn)
     if not tokens:
         # only generic words (e.g. "ремонт пилососа" -> "пилосос" kept) — if even
         # that is empty, show categories
@@ -364,6 +366,29 @@ def _tool_get_business_info(query: str, settings) -> str:
     return str(info)
 
 
+def _parse_csv_set(s, default):
+    """Editable comma/newline list from the panel -> tuple of lowercase phrases."""
+    if not s or not str(s).strip():
+        return default
+    items = [x.strip().lower() for x in re.split(r"[,;\n]", str(s)) if x.strip()]
+    return tuple(items) if items else default
+
+
+def _parse_synonyms_map(s, default):
+    """Editable synonyms: 'екран=матриця,дисплей' per line -> {word:[syn,...]}."""
+    if not s or not str(s).strip():
+        return default
+    out = {}
+    for line in re.split(r"[;\n]", str(s)):
+        if "=" in line:
+            k, vs = line.split("=", 1)
+            k = k.strip().lower()
+            vals = [v.strip().lower() for v in vs.split(",") if v.strip()]
+            if k and vals:
+                out[k] = vals
+    return out or default
+
+
 async def run_agent(
     text: str,
     history: list,
@@ -385,6 +410,36 @@ async def run_agent(
     # older enabled_tools list (list_categories pairs with the catalog).
     if "search_catalog" in enabled_tools and "list_categories" not in enabled_tools:
         enabled_tools.append("list_categories")
+
+    # Tenant-editable phrase triggers / synonyms (panel). Defaults from code.
+    t_price = _parse_csv_set(meta.get("price_triggers"), _PRICE_WORDS)
+    t_cap = _parse_csv_set(meta.get("capability_triggers"), _CAPABILITY_WORDS)
+    t_binfo = _parse_csv_set(meta.get("business_info_triggers"), _BUSINESS_INFO_TRIGGERS)
+    t_brands = _parse_csv_set(meta.get("brand_words"), _BRANDS)
+    t_parts = _parse_csv_set(meta.get("part_words"), _PART_WORDS)
+    syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), _CATALOG_SYNONYMS)
+
+    def wants_price(t):
+        return any(w in (t or "").lower() for w in t_price)
+
+    def asks_capability(t):
+        return any(w in (t or "").lower() for w in t_cap)
+
+    def looks_business_info(t):
+        return any(w in (t or "").lower() for w in t_binfo)
+
+    def looks_specific_part(t, hist=None):
+        blob = (t or "").lower()
+        if hist:
+            for h in hist[-4:]:
+                blob += " " + str(h.get("content", "")).lower()
+        has_brand = any(b in blob for b in t_brands)
+        has_part = any(p in blob for p in t_parts)
+        has_number = bool(re.search(r"\b\d{1,4}\b", blob))
+        return has_brand and (has_part or has_number)
+
+    async def catalog(q):
+        return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map)
     max_iter = 4
     try:
         max_iter = int(meta.get("agent_max_iterations", DEFAULT_MAX_ITERATIONS))
@@ -602,7 +657,7 @@ async def run_agent(
             # Business-facts questions (hours, address, payment...) need
             # get_business_info, not the catalog/web sweep.
             if (action == "answer" and not forced_lookup_done
-                    and _looks_business_info(text) and "get_business_info" in enabled_tools):
+                    and looks_business_info(text) and "get_business_info" in enabled_tools):
                 forced_lookup_done = True
                 r = _tool_get_business_info(text, settings)
                 gathered.append(("get_business_info", text, r))
@@ -614,12 +669,12 @@ async def run_agent(
             # ALWAYS go to the market, the model won't do it on its own. The
             # catalog has no exact price for a specific new model.
             if (action == "answer" and not forced_lookup_done
-                    and _looks_specific_part_query(text, history)
+                    and looks_specific_part(text, history)
                     and (("search_parts" in enabled_tools and parts_sites) or "web_research" in enabled_tools)):
                 forced_lookup_done = True
                 # quick catalog peek for our labour, then market price
                 if "search_catalog" in enabled_tools:
-                    rc = await _tool_search_catalog(text, tenant_id, db)
+                    rc = await catalog(text)
                     gathered.append(("search_catalog", text, rc))
                     actions_done.add("search_catalog")
                     emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(rc)[:800])
@@ -640,11 +695,11 @@ async def run_agent(
             # no waterfall. Don't repeat if the model already searched.
             already_catalog = any(a == "search_catalog" for a, _, _ in gathered)
             if (action == "answer" and not forced_lookup_done
-                    and _asks_capability(text) and not _wants_price(text)
+                    and asks_capability(text) and not wants_price(text)
                     and "search_catalog" in enabled_tools):
                 forced_lookup_done = True
                 if not already_catalog:
-                    r = await _tool_search_catalog(text, tenant_id, db)
+                    r = await catalog(text)
                     # Capability question — we only need YES/NO that we do it, NOT
                     # the prices. Inject a price-free verdict so the model can't
                     # dump the price list when nobody asked.
@@ -662,13 +717,13 @@ async def run_agent(
             # Price question → catalog (+ knowledge), and the market only if the
             # catalog has no real price. Reuse the model's own search if it did one.
             if (action == "answer" and not forced_lookup_done
-                    and _wants_price(text)
+                    and wants_price(text)
                     and ("search_catalog" in enabled_tools or "web_research" in enabled_tools)):
                 forced_lookup_done = True
                 emit(f"AGENT GUARD #{iteration}", "Примусовий пошук", "Запит ціни — каталог → (інтернет якщо нема)")
                 catalog_hit = any(not _is_empty(r) for a, _, r in gathered if a == "search_catalog")
                 if "search_catalog" in enabled_tools and not already_catalog:
-                    r = await _tool_search_catalog(text, tenant_id, db)
+                    r = await catalog(text)
                     gathered.append(("search_catalog", text, r))
                     actions_done.add("search_catalog")
                     catalog_hit = not _is_empty(r)
@@ -749,7 +804,7 @@ async def run_agent(
         sys_prompt += "\n\n[IF THE ANSWER IS MISSING FROM THE FACTS]\nUse this guidance in your own words: " + escalation_prompt
     # Deterministic price gate: if the client did NOT ask a price in THIS message,
     # forbid quoting any numbers — just confirm and ask what's wrong.
-    if not _wants_price(text):
+    if not wants_price(text):
         sys_prompt += ("\n\n[IMPORTANT: the client did NOT ask about price in this message. Do NOT state any "
                        "amounts, ranges or the price list, even if present in the facts. Just confirm humanly "
                        "(«так, робимо») and ask what exactly is wrong / which model.]")

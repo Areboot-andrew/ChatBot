@@ -714,6 +714,12 @@ async def update_settings(
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
     agent_decision_rules: str = Form(""),
+    price_triggers: str = Form(""),
+    capability_triggers: str = Form(""),
+    business_info_triggers: str = Form(""),
+    brand_words: str = Form(""),
+    part_words: str = Form(""),
+    catalog_synonyms: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -750,6 +756,12 @@ async def update_settings(
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
+            meta_data["price_triggers"] = price_triggers.strip()
+            meta_data["capability_triggers"] = capability_triggers.strip()
+            meta_data["business_info_triggers"] = business_info_triggers.strip()
+            meta_data["brand_words"] = brand_words.strip()
+            meta_data["part_words"] = part_words.strip()
+            meta_data["catalog_synonyms"] = catalog_synonyms.strip()
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified

@@ -114,6 +114,39 @@
             <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
+        <!-- Phrase recognition / routing -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Розпізнавання фраз і маршрутизація (на що як реагувати)</h3>
+            <p class="text-sm text-gray-400 mb-3"><b>Опишіть, на які фрази що робити і де шукати</b> — це підстраховує модель і робить логіку передбачуваною. Слова через кому. Це підказки тригерів; саме рішення приймає модель за «Правилами рішень». Порожньо = розумний дефолт.</p>
+            {% set m = settings.meta if settings and settings.meta else {} %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Слова-ЦІНА → шукати ціну (каталог/постачальники)</label>
+                    <input type="text" name="price_triggers" value="{{ m.get('price_triggers','') }}" placeholder="ціна, коштує, вартість, почому, скільки коштує" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                </div>
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Слова-ПОСЛУГА → перевірити каталог («чи робите»)</label>
+                    <input type="text" name="capability_triggers" value="{{ m.get('capability_triggers','') }}" placeholder="ремонтуєте, робите, заміняте, маєте, продаєте" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                </div>
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Слова-БІЗНЕС-ФАКТИ → get_business_info</label>
+                    <input type="text" name="business_info_triggers" value="{{ m.get('business_info_triggers','') }}" placeholder="години, графік, адреса, оплата, доставка, неділя, завтра" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                </div>
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Бренди/моделі (для ринкового пошуку деталей)</label>
+                    <input type="text" name="brand_words" value="{{ m.get('brand_words','') }}" placeholder="iphone, айфон, samsung, xiaomi (для квіткового — лишіть порожнім)" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                </div>
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Слова-деталі/товар (для ринкового пошуку)</label>
+                    <input type="text" name="part_words" value="{{ m.get('part_words','') }}" placeholder="дисплей, модуль, акумулятор / для квіткового: троянда, півонія" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                </div>
+                <div>
+                    <label class="block mb-1 text-sm text-gray-300">Синоніми каталогу (рядок: слово=синонім,синонім)</label>
+                    <textarea name="catalog_synonyms" rows="3" class="font-mono bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="екран=матриця,дисплей&#10;айфон=iphone&#10;батарея=акумулятор,акб">{{ m.get('catalog_synonyms','') }}</textarea>
+                </div>
+            </div>
+        </div>
+
         <!-- Answer Style -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Стиль фінальної відповіді (тон)</h3>
