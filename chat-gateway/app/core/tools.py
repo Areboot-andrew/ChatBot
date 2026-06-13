@@ -179,18 +179,19 @@ def web_research(query: str, max_pages: int = 3, page_chars: int = 4000, serper_
         parts = []
         if answer_text:
             parts.append(f"=== GOOGLE ANSWER BOX:\n{answer_text}")
+        # Compact search snippets first — on price aggregators they hold the
+        # prices cleanly, while full pages are mostly navigation noise.
+        snip_lines = [f"- {title}: {snippet}  ({url})" for score, url, title, snippet in candidates[:6] if snippet]
+        if snip_lines:
+            parts.append("=== РЕЗУЛЬТАТИ ПОШУКУ (сніпети з цінами):\n" + "\n".join(snip_lines))
         opened = 0
         for score, url, title, snippet in candidates:
             if opened >= max_pages:
                 break
             page_text = fetch_and_parse_url(url, max_chars=page_chars)
             if page_text and not page_text.startswith("Error fetching URL") and "Could not extract" not in page_text:
-                parts.append(f"=== ДЖЕРЕЛО: {title or url}\nURL: {url}\nЗМІСТ СТОРІНКИ:\n{page_text}")
+                parts.append(f"=== ЗМІСТ СТОРІНКИ {title or url} ({url}):\n{page_text}")
                 opened += 1
-            else:
-                # Page unreadable — keep at least the snippet as a weak fact.
-                if snippet:
-                    parts.append(f"=== ДЖЕРЕЛО (тільки сніпет): {title or url}\nURL: {url}\n{snippet}")
 
         if not parts:
             return "Found links but could not extract content from any page."
