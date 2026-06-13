@@ -109,6 +109,11 @@ _BUSINESS_INFO_TRIGGERS = (
     "з котрої", "вихідн", "адрес", "де ви", "де знаход", "як вас знайти", "куди їхати",
     "оплат", "оплачу", "розрахун", "карт", "готівк", "наложк", "телефон", "номер",
     "контакт", "звʼязат", "зв'язат", "гарант", "доставк", "відправк", "пошт",
+    # days of week + visit intent — must be checked against the schedule
+    "понеділок", "вівторок", "середу", "середа", "четвер", "пʼятниц", "п'ятниц",
+    "субот", "неділ", "вихідни", "свят",
+    "завтра", "сьогодні", "приїд", "заїд", "підійд", "зайд", "підвезу", "привезу",
+    "буду", "коли можна", "коли підійти", "коли приходити", "о котрій",
 )
 
 
@@ -272,7 +277,11 @@ async def run_agent(
     emit = trace or (lambda *a, **k: None)
     meta = settings.meta if settings and settings.meta else {}
 
-    enabled_tools = meta.get("enabled_tools") or ALL_TOOLS
+    enabled_tools = list(meta.get("enabled_tools") or ALL_TOOLS)
+    # Forward-compat: keep newer helper tools usable even if a tenant saved an
+    # older enabled_tools list (list_categories pairs with the catalog).
+    if "search_catalog" in enabled_tools and "list_categories" not in enabled_tools:
+        enabled_tools.append("list_categories")
     max_iter = 4
     try:
         max_iter = int(meta.get("agent_max_iterations", DEFAULT_MAX_ITERATIONS))
