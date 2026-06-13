@@ -28,17 +28,22 @@ async def chat(
     api_key: str = None,
     return_usage: bool = False,
     raise_error: bool = False,
-    fallback_text: str = None
+    fallback_text: str = None,
+    json_mode: bool = False
 ):
-    """Sends a chat completion request to LM Studio or a custom API."""
+    """Sends a chat completion request to LM Studio or a custom API.
+    json_mode=True asks the provider to return strict JSON (response_format)."""
     usage_data = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    extra = {}
+    if json_mode:
+        extra["response_format"] = {"type": "json_object"}
     try:
         if base_url:
             extra_headers = {}
             if "openrouter.ai" in base_url:
                 extra_headers["HTTP-Referer"] = getattr(settings, "PUBLIC_BASE_URL", "https://chat.texno.plus")
                 extra_headers["X-Title"] = "ChatGateway"
-                
+
             dynamic_client = AsyncOpenAI(
                 base_url=base_url,
                 api_key=api_key or "not-needed",
@@ -49,7 +54,8 @@ async def chat(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                timeout=60.0
+                timeout=60.0,
+                **extra
             )
         else:
             response = await client.chat.completions.create(
@@ -57,7 +63,8 @@ async def chat(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                timeout=60.0
+                timeout=60.0,
+                **extra
             )
             
         if response.usage:

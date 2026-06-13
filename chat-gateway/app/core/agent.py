@@ -444,6 +444,8 @@ async def run_agent(
     gathered = []          # [(action, query, result)]
     actions_done = set()
     forced_lookup_done = False
+    # Strict JSON for the router (cloud models). Disable per-tenant if needed.
+    use_json_mode = bool(meta.get("router_json_mode", True))
 
     base_url = meta.get("llm_base_url")
     api_key = meta.get("llm_api_key")
@@ -547,10 +549,24 @@ async def run_agent(
             messages.append({"role": "user", "content": text})
 
         t0 = time.time()
-        raw, usage = await chat(
-            messages, model=model_name, temperature=0.1, max_tokens=400,
-            base_url=base_url, api_key=api_key, return_usage=True, raise_error=True
-        )
+        # Ask the provider for strict JSON (cloud models support response_format).
+        # If the provider rejects json_mode, retry once without it.
+        try:
+            raw, usage = await chat(
+                messages, model=model_name, temperature=0.1, max_tokens=400,
+                base_url=base_url, api_key=api_key, return_usage=True,
+                raise_error=True, json_mode=use_json_mode
+            )
+        except Exception as je:
+            if use_json_mode:
+                use_json_mode = False  # provider doesn't support it — stop trying
+                logger.warning(f"json_mode unsupported, retrying plain: {je}")
+                raw, usage = await chat(
+                    messages, model=model_name, temperature=0.1, max_tokens=400,
+                    base_url=base_url, api_key=api_key, return_usage=True, raise_error=True
+                )
+            else:
+                raise
         try:
             decision = _extract_json(raw)
         except (ValueError, json.JSONDecodeError) as e:
