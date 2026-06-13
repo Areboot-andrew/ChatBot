@@ -127,27 +127,31 @@ WIDGET_JS = r"""
   css.textContent =
     '.cwx-btn{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#2563eb;color:#fff;border:none;cursor:pointer;font-size:24px;box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:99998}' +
     '.cwx-box{position:fixed;bottom:90px;right:20px;width:340px;max-width:92vw;height:480px;max-height:75vh;background:#111827;border:1px solid #374151;border-radius:14px;display:none;flex-direction:column;overflow:hidden;z-index:99999;font-family:system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.5)}' +
-    '.cwx-head{background:#1f2937;color:#f9fafb;padding:12px 16px;font-size:14px;font-weight:600}' +
+    '.cwx-head{display:flex;align-items:center;justify-content:space-between;background:#1f2937;color:#f9fafb;padding:12px 16px;font-size:14px;font-weight:600}' +
+    '.cwx-head button{background:none;border:none;color:#9ca3af;font-size:22px;line-height:1;cursor:pointer;padding:0 4px}' +
     '.cwx-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}' +
-    '.cwx-m{max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word}' +
+    '.cwx-m{max-width:85%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}' +
     '.cwx-m.u{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:4px}' +
     '.cwx-m.a{align-self:flex-start;background:#1f2937;color:#e5e7eb;border-bottom-left-radius:4px}' +
     '.cwx-in{display:flex;border-top:1px solid #374151;background:#111827}' +
-    '.cwx-in input{flex:1;border:none;background:transparent;color:#e5e7eb;padding:12px;font-size:13px;outline:none}' +
-    '.cwx-in button{border:none;background:transparent;color:#3b82f6;padding:0 14px;cursor:pointer;font-size:18px}' +
-    '.cwx-typing{align-self:flex-start;color:#9ca3af;font-size:12px;padding:4px 12px}';
+    '.cwx-in input{flex:1;min-width:0;border:none;background:transparent;color:#e5e7eb;padding:14px;font-size:16px;outline:none}' +
+    '.cwx-in button{border:none;background:transparent;color:#3b82f6;padding:0 16px;cursor:pointer;font-size:20px}' +
+    '.cwx-typing{align-self:flex-start;color:#9ca3af;font-size:12px;padding:4px 12px}' +
+    '@media (max-width:480px){.cwx-box{top:0;left:0;right:0;bottom:0;width:100%;max-width:100%;height:100%;height:100dvh;max-height:none;border-radius:0;border:none}.cwx-btn{bottom:16px;right:16px}}';
   document.head.appendChild(css);
 
   var btn = document.createElement('button'); btn.className = 'cwx-btn'; btn.innerHTML = '💬';
   var box = document.createElement('div'); box.className = 'cwx-box';
-  box.innerHTML = '<div class="cwx-head">Чат</div><div class="cwx-msgs"></div>' +
+  box.innerHTML = '<div class="cwx-head"><span class="cwx-title">Чат</span><button type="button" aria-label="Закрити">&times;</button></div><div class="cwx-msgs"></div>' +
     '<div class="cwx-in"><input type="text" placeholder="Ваше запитання..." maxlength="2000"><button>➤</button></div>';
   document.body.appendChild(btn); document.body.appendChild(box);
 
   var msgs = box.querySelector('.cwx-msgs');
   var input = box.querySelector('input');
   var send = box.querySelector('.cwx-in button');
-  var head = box.querySelector('.cwx-head');
+  var head = box.querySelector('.cwx-title');
+  var closeBtn = box.querySelector('.cwx-head button');
+  closeBtn.onclick = function(){ box.style.display = 'none'; };
   var greeted = false;
 
   function add(role, text){
