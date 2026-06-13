@@ -92,6 +92,17 @@ Reply in Ukrainian, address the client formally ("Ви"), in your persona's voic
 - Never expose internal tools, catalog/category names, JSON, English, or "[...]" markers."""
 
 
+# External part-price logic/labelling — default; editable via meta.parts_instruction.
+DEFAULT_PARTS_INSTRUCTION = (
+    "When the part is not in our price list: search the parts sites first, then google. "
+    "HOW TO PRESENT TO THE CLIENT: if prices were found, say it naturally — «глянув у постачальників, "
+    "ціни приблизно такі: ...» — and give 1-2 source links (URLs) from the data if available. Add our "
+    "labour from the catalog. Present the part price as an EXTERNAL/market price (bought separately); the "
+    "exact price the master gives after inspection. IF NO PRICE WAS FOUND or the search was empty — do NOT "
+    "invent numbers: say «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо»."
+)
+
+
 _JUNK_PATTERNS = [
     r"(?im)^\s*we already gave final\.?\s*$",
     r"(?i)\bwe already gave final\.?",
@@ -517,17 +528,7 @@ async def run_agent(
                     "check / take the device in.]\n" + (result or ""))
         return result
 
-    # Editable logic/labelling for external part prices (panel field). The CODE
-    # only does the mechanics (parts sites first, then open web); HOW to treat
-    # and present the result is this tenant text, not hardcoded.
-    DEFAULT_PARTS_INSTRUCTION = (
-        "When the part is not in our price list: search the parts sites first, then google. "
-        "HOW TO PRESENT TO THE CLIENT: if prices were found, say it naturally — «глянув у постачальників, "
-        "ціни приблизно такі: ...» — and give 1-2 source links (URLs) from the data if available. Add our "
-        "labour from the catalog. Present the part price as an EXTERNAL/market price (bought separately); the "
-        "exact price the master gives after inspection. IF NO PRICE WAS FOUND or the search was empty — do NOT "
-        "invent numbers: say «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо»."
-    )
+    # External part-price logic/labelling (panel field). Default at module level.
     parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
 
     async def _do_search_parts(q: str) -> str:

@@ -155,3 +155,41 @@ async def seed_admin():
             settings_db.system_prompt = givi_prompt
             await db.commit()
             logger.info("BotSettings system prompt updated to givi_system_prompt.md.")
+
+        # Fill the control prompts into the DB for ALL tenants where empty, so the
+        # panel shows them populated (and they are editable from there).
+        await seed_default_prompts(db)
+
+
+async def seed_default_prompts(db):
+    """Populate editable control prompts (decision rules, answer style, parts
+    instruction, synonyms) into bot_settings.meta where empty."""
+    from sqlalchemy.future import select as _select
+    from sqlalchemy.orm.attributes import flag_modified
+    from app.models.tenant import BotSetting
+    from app.core.agent import (DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE,
+                                DEFAULT_PARTS_INSTRUCTION, _CATALOG_SYNONYMS)
+
+    synonyms_text = "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items())
+    defaults = {
+        "agent_decision_rules": DEFAULT_DECISION_RULES,
+        "answer_style": DEFAULT_ANSWER_STYLE,
+        "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
+        "catalog_synonyms": synonyms_text,
+    }
+    res = await db.execute(_select(BotSetting))
+    changed = 0
+    for s in res.scalars().all():
+        meta = dict(s.meta or {})
+        touched = False
+        for k, v in defaults.items():
+            if not (meta.get(k) or "").strip():
+                meta[k] = v
+                touched = True
+        if touched:
+            s.meta = meta
+            flag_modified(s, "meta")
+            changed += 1
+    if changed:
+        await db.commit()
+        logger.info(f"Seeded default control prompts into {changed} tenant(s).")
