@@ -1,11 +1,13 @@
-"""seed texno.plus trusted site + repair_check reasoning intent for existing tenants
+"""seed texno.plus trusted site for existing tenants
 
 Revision ID: f6a7b8c9d0e1
 Revises: e5f6a7b8c9d0
 Create Date: 2026-06-13 15:00:00.000000
 
+Note: the repair_check example intent was removed from this migration — its
+INSERT...SELECT broke deploys repeatedly and it's only a convenience example
+(seed.py creates it for fresh installs). Add it from the panel if needed.
 """
-import json
 from typing import Sequence, Union
 
 from alembic import op
@@ -16,20 +18,10 @@ down_revision: Union[str, None] = 'e5f6a7b8c9d0'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-REPAIR_REASONING = (
-    "Питання типу «ви ремонтуєте {прилад}». Витягни назву приладу. Якщо не знаєш точно "
-    "що це за пристрій — знайди в інтернеті його категорію. Перевір каталог і наш сайт. "
-    "Прайс — це НЕ повний список: відсутність у прайсі не означає що ми це не робимо "
-    "(напр. блендер/міксер = дрібна побутова техніка). Якщо це електроніка або побутова "
-    "техніка — ми ремонтуємо, запропонуй привезти на безкоштовну діагностику. Не "
-    "відмовляй, поки не перевірив усі джерела."
-)
-
 
 def upgrade() -> None:
     conn = op.get_bind()
-
-    # 1. Set trusted site to texno.plus where empty, only for the texno persona.
+    # Set trusted site to texno.plus where empty, only for the texno persona.
     conn.execute(sa.text(
         "UPDATE bot_settings "
         "SET meta = (CASE WHEN meta IS NULL THEN '{}'::jsonb ELSE meta END) "
@@ -38,22 +30,6 @@ def upgrade() -> None:
         "AND COALESCE(meta->>'fallback_sites', '') = ''"
     ))
 
-    # 2. Add a repair_check reasoning intent as a ready example for ONE tenant.
-    # (knowledge_types.code has a global unique constraint, so insert once.)
-    # Pass patterns and meta as single jsonb params with explicit casts to avoid
-    # asyncpg IndeterminateDatatypeError.
-    patterns_json = json.dumps(["ви ремонтуєте", "чи робите", "берете в ремонт", "можете полагодити", "ремонтуєте"])
-    meta_json = json.dumps({"reasoning": REPAIR_REASONING})
-    conn.execute(sa.text(
-        "INSERT INTO knowledge_types (id, tenant_id, code, label, handler, intent_patterns, enabled, meta) "
-        "SELECT gen_random_uuid(), t.id, 'repair_check', 'Чи ремонтуємо прилад', 'qa_handler', "
-        "  cast(:patterns as jsonb), true, cast(:meta as jsonb) "
-        "FROM tenants t "
-        "WHERE NOT EXISTS (SELECT 1 FROM knowledge_types k WHERE k.code = 'repair_check') "
-        "ORDER BY t.created_at LIMIT 1"
-    ), {"patterns": patterns_json, "meta": meta_json})
-
 
 def downgrade() -> None:
-    conn = op.get_bind()
-    conn.execute(sa.text("DELETE FROM knowledge_types WHERE code = 'repair_check'"))
+    pass
