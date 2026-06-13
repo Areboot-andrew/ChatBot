@@ -572,11 +572,12 @@ async def conversation_messages(
     if not res_c.scalars().first():
         return {"messages": []}
     res = await db.execute(
-        select(Message.role, Message.content, Message.created_at)
+        select(Message.role, Message.content, Message.created_at, Message.meta)
         .where(Message.conversation_id == conv_id).order_by(Message.created_at))
     return {"messages": [
-        {"role": r, "content": c, "at": t.isoformat() if t else None}
-        for r, c, t in res.all()
+        {"role": r, "content": c, "at": t.isoformat() if t else None,
+         "trace": (m or {}).get("trace", []) if isinstance(m, dict) else []}
+        for r, c, t, m in res.all()
     ]}
 
 

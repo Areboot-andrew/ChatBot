@@ -92,9 +92,11 @@ class UserbotManager:
             # Human-like pacing: think a bit, then "type" while working.
             await asyncio.sleep(random.uniform(2, 5))
             async with client.action(event.chat_id, 'typing'):
+                from app.core.transcript import make_trace_collector
+                collect, trace_steps = make_trace_collector()
                 async with async_session_maker() as db:
                     response = await process_message_pipeline(
-                        text, history, tenant_id, db, chat_key=chat_key)
+                        text, history, tenant_id, db, chat_key=chat_key, trace=collect)
                 # Typing time roughly proportional to answer length, capped.
                 await asyncio.sleep(min(1 + len(response) * 0.04, 8))
 
@@ -105,7 +107,7 @@ class UserbotManager:
             from app.database import async_session_maker
             async with async_session_maker() as logdb:
                 await log_message(logdb, tenant_id, channel_id, chat_id, "user", text)
-                await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response)
+                await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response, meta={"trace": trace_steps})
 
             await event.respond(response)
         except Exception:

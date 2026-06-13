@@ -100,13 +100,14 @@ async def webchat_message(channel_id: uuid.UUID, request: Request):
         history = await HistoryManager.get_history(hist_channel, session_id)
         history = history + [{"role": "user", "content": text}]
 
+        from app.core.transcript import make_trace_collector, log_message
+        collect, steps = make_trace_collector()
         response_text = await process_message_pipeline(
             text, history, channel.tenant_id, db,
-            chat_key=f"{hist_channel}:{session_id}",
+            chat_key=f"{hist_channel}:{session_id}", trace=collect,
         )
-        from app.core.transcript import log_message
         await log_message(db, channel.tenant_id, channel.id, session_id, "user", text)
-        await log_message(db, channel.tenant_id, channel.id, session_id, "assistant", response_text)
+        await log_message(db, channel.tenant_id, channel.id, session_id, "assistant", response_text, meta={"trace": steps})
 
     await HistoryManager.add_message(hist_channel, session_id, "user", text)
     await HistoryManager.add_message(hist_channel, session_id, "assistant", response_text)
