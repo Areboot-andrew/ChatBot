@@ -146,7 +146,7 @@ async def seed_admin():
                 max_tokens="1024",
                 meta={
                     "engine": "agent",
-                    "agent_max_iterations": "5",
+                    "agent_max_iterations": "3",
                     "enabled_tools": [],  # empty = all tools enabled
                     "fallback_sites": "texno.plus",  # check our own site first
                     # Temporary Serper (Google) key — replace with your own in Settings

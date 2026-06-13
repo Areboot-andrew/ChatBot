@@ -164,8 +164,8 @@
                 </div>
                 <div>
                     <label for="agent_max_iterations" class="block mb-2 text-sm font-medium text-gray-300">Макс. кроків агента за хід</label>
-                    <input type="number" min="1" max="8" name="agent_max_iterations" id="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '4') if settings and settings.meta else '4' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-                    <p class="mt-1 text-xs text-gray-500">Більше кроків = розумніше, але повільніше на локальній моделі.</p>
+                    <input type="number" min="1" max="3" name="agent_max_iterations" id="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '3') if settings and settings.meta else '3' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">До 3 звернень до джерел. Після достатньої підтвердженої відповіді цикл зупиняється одразу.</p>
                 </div>
             </div>
             <label class="flex items-center gap-2 text-sm text-gray-300 mb-2">

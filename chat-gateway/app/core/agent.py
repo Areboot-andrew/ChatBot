@@ -103,6 +103,7 @@ Mechanical rules:
 _JUNK_PATTERNS = [
     r"(?im)^\s*we already gave final\.?\s*$",
     r"(?i)\bwe already gave final\.?",
+    r"(?i)\bwe already answered\.?",
     r"(?im)^\s*MODE:.*$",
     r"(?im)^\s*\{.*\"action\".*\}\s*$",
     r"(?im)^\s*(reason|action|memory_patch|query)\s*[:=].*$",
@@ -124,6 +125,9 @@ def _clean_answer(text: str, fallback: str = "") -> str:
         return text
     import re as _re
     out = text
+    self_note = _re.search(r"(?i)\bwe already (?:answered|gave final)\.?", out)
+    if self_note and out[:self_note.start()].strip():
+        out = out[:self_note.start()]
     for pat in _JUNK_PATTERNS:
         out = _re.sub(pat, "", out)
     # collapse leftover blank lines
@@ -152,6 +156,25 @@ def _as_bool(value) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_PRICE_INTENT_RE = re.compile(
+    r"(?iu)(?:скільки\s+(?:це\s+)?(?:коштує|буде\s+коштувати)|"
+    r"(?:яка|який|яку)\s+(?:ціна|вартість)|ціна|ціни|вартість|прайс|по\s+грошах|"
+    r"орієнтовно\s+по\s+ціні|дорого\s+чи|cost|price|how\s+much)"
+)
+
+
+def _client_requested_price(text: str, history: list = None) -> bool:
+    """Derive price intent only from recent client turns, never assistant text."""
+    client_turns = [
+        str(item.get("content") or "")
+        for item in (history or [])
+        if item.get("role") == "user" and item.get("content")
+    ]
+    if not client_turns or client_turns[-1] != text:
+        client_turns.append(text or "")
+    return any(_PRICE_INTENT_RE.search(turn) for turn in client_turns[-2:])
 
 
 _GREETING_WORDS = {
@@ -473,9 +496,9 @@ async def run_agent(
 
     async def catalog(q):
         return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map)
-    max_iter = 4
+    max_iter = 3
     try:
-        max_iter = int(meta.get("agent_max_iterations", DEFAULT_MAX_ITERATIONS))
+        max_iter = min(3, max(1, int(meta.get("agent_max_iterations", 3))))
     except (ValueError, TypeError):
         pass
 
@@ -654,7 +677,7 @@ async def run_agent(
         candidates = [r for r in route_configs.values() if r.get("handler") == wanted_handler]
         return candidates[0] if len(candidates) == 1 else {}
 
-    async def _validate_tool_result(raw_result: str, decision: dict, action: str, query: str) -> str:
+    async def _validate_tool_result(raw_result: str, decision: dict, action: str, query: str) -> tuple[str, dict]:
         """Use the selected route's editable prompts to turn untrusted source
         text into verified evidence. Raw source text never reaches final answer."""
         route = _route_for_decision(str(decision.get("route_code") or ""), action)
@@ -742,7 +765,12 @@ async def run_agent(
             lines.append("verified_facts: none")
         if no_result_guidance:
             lines.append("no_result_guidance: " + no_result_guidance)
-        return "\n".join(lines)
+        state = {
+            "relevant": relevant,
+            "sufficient": sufficient,
+            "next_action": str(validation.get("next_action") or "").strip().lower(),
+        }
+        return "\n".join(lines), state
 
     # Chat memory = only the short durable facts the model itself saved
     # (memory_patch: device model, stage). No raw lookup dumps carried over — that
@@ -766,6 +794,7 @@ async def run_agent(
         return "\n\n".join(parts)
 
     escalated = False
+    explicit_price_requested = _client_requested_price(text, history)
 
     # Short business identity for the ROUTER stage (full persona/tone is only for
     # the final answer — at routing it just makes small models ignore the JSON).
@@ -794,19 +823,28 @@ async def run_agent(
         # Ask the provider for strict JSON (cloud models support response_format).
         # If the provider rejects json_mode, retry once without it.
         try:
-            raw, usage = await chat(
+            raw, usage = await asyncio.wait_for(chat(
                 messages, model=model_name, temperature=0.1, max_tokens=400,
                 base_url=base_url, api_key=api_key, return_usage=True,
                 raise_error=True, json_mode=use_json_mode
-            )
+            ), timeout=35)
+        except asyncio.TimeoutError:
+            emit(f"AGENT ROUTER #{iteration}", "Тайм-аут → відповідь з наявних фактів",
+                 "Роутер не відповів за 35 секунд; цикл зупинено.", "35.00s")
+            break
         except Exception as je:
             if use_json_mode:
                 use_json_mode = False  # provider doesn't support it — stop trying
                 logger.warning(f"json_mode unsupported, retrying plain: {je}")
-                raw, usage = await chat(
-                    messages, model=model_name, temperature=0.1, max_tokens=400,
-                    base_url=base_url, api_key=api_key, return_usage=True, raise_error=True
-                )
+                try:
+                    raw, usage = await asyncio.wait_for(chat(
+                        messages, model=model_name, temperature=0.1, max_tokens=400,
+                        base_url=base_url, api_key=api_key, return_usage=True, raise_error=True
+                    ), timeout=35)
+                except asyncio.TimeoutError:
+                    emit(f"AGENT ROUTER #{iteration}", "Тайм-аут → відповідь з наявних фактів",
+                         "Повторний виклик роутера не відповів за 35 секунд; цикл зупинено.", "35.00s")
+                    break
             else:
                 raise
         try:
@@ -822,6 +860,17 @@ async def run_agent(
         route_code = str(decision.get("route_code", "") or "")
         question = str(decision.get("question", "") or "")
         needed_fact = str(decision.get("needed_fact", "") or "")
+        model_price_requested = _as_bool(decision.get("price_requested", False))
+        decision["price_requested"] = explicit_price_requested
+        if not explicit_price_requested and (model_price_requested or needed_fact == "price"):
+            emit(f"AGENT ROUTER #{iteration}", "Ціновий намір відхилено",
+                 "Клієнт не питав ціну; намір не можна брати зі слів асистента.")
+            action = "answer"
+            decision["action"] = action
+            needed_fact = "other"
+            decision["needed_fact"] = needed_fact
+            query = ""
+            decision["query"] = query
         configured_tool = route_configs.get(route_code, {}).get("tool_name", "")
         if configured_tool and action != "answer" and action != configured_tool:
             emit(f"AGENT ROUTER #{iteration}", "Дію виправлено контрактом роута",
@@ -894,12 +943,18 @@ async def run_agent(
             raw_result = f"Unknown action '{action}'."
 
         if action != "escalate":
-            result = await _validate_tool_result(raw_result, decision, action, query or text)
+            result, validation_state = await _validate_tool_result(
+                raw_result, decision, action, query or text
+            )
+        else:
+            validation_state = {"sufficient": False, "next_action": "answer"}
 
         gathered.append((action, query, result))
         emit(f"AGENT TOOL #{iteration}", action, str(result)[:800], f"{time.time() - t0:.2f}s")
 
-        if escalated:
+        if escalated or validation_state.get("sufficient"):
+            break
+        if validation_state.get("next_action") in {"answer", "decline", "stop"}:
             break
 
     if memory.get("_session_banned") == "1":

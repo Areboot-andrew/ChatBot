@@ -217,7 +217,7 @@ async def create_tenant(
         max_tokens="1024",
         meta={
             "engine": "agent",
-            "agent_max_iterations": "5",
+            "agent_max_iterations": "3",
             "enabled_tools": [],
             "agent_decision_rules": DEFAULT_DECISION_RULES,
             "answer_style": DEFAULT_ANSWER_STYLE,
@@ -780,7 +780,7 @@ async def update_settings(
     fallback_text: str = Form(""),
     tpl_evaluation_rules: str = Form(""),
     engine: str = Form("agent"),
-    agent_max_iterations: str = Form("4"),
+    agent_max_iterations: str = Form("3"),
     enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),

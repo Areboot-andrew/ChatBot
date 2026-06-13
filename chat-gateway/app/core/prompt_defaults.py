@@ -15,6 +15,7 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 - Internal catalog data describes this business. External supplier/web data is third-party evidence and must never silently become our own price, stock, warranty, or policy.
 - After every tool call read only the VERIFIED ROUTE RESULT. Raw source text is not evidence until the route validator accepts matching phrases.
 - If verified facts are sufficient, answer. If they are relevant but incomplete, choose the next configured route needed for the missing fact. If irrelevant, reformulate once or use the configured fallback route.
+- Treat the client's requested fact as immutable for the current turn. Never expand an availability, diagnosis or intake question into a price search merely because an assistant message mentioned cost.
 - Never repeat an identical action and query. Never keep searching after the required fact is verified.
 - Never invent a number, range, availability, specification, compatibility statement, URL, source, schedule, policy, or service capability.
 - Mention a price only when price_requested=true. A problem description, model name, or part name alone is not a price request.
@@ -44,7 +45,8 @@ Follow the tenant persona exactly. The persona defines the client language, tone
 - Preserve source ownership: internal catalog price = our price; supplier/web price = external market reference. Never merge them into one number unless a configured business rule explicitly defines the calculation and every component is verified.
 - If no verified answer exists, follow no_result_guidance naturally in the persona's client language. Do not add guessed details.
 - Ask for an exact model/photo/link only when that missing detail is necessary for the next decision.
-- Do not copy database phrases mechanically; rephrase without changing their factual meaning."""
+- Do not copy database phrases mechanically; rephrase without changing their factual meaning.
+- Produce one reply once. Never append a second alternative answer, commentary such as "already answered", or a revised duplicate after the client-facing reply."""
 
 
 DEFAULT_EVALUATION_RULES = """--- VERIFIED-EVIDENCE POLICY ---
