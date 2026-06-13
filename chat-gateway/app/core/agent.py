@@ -58,7 +58,7 @@ Decision rules:
 - Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
 - Technical specs, compatibility, repair data missing from internal sources → web_research with a precise English query including the concrete model from the chat.
 - If a concrete model/detail is missing and needed → "answer" (you will ask the client for it).
-- Do not repeat an action that already returned results this turn. Maximum {max_iter} steps, then you must "answer".
+- Do not repeat an action that already returned results this turn. If a lookup is listed under [ALREADY CHECKED THIS CHAT], reuse that result instead of searching again. Maximum {max_iter} steps, then you must "answer".
 - "memory_patch": durable facts about THIS client chat worth remembering (device model, chosen option, stage). Keys/values short strings. Empty object if nothing new.
 
 Examples:
@@ -328,10 +328,19 @@ async def run_agent(
                    "could not extract", "не знайдено у базі", "не налаштована"]
         return any(m in low for m in markers)
 
+    # Persistent per-chat lookup memory (survives between messages): things the
+    # agent already searched this conversation, so it doesn't repeat them and can
+    # fall back to them. Service keys start with "_" and are hidden from display.
+    chat_facts = list(memory.get("_facts", []))  # [{tool, query, summary}]
+
     def build_context_block() -> str:
         parts = []
-        if memory:
-            parts.append("[CHAT MEMORY]\n" + "\n".join([f"- {k}: {v}" for k, v in memory.items()]))
+        visible = {k: v for k, v in memory.items() if not k.startswith("_")}
+        if visible:
+            parts.append("[CHAT MEMORY]\n" + "\n".join([f"- {k}: {v}" for k, v in visible.items()]))
+        if chat_facts:
+            lines = [f"- {f['tool']}('{f['query']}') → {f['summary']}" for f in chat_facts]
+            parts.append("[ALREADY CHECKED THIS CHAT — do NOT repeat these lookups, reuse the result]\n" + "\n".join(lines))
         if gathered:
             facts = []
             for action, query, result in gathered:
@@ -498,5 +507,25 @@ async def run_agent(
         messages, model=model_name, temperature=temp, max_tokens=max_tokens,
         base_url=base_url, api_key=api_key, raise_error=True
     )
-    emit("AGENT ANSWER", "OK", f"Кроків циклу: {len(gathered)}, пам'ять: {json.dumps(memory, ensure_ascii=False)}", f"{time.time() - t0:.2f}s")
+
+    # Persist this turn's lookups into per-chat memory so the next message can
+    # reuse them and the agent won't repeat the same searches.
+    for action, query, result in gathered:
+        if action in ("escalate",) or not result:
+            continue
+        summary = " ".join(str(result).split())[:300]
+        chat_facts.append({"tool": action, "query": (query or text)[:80], "summary": summary})
+    if chat_facts:
+        # keep the most recent unique-ish lookups, cap size to bound tokens
+        seen = set()
+        deduped = []
+        for f in reversed(chat_facts):
+            key = f"{f['tool']}:{f['query'].lower()}"
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(f)
+        memory["_facts"] = list(reversed(deduped[:12]))
+
+    emit("AGENT ANSWER", "OK", f"Кроків циклу: {len(gathered)}, пам'ять чату: {len(memory.get('_facts', []))} знахідок", f"{time.time() - t0:.2f}s")
     return answer, memory
