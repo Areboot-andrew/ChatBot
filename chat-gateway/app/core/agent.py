@@ -79,6 +79,7 @@ Now write the message the client will see. OUTPUT ONLY that message, in Ukrainia
 - Do NOT expose internal category names or mechanics. Never say «входить до категорії "Ремонт дрібної побутової техніки"». Just speak naturally: «Так, пилососи беремо.»
 - PRICE ONLY ON DEMAND: if the client did NOT ask for a price (they describe a problem or want to drop the device off) — DO NOT quote prices or push diagnostics cost. Accept it, ask for the exact model/photo, and tell them to bring it. Mention price ONLY if they asked, or naturally if marketing rules clearly fit.
 - NEVER output placeholders like «від X грн», «X грн до Y грн», «від X до Y». If you do NOT have real numbers from the facts, do NOT invent a range — say the exact price is after inspection / you'll check. Real numbers only.
+- MARKET PRICE WORDING: when external/market prices were found, present them naturally — «я глянув у постачальників, ціни приблизно такі: ...» — and include 1-2 source links (the URL lines from the facts) if available. If the search found NOTHING / was blocked / had no real numbers, do NOT invent: say «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо».
 - Use ONLY prices that match the SAME device type as asked. Do NOT give TV/monitor matrix prices for a phone screen, etc. If the facts have only unrelated-device prices, treat it as 'no price' and answer accordingly.
 - PRICE RULE (when price WAS asked): if the gathered facts contain a price/range for the asked service, give that orientation range now. Asking for the exact model is an ADDITION after the range, never a replacement. Do NOT loop asking for the model while withholding the price.
 - Use ONLY the facts gathered in [GATHERED FACTS] and [CHAT MEMORY] for prices, specs, availability, services, compatibility. If a needed fact is absent — say you don't know / need to check / ask for the exact model. Never invent.
@@ -456,9 +457,11 @@ async def run_agent(
     # and present the result is this tenant text, not hardcoded.
     DEFAULT_PARTS_INSTRUCTION = (
         "Коли деталі немає в нашому прайсі: спершу шукай ринкову ціну на Сайтах запчастин (парсинг), "
-        "якщо там нема — гугли. Для конкретної моделі гугли одразу потрібну запчастину і дай орієнтовні "
-        "ціни ВІД і ДО. Додай вартість нашої роботи з каталогу. Ціну деталі подавай як СТОРОННЮ ринкову "
-        "(деталь купується окремо), точну назве майстер після огляду."
+        "якщо там нема — гугли. ЯК ПОДАВАТИ КЛІЄНТУ: якщо знайшов ціни — скажи природно «я глянув у "
+        "постачальників, ціни приблизно такі: ...» і дай 1-2 посилання (URL) з даних, якщо вони є. "
+        "Додай нашу роботу з каталогу. Ціну деталі подавай як СТОРОННЮ ринкову (купується окремо), "
+        "точну назве майстер після огляду. ЯКЩО ЦІНИ НЕ ЗНАЙШОВ або пошук порожній — НЕ вигадуй цифри: "
+        "скажи «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо»."
     )
     parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
 
