@@ -31,15 +31,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_ITERATIONS = 5
 ALL_TOOLS = ["list_categories", "search_catalog", "search_knowledge", "search_parts", "web_research", "open_url", "get_business_info", "escalate"]
 
+# Tool descriptions are BUSINESS-NEUTRAL (work for a service OR a shop). The
+# persona (system_prompt) defines what the business actually is.
 TOOL_DESCRIPTIONS = {
-    "list_categories": '"list_categories": list our service categories with counts only (cheap, no prices). Use first to see what areas we cover, then drill down with search_catalog.',
-    "search_catalog": '"search_catalog": OUR local price list / services. query = a service name OR a category name. It drills down step by step: by service name, else the matching category\'s services, else the category list. Search again with a narrower/different word to dig deeper instead of loading everything.',
-    "search_parts": '"search_parts": MARKET price of a spare part (display module, battery, etc.) from external parts suppliers — used when the part/model is NOT in our catalog. This is a THIRD-PARTY price reference, NOT our price. query = the part + exact model. Try both Ukrainian and English wording.',
-    "search_knowledge": '"search_knowledge": internal knowledge base (FAQ, warranty, conditions, documents). query = the client question, concise.',
-    "web_research": '"web_research": internet research. Opens the most relevant found pages and reads their full content. query = precise ENGLISH technical query with the concrete device/model name. NEVER copy the client\'s raw wording or typos.',
+    "list_categories": '"list_categories": our categories with counts only (cheap, no prices). Use first to see what areas we cover, then drill down with search_catalog.',
+    "search_catalog": '"search_catalog": OUR catalog — services/products and prices. query = an item/service name OR a category name. Drills down step by step (by name, else matching category, else the category list). Search again with a narrower/different word instead of loading everything.',
+    "search_parts": '"search_parts": EXTERNAL/market price of an item/part NOT in our catalog (from supplier/price sites). A THIRD-PARTY price reference, NOT our price. query = the item + its exact name/model. Try both Ukrainian and English wording.',
+    "search_knowledge": '"search_knowledge": our knowledge base (FAQ, conditions, warranty, documents). query = the client question, concise.',
+    "web_research": '"web_research": internet research — opens the most relevant pages and reads them. query = a precise query with the concrete item/name. Use Ukrainian for local shops/prices, English for worldwide specs. NEVER copy the client\'s raw typos.',
     "open_url": '"open_url": open one specific URL and read its content. query = the full URL.',
-    "get_business_info": '"get_business_info": address, working hours, phone, payment, delivery, warranty of this business. query = which field is needed.',
-    "escalate": '"escalate": hand off to a human operator. Use when the client explicitly asks for a human or the conversation is stuck.',
+    "get_business_info": '"get_business_info": our address, working hours, phone, payment, delivery, warranty/terms. query = which field is needed.',
+    "escalate": '"escalate": hand off to a human. Use when the client explicitly asks for a human or the conversation is stuck.',
 }
 
 # ENGINE MECHANICS — hardcoded by design (JSON action format, the loop). This is
@@ -67,18 +69,18 @@ Answer ONLY about the device the CLIENT mentioned. Do not introduce a different 
 
 # EDITABLE decision rules (meta.agent_decision_rules) — HOW to act / where to get
 # data / what data we have. Default in English; tenant can fully override in panel.
-DEFAULT_DECISION_RULES = """Decision rules — choose the next action from the CONVERSATION CONTEXT. Use a tool ONLY when you actually need that data. Do not pile up context.
-- SELF-CHECK at EVERY step before acting: "Do I clearly understand what the client wants right now?" If there is ANY doubt — vague wording, unclear which device/service, missing model, contradictory or off-topic context — then action "answer" with ONE short clarifying question. NEVER search or assume on an unclear request. Put your confidence in "reason".
+DEFAULT_DECISION_RULES = """Decision rules — choose the next action from the CONVERSATION CONTEXT. Business-neutral: works for a service or a shop; the persona defines what we are. Use a tool ONLY when you actually need that data. Do not pile up context.
+- SELF-CHECK at EVERY step before acting: "Do I clearly understand what the client wants right now?" If there is ANY doubt — vague wording, unclear which item/service, missing details, contradictory or off-topic context — then action "answer" with ONE short clarifying question. NEVER search or assume on an unclear request. Note your confidence in "reason".
 - Only when the intent is clear do you pick a tool and search the relevant source.
 - Greeting / small talk / emotion → answer (no search).
-- The client describes a broken device or wants to bring it in, and did NOT ask a price → if unsure, search_catalog once to check we service this TYPE; then answer: confirm "так, ремонтуємо" (if yes) and ask WHAT exactly is wrong / the model. Do NOT quote any prices — they weren't asked.
-- First understand WHAT is broken (the symptom/part). Only when the concrete service is clear AND the client asks about price → search_catalog for THAT one service and give a single orientation range. NEVER dump the whole price list / all prices.
-- "do you repair X?" → search_catalog to confirm → answer yes/no, no prices.
-- If the device is UNKNOWN / not in our catalog → web_research to learn what it is; if it belongs to a category we repair (e.g. small home appliance / дрібна побутова) → offer to bring it in for diagnostics.
-- Price of a SPARE PART not in our catalog → search_parts / web_research for the market price.
-- STEP BY STEP: if one source returns nothing, try the NEXT relevant source. If nothing is found anywhere, answer honestly «не знайшов / треба глянути на місці» — NEVER invent prices or links.
-- get_business_info for our address/hours/payment/delivery.
-- After a search, keep ONLY what matters: save the key fact (e.g. found price, chosen part) into memory_patch in a few words. Do NOT carry over raw dumps."""
+- The client describes a need or a problem and did NOT ask a price → if unsure, search_catalog once to check we cover this; then confirm briefly (e.g. "Так, це робимо/є") and ask ONE short question about what exactly they need. Do NOT quote prices — they weren't asked.
+- "do you do / have / sell X?" → search_catalog to confirm → answer yes/no, no prices.
+- Price asked → first make the concrete item/service clear, then search_catalog for THAT one and give a SINGLE relevant orientation price. NEVER dump the whole price list.
+- Item UNKNOWN / not in our catalog → web_research to learn what it is; if it fits something we cover → offer the next step (bring it in / order it).
+- Price of an item/part NOT in our catalog → search_parts / web_research for the market price (third-party, not ours).
+- get_business_info for our address/hours/payment/delivery/terms.
+- STEP BY STEP: empty result → try the NEXT relevant source. Nothing found anywhere → answer honestly that you couldn't find it — NEVER invent prices or links.
+- After a search, keep ONLY what matters: save the key fact into memory_patch in a few words. Do NOT carry over raw dumps."""
 
 # Default final-answer style. Editable per tenant via meta.answer_style
 # (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
