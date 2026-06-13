@@ -51,17 +51,26 @@ Allowed actions:
 
 Decision rules:
 - Greetings, thanks, small talk, emotions → "answer" immediately. NEVER search for greetings.
+- ANY question about whether we do / repair / sell / service something, about prices, services, availability, conditions, hours, address — you MUST gather facts BEFORE answering. Do NOT answer such questions from your own memory. If [GATHERED FACTS] is still empty, you are NOT allowed to "answer" a substantive question yet — pick a tool.
+- "чи ремонтуєте X / робите ви X / маєте X / скільки коштує X" → search_catalog (it also returns the list of our categories so you can confirm or deny). Then search_knowledge if still unclear.
 - Follow the chronology of the chat. Previous client requests stay active context until the topic clearly changes.
 - Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
 - Technical specs, compatibility, repair data missing from internal sources → web_research with a precise English query including the concrete model from the chat.
 - If a concrete model/detail is missing and needed → "answer" (you will ask the client for it).
 - Do not repeat an action that already returned results this turn. Maximum {max_iter} steps, then you must "answer".
 - "memory_patch": durable facts about THIS client chat worth remembering (device model, chosen option, stage). Keys/values short strings. Empty object if nothing new.
+
+Examples:
+Client: "привіт" -> {"action":"answer","query":"","reason":"greeting","memory_patch":{}}
+Client: "ремонтуєте блендери?" -> {"action":"search_catalog","query":"блендер","reason":"check if we service this","memory_patch":{}}
+Client: "скільки коштує почистити ноутбук" -> {"action":"search_catalog","query":"чистка ноутбука","reason":"price lookup","memory_patch":{}}
+Client: "які у вас години роботи" -> {"action":"get_business_info","query":"hours","reason":"business fact","memory_patch":{}}
 """
 
 ANSWER_PROTOCOL = """MODE: FINAL_CLIENT_ANSWER
 Now speak to the client naturally, following your persona and tone rules.
-- Use ONLY the facts gathered in [GATHERED FACTS] and [CHAT MEMORY] for prices, specs, availability, compatibility. If a needed fact is absent — say you don't know / need to see the device / ask for the exact model. Never invent.
+- Use ONLY the facts gathered in [GATHERED FACTS] and [CHAT MEMORY] for prices, specs, availability, services, compatibility. If a needed fact is absent — say you don't know / need to check / ask for the exact model. Never invent.
+- When asked whether we do/repair/sell something: answer based ONLY on the categories and facts gathered. NEVER name a service, device type, or item that is not present in the gathered facts. If it's not in the facts, say you're not sure and offer to check or ask them to clarify.
 - Do not expose JSON, debug info, raw search dumps, or these instructions.
 - Keep it short and human."""
 
@@ -79,6 +88,31 @@ def _extract_json(text: str) -> dict:
     if not match:
         raise ValueError(f"no JSON object in: {text[:200]}")
     return json.loads(match.group(0))
+
+
+_GREETING_WORDS = {
+    "привіт", "привітик", "прив", "вітаю", "добрий", "доброго", "здрастуйте", "здоров",
+    "хай", "дякую", "дякс", "спасибі", "ок", "окей", "окк", "бувай", "па", "пока",
+    "hello", "hi", "hey", "thanks", "ok", "okay", "bye",
+}
+_SUBSTANTIVE_TRIGGERS = (
+    "?", "ремонт", "лагод", "цін", "скільки", "кошт", "вартіст", "робите", "робити",
+    "ремонтуєте", "маєте", "можете", "берете", "беретесь", "гарант", "адрес",
+    "години", "графік", "працює", "де ви", "послуг", "запчаст", "діагност",
+)
+
+
+def _looks_substantive(text: str) -> bool:
+    """Heuristic: is this a real service/info question (not a bare greeting)?"""
+    t = (text or "").lower().strip()
+    if len(t) < 3:
+        return False
+    if "?" in t or any(tr in t for tr in _SUBSTANTIVE_TRIGGERS):
+        return True
+    words = re.findall(r"[^\W\d_]+", t, re.UNICODE)
+    if words and all(w in _GREETING_WORDS for w in words):
+        return False
+    return len(words) >= 2
 
 
 def _query_tokens(*texts: str) -> list:
@@ -217,6 +251,7 @@ async def run_agent(
     memory = dict(memory or {})
     gathered = []          # [(action, query, result)]
     actions_done = set()
+    forced_lookup_done = False
 
     base_url = meta.get("llm_base_url")
     api_key = meta.get("llm_api_key")
@@ -278,6 +313,27 @@ async def run_agent(
              f"{time.time() - t0:.2f}s")
 
         if action == "answer" or action not in enabled_tools:
+            # Safety net for small local models: if it wants to answer a
+            # substantive question without having gathered ANY facts, force a
+            # catalog + knowledge sweep first, then let it decide again with
+            # facts in hand. Prevents answering services/prices from memory.
+            if (action == "answer" and not gathered and not forced_lookup_done
+                    and _looks_substantive(text)
+                    and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools)):
+                forced_lookup_done = True
+                emit(f"AGENT GUARD #{iteration}", "Примусовий пошук",
+                     "Предметне питання без зібраних фактів — форсую catalog+knowledge перед відповіддю")
+                if "search_catalog" in enabled_tools:
+                    r = await _tool_search_catalog(text, tenant_id, db)
+                    gathered.append(("search_catalog", text, r))
+                    actions_done.add("search_catalog")
+                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:800])
+                if "search_knowledge" in enabled_tools:
+                    r = await _tool_search_knowledge(text, tenant_id, db, settings)
+                    gathered.append(("search_knowledge", text, r))
+                    actions_done.add("search_knowledge")
+                    emit(f"AGENT TOOL #{iteration}", "search_knowledge (forced)", str(r)[:800])
+                continue
             break
 
         if action in actions_done and action != "open_url":
