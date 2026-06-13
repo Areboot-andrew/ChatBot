@@ -78,7 +78,8 @@ ANSWER_PROTOCOL = """--- НАПИШИ ВІДПОВІДЬ КЛІЄНТУ ---
 Прості орієнтири (не зачитуй — просто тримай у голові):
 - Ціни/факти бери ТІЛЬКИ зі зібраного вище. Нема — не вигадуй: скажи чесно, спитай модель або «гляну на місці».
 - Ринкову ціну деталі подавай як «глянув у постачальників, приблизно стільки» (+ лінк, якщо є), окремо від нашої роботи.
-- Не сип цінами, якщо клієнт про них не питав — прийми в роботу і спитай модель.
+- НЕ сип цінами/прайсом, якщо клієнт прямо не спитав про ціну. На «зламалось / чи робите» — досить «так, робимо, а що саме не так?». Ціни називай ЛИШЕ коли про них питають.
+- Дані з бази/каталогу ПЕРЕФРАЗОВУЙ своїми словами під контекст — не вивалюй прайс списком і не копіюй дослівно.
 - Тільки саме повідомлення клієнту. Без англійської, без службових позначок, без назв внутрішніх категорій, без заглушок «X–Y грн»."""
 
 
@@ -634,9 +635,18 @@ async def run_agent(
                 forced_lookup_done = True
                 if not already_catalog:
                     r = await _tool_search_catalog(text, tenant_id, db)
-                    gathered.append(("search_catalog", text, r))
+                    # Capability question — we only need YES/NO that we do it, NOT
+                    # the prices. Inject a price-free verdict so the model can't
+                    # dump the price list when nobody asked.
+                    available = not _is_empty(r) or "категорії послуг" in r.lower()
+                    verdict = ("[ДОСТУПНІСТЬ: так, така техніка/послуга у нас Є. Відповідай коротко «так, робимо» "
+                               "і спитай ЩО САМЕ не працює / модель. НЕ називай жодних цін — клієнт про них не питав.]"
+                               if available else
+                               "[ДОСТУПНІСТЬ: прямого збігу в каталозі нема. Перевір сайт/інтернет або чесно скажи, "
+                               "що уточниш. Без цін.]")
+                    gathered.append(("availability_check", text, verdict))
                     actions_done.add("search_catalog")
-                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced, capability)", str(r)[:600])
+                    emit(f"AGENT TOOL #{iteration}", "availability_check (forced, capability)", verdict)
                 continue
 
             # Price question → catalog (+ knowledge), and the market only if the
@@ -727,6 +737,12 @@ async def run_agent(
     escalation_prompt = settings.escalation_prompt if settings and settings.escalation_prompt else ""
     if escalation_prompt:
         sys_prompt += "\n\n[IF THE ANSWER IS MISSING FROM THE FACTS]\nUse this guidance in your own words: " + escalation_prompt
+    # Deterministic price gate: if the client did NOT ask a price in THIS message,
+    # forbid quoting any numbers — just confirm and ask what's wrong.
+    if not _wants_price(text):
+        sys_prompt += ("\n\n[ВАЖЛИВО: клієнт НЕ питав ціну в цьому повідомленні. НЕ називай жодних сум, "
+                       "діапазонів чи прайсу, навіть якщо вони є у фактах. Просто підтверди по-людськи "
+                       "(«так, робимо») і спитай, що саме не працює / яка модель.]")
     sys_prompt += "\n\n" + ANSWER_PROTOCOL
 
     temp = 0.7
