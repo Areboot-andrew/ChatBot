@@ -5,6 +5,7 @@ Revises: e5f6a7b8c9d0
 Create Date: 2026-06-13 15:00:00.000000
 
 """
+import json
 from typing import Sequence, Union
 
 from alembic import op
@@ -39,15 +40,18 @@ def upgrade() -> None:
 
     # 2. Add a repair_check reasoning intent as a ready example for ONE tenant.
     # (knowledge_types.code has a global unique constraint, so insert once.)
+    # Pass patterns and meta as single jsonb params with explicit casts to avoid
+    # asyncpg IndeterminateDatatypeError.
+    patterns_json = json.dumps(["ви ремонтуєте", "чи робите", "берете в ремонт", "можете полагодити", "ремонтуєте"])
+    meta_json = json.dumps({"reasoning": REPAIR_REASONING})
     conn.execute(sa.text(
         "INSERT INTO knowledge_types (id, tenant_id, code, label, handler, intent_patterns, enabled, meta) "
         "SELECT gen_random_uuid(), t.id, 'repair_check', 'Чи ремонтуємо прилад', 'qa_handler', "
-        "  '[\"ви ремонтуєте\", \"чи робите\", \"берете в ремонт\", \"можете полагодити\", \"ремонтуєте\"]'::jsonb, "
-        "  true, jsonb_build_object('reasoning', cast(:reasoning as text)) "
+        "  cast(:patterns as jsonb), true, cast(:meta as jsonb) "
         "FROM tenants t "
         "WHERE NOT EXISTS (SELECT 1 FROM knowledge_types k WHERE k.code = 'repair_check') "
         "ORDER BY t.created_at LIMIT 1"
-    ), {"reasoning": REPAIR_REASONING})
+    ), {"patterns": patterns_json, "meta": meta_json})
 
 
 def downgrade() -> None:
