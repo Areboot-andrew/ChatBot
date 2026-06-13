@@ -770,6 +770,82 @@ async def update_settings(
             await db.commit()
     return RedirectResponse(url="/admin/settings", status_code=303)
 
+
+# --- TENANT CONFIG EXPORT / IMPORT (all prompts & routing in one file) ---
+# Editable fields exported/imported as one JSON file. Engine mechanics (action
+# format, loop) are NOT here — they stay in code.
+_CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
+                   "escalation_prompt", "escalation_policy", "fallback_text",
+                   "llm_model", "temperature", "max_tokens",
+                   "rag_top_k", "rag_score_threshold"]
+_CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
+                     "agent_decision_rules", "answer_style", "parts_instruction",
+                     "parts_sites", "fallback_sites", "tpl_evaluation_rules",
+                     "price_triggers", "capability_triggers", "business_info_triggers",
+                     "brand_words", "part_words", "catalog_synonyms", "business_info",
+                     "llm_base_url"]  # serper_api_key intentionally omitted (secret)
+
+
+@router.get("/settings/export")
+async def export_config(
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    import json as _json
+    from fastapi.responses import StreamingResponse as _SR
+    res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+    s = res.scalars().first()
+    cfg = {"_about": "Tenant config: all editable prompts & routing. Engine "
+                     "mechanics (JSON action format, loop) stay in code. Import "
+                     "this file in Settings to fill everything.",
+           "columns": {}, "meta": {}}
+    if s:
+        for c in _CONFIG_COLUMNS:
+            cfg["columns"][c] = getattr(s, c, None)
+        meta = s.meta or {}
+        for k in _CONFIG_META_KEYS:
+            if k in meta:
+                cfg["meta"][k] = meta[k]
+    data = _json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
+    return _SR(iter([data]), media_type="application/json",
+               headers={"Content-Disposition": 'attachment; filename="tenant_config.json"'})
+
+
+@router.post("/settings/import")
+async def import_config(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    import json as _json
+    if not tenant_id:
+        return RedirectResponse(url="/admin/settings", status_code=303)
+    try:
+        cfg = _json.loads((await file.read()).decode("utf-8"))
+    except Exception:
+        return RedirectResponse(url="/admin/settings?err=badfile", status_code=303)
+
+    res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+    s = res.scalars().first()
+    if not s:
+        s = BotSetting(tenant_id=tenant_id, system_prompt="", temperature="0.7", max_tokens="1024")
+        db.add(s)
+    cols = cfg.get("columns", {})
+    for c in _CONFIG_COLUMNS:
+        if c in cols and cols[c] is not None:
+            setattr(s, c, cols[c])
+    meta = dict(s.meta or {})
+    for k, v in (cfg.get("meta", {}) or {}).items():
+        if k in _CONFIG_META_KEYS:
+            meta[k] = v
+    s.meta = meta
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(s, "meta")
+    await db.commit()
+    return RedirectResponse(url="/admin/settings?ok=imported", status_code=303)
+
 # --- KNOWLEDGE BASE ---
 from fastapi import UploadFile, File, BackgroundTasks
 from app.models.knowledge import KbDocument
