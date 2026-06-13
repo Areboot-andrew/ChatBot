@@ -197,10 +197,17 @@ WIDGET_JS = r"""
   box.querySelector('.cwx-close').onclick = function(){ box.style.display = 'none'; };
   var greeted = false;
 
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function linkify(s){
+    return esc(s).replace(/(https?:\/\/[^\s<]+)/g, function(u){
+      var clean = u.replace(/[.,;:)]+$/,'');
+      return '<a href="'+clean+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">'+clean+'</a>';
+    });
+  }
   function add(role, text){
     var d = document.createElement('div');
     d.className = 'cwx-m ' + (role === 'user' ? 'u' : 'a');
-    d.textContent = text;
+    if (role === 'user') { d.textContent = text; } else { d.innerHTML = linkify(text); }
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
     return d;
   }
@@ -294,10 +301,17 @@ INLINE_JS = r"""
     var input = root.querySelector('input');
     var send = root.querySelector('button');
 
+    function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function linkify(s){
+      return esc(s).replace(/(https?:\/\/[^\s<]+)/g, function(u){
+        var clean = u.replace(/[.,;:)]+$/,'');
+        return '<a href="'+clean+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">'+clean+'</a>';
+      });
+    }
     function add(role, text){
       var d = document.createElement('div');
       d.className = 'cwi-m ' + (role === 'user' ? 'u' : 'a');
-      d.textContent = text;
+      if (role === 'user') { d.textContent = text; } else { d.innerHTML = linkify(text); }
       msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
     }
 
