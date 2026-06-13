@@ -117,43 +117,11 @@ WIDGET_JS = r"""
 (function(){
   var script = document.currentScript;
   var CHANNEL = script.getAttribute('data-channel');
-  var MODE = script.getAttribute('data-mode') || 'bubble';
-  var CONTAINER_ID = script.getAttribute('data-container') || 'chat-widget';
   var BASE = '{BASE_URL}';
   if (!CHANNEL) { console.error('chat-widget: data-channel missing'); return; }
 
   var sid = localStorage.getItem('cw_sid_' + CHANNEL);
   if (!sid) { sid = 'w' + Date.now() + Math.random().toString(36).slice(2, 10); localStorage.setItem('cw_sid_' + CHANNEL, sid); }
-
-  function ask(text, onOk, onErr){
-    return fetch(BASE + '/webchat/' + CHANNEL + '/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ session_id: sid, text: text })
-    })
-    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
-    .then(function(d){ onOk(d.response); })
-    .catch(function(){ onErr('Технічна помилка, спробуйте ще раз.'); });
-  }
-
-  /* ============ INLINE MODE: форма прямо в сторінці ============ */
-  if (MODE === 'inline') {
-    var host = document.getElementById(CONTAINER_ID);
-    if (!host) {
-      host = document.createElement('div');
-      script.parentNode.insertBefore(host, script);
-    }
-    var icss = document.createElement('style');
-    icss.textContent =
-      '.cwi-wrap{font-family:system-ui,sans-serif;max-width:640px;border:1px solid #374151;border-radius:14px;overflow:hidden;background:#111827}' +
-      '.cwi-out{min-height:120px;max-height:380px;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}' +
-      '.cwi-m{max-width:88%;padding:8px 12px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}' +
-      '.cwi-m.u{align-self:flex-end;background:#2563eb;color:#fff;border-bottom-right-radius:4px}' +
-      '.cwi-m.a{align-self:flex-start;background:#1f2937;color:#e5e7eb;border-bottom-left-radius:4px}' +
-      '.cwi-typing{align-self:flex-start;color:#9ca3af;font-size:12px;padding:2px 12px}' +
-      '.cwi-in{display:flex;border-top:1px solid #374151}' +
-      '.cwi-in input{flex:1;border:none;background:transparent;color:#e5e7eb;padding:13px;font-size:14px;outline:none}' +
-      '.cwi-in button{border:none;background:#2563eb;color:#fff
 
   var css = document.createElement('style');
   css.textContent =
