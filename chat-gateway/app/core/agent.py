@@ -68,7 +68,8 @@ Answer ONLY about the device the CLIENT mentioned. Do not introduce a different 
 # EDITABLE decision rules (meta.agent_decision_rules) — HOW to act / where to get
 # data / what data we have. Default in English; tenant can fully override in panel.
 DEFAULT_DECISION_RULES = """Decision rules — choose the next action from the CONVERSATION CONTEXT. Use a tool ONLY when you actually need that data. Do not pile up context.
-- FIRST understand the intent from the whole conversation. Only when you clearly understand WHAT the client wants do you search the relevant source. If the message is vague/ambiguous → action "answer" and ask a short clarifying question — do NOT search blindly.
+- SELF-CHECK at EVERY step before acting: "Do I clearly understand what the client wants right now?" If there is ANY doubt — vague wording, unclear which device/service, missing model, contradictory or off-topic context — then action "answer" with ONE short clarifying question. NEVER search or assume on an unclear request. Put your confidence in "reason".
+- Only when the intent is clear do you pick a tool and search the relevant source.
 - Greeting / small talk / emotion → answer (no search).
 - The client describes a broken device or wants to bring it in, and did NOT ask a price → if unsure, search_catalog once to check we service this TYPE; then answer: confirm "так, ремонтуємо" (if yes) and ask WHAT exactly is wrong / the model. Do NOT quote any prices — they weren't asked.
 - First understand WHAT is broken (the symptom/part). Only when the concrete service is clear AND the client asks about price → search_catalog for THAT one service and give a single orientation range. NEVER dump the whole price list / all prices.
