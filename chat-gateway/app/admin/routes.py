@@ -503,6 +503,55 @@ async def _register_telegram_webhook(channel_id: uuid.UUID, token: str):
                 logging.getLogger(__name__).info(f"Webhook registered: {webhook_url}")
     except Exception as e:
         logging.getLogger(__name__).error(f"setWebhook error for channel {channel_id}: {e}")
+# --- HELP / DIAGNOSTICS ---
+@router.get("/help", response_class=HTMLResponse)
+async def help_page(
+    request: Request,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    tenants = await get_all_tenants(db)
+    return templates.TemplateResponse(request=request, name="help.html", context={
+        "request": request, "user": user, "tenants": tenants, "current_tenant_id": tenant_id
+    })
+
+
+@router.post("/api/test-parse")
+async def api_test_parse(url: str = Form(...), user: User = Depends(get_current_user)):
+    import asyncio
+    from app.core.tools import fetch_and_parse_url
+    try:
+        text = await asyncio.to_thread(fetch_and_parse_url, url.strip(), 3000)
+        if text.startswith("Error fetching URL") or "Could not extract" in text:
+            return {"ok": False, "detail": text}
+        return {"ok": True, "length": len(text), "text": text}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)}
+
+
+@router.post("/api/test-search")
+async def api_test_search(
+    query: str = Form(...),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    import asyncio
+    from app.core.tools import web_research
+    serper_key = None
+    if tenant_id:
+        res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+        s = res.scalars().first()
+        if s and s.meta:
+            serper_key = s.meta.get("serper_api_key") or None
+    try:
+        text = await asyncio.to_thread(web_research, query.strip(), 3, 2000, serper_key)
+        return {"ok": True, "text": text}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)}
+
+
 # --- SETTINGS ---
 @router.get("/settings", response_class=HTMLResponse)
 async def bot_settings(

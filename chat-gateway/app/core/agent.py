@@ -28,11 +28,12 @@ from app.models.services import ServicePrice, ServiceCategory
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_ITERATIONS = 4
-ALL_TOOLS = ["search_catalog", "search_knowledge", "web_research", "open_url", "get_business_info", "escalate"]
+DEFAULT_MAX_ITERATIONS = 5
+ALL_TOOLS = ["list_categories", "search_catalog", "search_knowledge", "web_research", "open_url", "get_business_info", "escalate"]
 
 TOOL_DESCRIPTIONS = {
-    "search_catalog": '"search_catalog": local price list / services / availability. query = short Ukrainian service or product wording.',
+    "list_categories": '"list_categories": list our service categories with counts only (cheap, no prices). Use first to see what areas we cover, then drill down with search_catalog.',
+    "search_catalog": '"search_catalog": local price list / services. query = a service name OR a category name. It drills down step by step: by service name, else the matching category\'s services, else the category list. Search again with a narrower/different word to dig deeper instead of loading everything.',
     "search_knowledge": '"search_knowledge": internal knowledge base (FAQ, warranty, conditions, documents). query = the client question, concise.',
     "web_research": '"web_research": internet research. Opens the most relevant found pages and reads their full content. query = precise ENGLISH technical query with the concrete device/model name. NEVER copy the client\'s raw wording or typos.',
     "open_url": '"open_url": open one specific URL and read its content. query = the full URL.',
@@ -126,27 +127,61 @@ def _query_tokens(*texts: str) -> list:
     return tokens
 
 
-async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession) -> str:
-    tokens = _query_tokens(query)
-    prices = []
-    if tokens:
-        conditions = [ServicePrice.name.ilike(f"%{tok}%") for tok in tokens]
-        res = await db.execute(
-            select(ServicePrice, ServiceCategory.title)
-            .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id, isouter=True)
-            .where(ServicePrice.tenant_id == tenant_id, or_(*conditions))
-            .limit(8)
-        )
-        prices = res.all()
-    if not prices:
-        # Nothing matched — show available categories so the model can clarify.
-        res_c = await db.execute(
-            select(ServiceCategory.title).where(ServiceCategory.tenant_id == tenant_id).limit(15))
-        cats = [c for (c,) in res_c.all() if c]
-        if cats:
-            return "Нічого не знайдено за запитом. Доступні категорії послуг: " + ", ".join(cats)
+async def _tool_list_categories(tenant_id: uuid.UUID, db: AsyncSession) -> str:
+    """Cheap step 1: category names + service counts, without dumping prices."""
+    from sqlalchemy import func
+    res = await db.execute(
+        select(ServiceCategory.title, func.count(ServicePrice.id))
+        .join(ServicePrice, ServicePrice.category_id == ServiceCategory.id, isouter=True)
+        .where(ServiceCategory.tenant_id == tenant_id)
+        .group_by(ServiceCategory.title)
+        .order_by(ServiceCategory.title)
+    )
+    rows = [(t, n) for t, n in res.all() if t]
+    if not rows:
         return "Каталог порожній."
-    return "\n".join([f"- {cat or 'Послуги'}: {p.name} — {p.price}" for p, cat in prices])
+    return "Категорії послуг (оберіть і запитайте search_catalog по назві категорії або послуги):\n" + \
+        "\n".join([f"- {t} ({n} послуг)" for t, n in rows])
+
+
+async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession) -> str:
+    """
+    Targeted, paginated catalog search (keeps context small):
+    1. exact-ish match by service name (ILIKE tokens);
+    2. else match by category title -> return that category's services;
+    3. else return the category list so the model can drill down step by step.
+    """
+    tokens = _query_tokens(query)
+    if not tokens:
+        return await _tool_list_categories(tenant_id, db)
+
+    # 1. by service name
+    name_conds = [ServicePrice.name.ilike(f"%{tok}%") for tok in tokens]
+    res = await db.execute(
+        select(ServicePrice, ServiceCategory.title)
+        .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id, isouter=True)
+        .where(ServicePrice.tenant_id == tenant_id, or_(*name_conds))
+        .limit(12)
+    )
+    prices = res.all()
+    if prices:
+        return "\n".join([f"- {cat or 'Послуги'}: {p.name} — {p.price}" for p, cat in prices])
+
+    # 2. by category title -> drill into that category
+    cat_conds = [ServiceCategory.title.ilike(f"%{tok}%") for tok in tokens]
+    res = await db.execute(
+        select(ServicePrice, ServiceCategory.title)
+        .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
+        .where(ServicePrice.tenant_id == tenant_id, or_(*cat_conds))
+        .limit(20)
+    )
+    prices = res.all()
+    if prices:
+        cat = prices[0][1]
+        return f"Послуги категорії «{cat}»:\n" + "\n".join([f"- {p.name} — {p.price}" for p, _ in prices])
+
+    # 3. nothing -> category list for step-by-step drill-down
+    return "Прямого збігу немає. " + await _tool_list_categories(tenant_id, db)
 
 
 async def _tool_search_knowledge(query: str, tenant_id: uuid.UUID, db: AsyncSession, settings) -> str:
@@ -384,14 +419,24 @@ async def run_agent(
                 continue
             break
 
-        if action in actions_done and action != "open_url":
+        # Allow repeating catalog/web/open_url with a DIFFERENT query (step-by-step
+        # drill-down). Block only an identical repeat to avoid loops.
+        repeatable = {"search_catalog", "search_knowledge", "web_research", "open_url"}
+        action_key = f"{action}:{query.lower().strip()}"
+        if action in actions_done and action not in repeatable:
             emit(f"AGENT TOOL #{iteration}", "Пропущено", f"'{action}' вже виконувався цього ходу")
             break
+        if action_key in actions_done:
+            emit(f"AGENT TOOL #{iteration}", "Пропущено", f"'{action}' з тим самим запитом вже виконувався")
+            break
         actions_done.add(action)
+        actions_done.add(action_key)
 
         # Execute tool
         t0 = time.time()
-        if action == "search_catalog":
+        if action == "list_categories":
+            result = await _tool_list_categories(tenant_id, db)
+        elif action == "search_catalog":
             result = await _tool_search_catalog(query or text, tenant_id, db)
         elif action == "search_knowledge":
             result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
