@@ -75,14 +75,14 @@ Answer ONLY about the device the CLIENT mentioned. Do not introduce a different 
 
 # Default final-answer style. Editable per tenant via meta.answer_style
 # (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
-DEFAULT_ANSWER_STYLE = """--- НАПИШИ ВІДПОВІДЬ КЛІЄНТУ ---
-Тепер ти просто говориш із клієнтом — живою, теплою, розмовною українською, у СВОЄМУ стилі (як описано вище): коротко, по-людськи, можна з легким гумором чи підколом, де доречно. НЕ як робот, не шаблонно, не канцелярит. Це жива людина по той бік, не форма.
-Прості орієнтири (не зачитуй — просто тримай у голові):
-- Ціни/факти бери ТІЛЬКИ зі зібраного вище. Нема — не вигадуй: скажи чесно, спитай модель або «гляну на місці».
-- Ринкову ціну деталі подавай як «глянув у постачальників, приблизно стільки» (+ лінк, якщо є), окремо від нашої роботи.
-- НЕ сип цінами/прайсом, якщо клієнт прямо не спитав про ціну. На «зламалось / чи робите» — досить «так, робимо, а що саме не так?». Ціни називай ЛИШЕ коли про них питають.
-- Дані з бази/каталогу ПЕРЕФРАЗОВУЙ своїми словами під контекст — не вивалюй прайс списком і не копіюй дослівно.
-- Тільки саме повідомлення клієнту. Без англійської, без службових позначок, без назв внутрішніх категорій, без заглушок «X–Y грн»."""
+DEFAULT_ANSWER_STYLE = """--- WRITE THE REPLY TO THE CLIENT ---
+Now just talk to the client in warm, natural, conversational Ukrainian, in YOUR own style (as described above): short, human, light humour/banter where it fits. NOT robotic, not templated, not bureaucratic. A real person is on the other side, not a form.
+Keep in mind (do not read these out):
+- Use prices/facts ONLY from what was gathered above. If absent — do not invent: say so honestly, ask for the model, or "гляну на місці".
+- Present a market part price as "глянув у постачальників, приблизно стільки" (+ a link if available), separate from our labour.
+- Do NOT dump prices / the price list unless the client explicitly asked about price. For "it's broken / do you fix it" — just "так, робимо, а що саме не так?". Quote prices ONLY when asked.
+- REPHRASE catalog/DB data in your own words for the context — never paste the price list verbatim.
+- Output ONLY the client message itself, in Ukrainian. No English, no service markers, no internal category names, no "X–Y" placeholders."""
 
 
 _JUNK_PATTERNS = [
@@ -470,12 +470,12 @@ async def run_agent(
     # only does the mechanics (parts sites first, then open web); HOW to treat
     # and present the result is this tenant text, not hardcoded.
     DEFAULT_PARTS_INSTRUCTION = (
-        "Коли деталі немає в нашому прайсі: спершу шукай ринкову ціну на Сайтах запчастин (парсинг), "
-        "якщо там нема — гугли. ЯК ПОДАВАТИ КЛІЄНТУ: якщо знайшов ціни — скажи природно «я глянув у "
-        "постачальників, ціни приблизно такі: ...» і дай 1-2 посилання (URL) з даних, якщо вони є. "
-        "Додай нашу роботу з каталогу. Ціну деталі подавай як СТОРОННЮ ринкову (купується окремо), "
-        "точну назве майстер після огляду. ЯКЩО ЦІНИ НЕ ЗНАЙШОВ або пошук порожній — НЕ вигадуй цифри: "
-        "скажи «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо»."
+        "When the part is not in our price list: search the parts sites first, then google. "
+        "HOW TO PRESENT TO THE CLIENT: if prices were found, say it naturally — «глянув у постачальників, "
+        "ціни приблизно такі: ...» — and give 1-2 source links (URLs) from the data if available. Add our "
+        "labour from the catalog. Present the part price as an EXTERNAL/market price (bought separately); the "
+        "exact price the master gives after inspection. IF NO PRICE WAS FOUND or the search was empty — do NOT "
+        "invent numbers: say «точної ціни зараз не знайду, але як привезете прилад — на місці підберемо»."
     )
     parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
 
@@ -483,7 +483,7 @@ async def run_agent(
         """Market price of a part from external supplier sites first, then open
         web. Treatment/labelling comes from the editable parts_instruction."""
         res = await _do_web_research(q, sites=parts_sites)  # parts sites first, web fallback
-        header = "[ЗОВНІШНІ ЦІНИ ДЕТАЛЕЙ — РИНКОВІ, НЕ НАШІ. Інструкція трактування: " + parts_instruction + "]\n"
+        header = "[EXTERNAL PART PRICES — MARKET, NOT OURS. How to treat: " + parts_instruction + "]\n"
         if not res or "No search results" in res or "ПОШУК ЗАБЛОКОВАНО" in res:
             return header + (res or "ринкову ціну не знайдено.")
         return header + res
@@ -641,11 +641,11 @@ async def run_agent(
                     # the prices. Inject a price-free verdict so the model can't
                     # dump the price list when nobody asked.
                     available = not _is_empty(r) or "категорії послуг" in r.lower()
-                    verdict = ("[ДОСТУПНІСТЬ: так, така техніка/послуга у нас Є. Відповідай коротко «так, робимо» "
-                               "і спитай ЩО САМЕ не працює / модель. НЕ називай жодних цін — клієнт про них не питав.]"
+                    verdict = ("[AVAILABILITY: yes, we do this type of device/service. Answer briefly «так, робимо» "
+                               "and ask WHAT EXACTLY is wrong / the model. Do NOT quote any prices — the client didn't ask.]"
                                if available else
-                               "[ДОСТУПНІСТЬ: прямого збігу в каталозі нема. Перевір сайт/інтернет або чесно скажи, "
-                               "що уточниш. Без цін.]")
+                               "[AVAILABILITY: no exact catalog match. Check the site/internet or honestly say you'll "
+                               "verify. No prices.]")
                     gathered.append(("availability_check", text, verdict))
                     actions_done.add("search_catalog")
                     emit(f"AGENT TOOL #{iteration}", "availability_check (forced, capability)", verdict)
@@ -742,9 +742,9 @@ async def run_agent(
     # Deterministic price gate: if the client did NOT ask a price in THIS message,
     # forbid quoting any numbers — just confirm and ask what's wrong.
     if not _wants_price(text):
-        sys_prompt += ("\n\n[ВАЖЛИВО: клієнт НЕ питав ціну в цьому повідомленні. НЕ називай жодних сум, "
-                       "діапазонів чи прайсу, навіть якщо вони є у фактах. Просто підтверди по-людськи "
-                       "(«так, робимо») і спитай, що саме не працює / яка модель.]")
+        sys_prompt += ("\n\n[IMPORTANT: the client did NOT ask about price in this message. Do NOT state any "
+                       "amounts, ranges or the price list, even if present in the facts. Just confirm humanly "
+                       "(«так, робимо») and ask what exactly is wrong / which model.]")
     # Tone of the final reply — editable per tenant (panel), default in code.
     answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
     sys_prompt += "\n\n" + answer_style
