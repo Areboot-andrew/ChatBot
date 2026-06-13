@@ -96,6 +96,9 @@ async def seed_admin():
                 {"code": "qa", "label": "Відповіді на питання (Послуги та Ціни)", "handler": "qa_handler", "intent_patterns": ["скільки коштує", "ціна", "прайс", "заміна", "ремонт", "терміни"]},
                 {"code": "web_search", "label": "Web Search (Only if exact technical specs are unknown to you. Formulate exact English query)", "handler": "web_search_handler", "intent_patterns": ["характеристики", "сумісність", "socket", "який процесор", "скільки пам'яті"]},
                 {"code": "handoff", "label": "Перевід на оператора", "handler": "escalate", "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "допомога", "зв'язок", "записатись"]},
+                {"code": "repair_check", "label": "Чи ремонтуємо прилад", "handler": "qa_handler",
+                 "intent_patterns": ["ви ремонтуєте", "чи робите", "берете в ремонт", "можете полагодити", "ремонтуєте"],
+                 "reasoning": "Питання типу «ви ремонтуєте {прилад}». Витягни назву приладу. Якщо не знаєш точно що це за пристрій — знайди в інтернеті його категорію. Перевір каталог і наш сайт. Прайс — це НЕ повний список: відсутність у прайсі не означає що ми це не робимо (напр. блендер/міксер = дрібна побутова техніка). Якщо це електроніка або побутова техніка — ми ремонтуємо, запропонуй привезти на безкоштовну діагностику. Не відмовляй, поки не перевірив усі джерела."},
                 {"code": "unknown", "label": "Невідомий запит", "handler": "fallback", "intent_patterns": []}
             ]
             for intent in intents_data:
@@ -104,7 +107,8 @@ async def seed_admin():
                     code=intent["code"],
                     label=intent["label"],
                     handler=intent["handler"],
-                    intent_patterns=intent["intent_patterns"]
+                    intent_patterns=intent["intent_patterns"],
+                    meta={"reasoning": intent.get("reasoning", "")}
                 )
                 db.add(kt)
             await db.commit()
@@ -129,8 +133,9 @@ async def seed_admin():
                 max_tokens="1024",
                 meta={
                     "engine": "agent",
-                    "agent_max_iterations": "4",
+                    "agent_max_iterations": "5",
                     "enabled_tools": [],  # empty = all tools enabled
+                    "fallback_sites": "texno.plus",  # check our own site first
                     "business_info": {
                         "phone": "066-170-12-82",
                         "hours": "Пн-Пт 10:00-19:00, Сб 10:00-15:00",
