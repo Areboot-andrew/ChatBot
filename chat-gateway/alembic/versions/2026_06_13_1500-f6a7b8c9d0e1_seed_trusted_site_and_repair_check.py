@@ -43,7 +43,7 @@ def upgrade() -> None:
         "INSERT INTO knowledge_types (id, tenant_id, code, label, handler, intent_patterns, enabled, meta) "
         "SELECT gen_random_uuid(), t.id, 'repair_check', 'Чи ремонтуємо прилад', 'qa_handler', "
         "  '[\"ви ремонтуєте\", \"чи робите\", \"берете в ремонт\", \"можете полагодити\", \"ремонтуєте\"]'::jsonb, "
-        "  true, jsonb_build_object('reasoning', :reasoning) "
+        "  true, jsonb_build_object('reasoning', cast(:reasoning as text)) "
         "FROM tenants t "
         "WHERE NOT EXISTS (SELECT 1 FROM knowledge_types k WHERE k.code = 'repair_check') "
         "ORDER BY t.created_at LIMIT 1"
