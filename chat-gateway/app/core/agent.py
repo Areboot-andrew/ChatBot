@@ -104,6 +104,19 @@ _SUBSTANTIVE_TRIGGERS = (
 )
 
 
+_BUSINESS_INFO_TRIGGERS = (
+    "годин", "графік", "режим робот", "коли працює", "коли ви працює", "до котрої",
+    "з котрої", "вихідн", "адрес", "де ви", "де знаход", "як вас знайти", "куди їхати",
+    "оплат", "оплачу", "розрахун", "карт", "готівк", "наложк", "телефон", "номер",
+    "контакт", "звʼязат", "зв'язат", "гарант", "доставк", "відправк", "пошт",
+)
+
+
+def _looks_business_info(text: str) -> bool:
+    t = (text or "").lower()
+    return any(tr in t for tr in _BUSINESS_INFO_TRIGGERS)
+
+
 def _looks_substantive(text: str) -> bool:
     """Heuristic: is this a real service/info question (not a bare greeting)?"""
     t = (text or "").lower().strip()
@@ -418,6 +431,17 @@ async def run_agent(
             # substantive question without having gathered ANY facts, force a
             # catalog + knowledge sweep first, then let it decide again with
             # facts in hand. Prevents answering services/prices from memory.
+            # Business-facts questions (hours, address, payment...) need
+            # get_business_info, not the catalog/web sweep.
+            if (action == "answer" and not forced_lookup_done
+                    and _looks_business_info(text) and "get_business_info" in enabled_tools):
+                forced_lookup_done = True
+                r = _tool_get_business_info(text, settings)
+                gathered.append(("get_business_info", text, r))
+                actions_done.add("get_business_info")
+                emit(f"AGENT GUARD #{iteration}", "get_business_info (forced)", str(r)[:800])
+                continue
+
             if (action == "answer" and not forced_lookup_done
                     and _looks_substantive(text)
                     and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools or "web_research" in enabled_tools)):
