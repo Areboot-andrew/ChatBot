@@ -29,11 +29,12 @@ from app.models.services import ServicePrice, ServiceCategory
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ITERATIONS = 5
-ALL_TOOLS = ["list_categories", "search_catalog", "search_knowledge", "web_research", "open_url", "get_business_info", "escalate"]
+ALL_TOOLS = ["list_categories", "search_catalog", "search_knowledge", "search_parts", "web_research", "open_url", "get_business_info", "escalate"]
 
 TOOL_DESCRIPTIONS = {
     "list_categories": '"list_categories": list our service categories with counts only (cheap, no prices). Use first to see what areas we cover, then drill down with search_catalog.',
-    "search_catalog": '"search_catalog": local price list / services. query = a service name OR a category name. It drills down step by step: by service name, else the matching category\'s services, else the category list. Search again with a narrower/different word to dig deeper instead of loading everything.',
+    "search_catalog": '"search_catalog": OUR local price list / services. query = a service name OR a category name. It drills down step by step: by service name, else the matching category\'s services, else the category list. Search again with a narrower/different word to dig deeper instead of loading everything.',
+    "search_parts": '"search_parts": MARKET price of a spare part (display module, battery, etc.) from external parts suppliers — used when the part/model is NOT in our catalog. This is a THIRD-PARTY price reference, NOT our price. query = the part + exact model. Try both Ukrainian and English wording.',
     "search_knowledge": '"search_knowledge": internal knowledge base (FAQ, warranty, conditions, documents). query = the client question, concise.',
     "web_research": '"web_research": internet research. Opens the most relevant found pages and reads their full content. query = precise ENGLISH technical query with the concrete device/model name. NEVER copy the client\'s raw wording or typos.',
     "open_url": '"open_url": open one specific URL and read its content. query = the full URL.',
@@ -56,7 +57,9 @@ Decision rules:
 - "чи ремонтуєте X / робите ви X / маєте X / скільки коштує X" → search_catalog (it also returns the list of our categories so you can confirm or deny). Then search_knowledge if still unclear.
 - Follow the chronology of the chat. Previous client requests stay active context until the topic clearly changes.
 - Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
-- Technical specs, compatibility, repair data missing from internal sources → web_research with a precise English query including the concrete model from the chat.
+- Price of a SPARE PART for a model not in our catalog → search_parts (it queries external supplier sites and returns a THIRD-PARTY market price, not ours).
+- Technical specs, compatibility, repair data missing from internal sources → web_research.
+- Search QUERIES: try BOTH languages depending on the source — Ukrainian wording for local UA shops/parts and prices ("модуль iPhone 15 ціна купити"), English for worldwide specs/datasheets ("iPhone 15 display module replacement"). Do not limit yourself to one language; reformulate if the first query finds nothing.
 - If a concrete model/detail is missing and needed → "answer" (you will ask the client for it).
 - Do not repeat an action that already returned results this turn. If a lookup is listed under [ALREADY CHECKED THIS CHAT], reuse that result instead of searching again. Maximum {max_iter} steps, then you must "answer".
 - "memory_patch": durable facts about THIS client chat worth remembering (device model, chosen option, stage). Keys/values short strings. Empty object if nothing new.
@@ -354,19 +357,31 @@ async def run_agent(
 
     serper_key = meta.get("serper_api_key") or None
     fallback_sites = meta.get("fallback_sites", "")
+    parts_sites = meta.get("parts_sites", "")
 
-    async def _do_web_research(q: str) -> str:
-        """Web research, trusted sites first (panel), then open web."""
+    async def _do_web_research(q: str, sites: str = None, fallback_open: bool = True) -> str:
+        """Web research. If `sites` given, restrict to them first; optionally
+        fall back to the open web."""
+        sites = sites if sites is not None else fallback_sites
         result = ""
-        if fallback_sites:
-            sites = [s.strip() for s in fallback_sites.split(",") if s.strip()]
-            sites_q = " OR ".join([f"site:{s}" for s in sites])
+        if sites:
+            site_list = [s.strip() for s in sites.split(",") if s.strip()]
+            sites_q = " OR ".join([f"site:{s}" for s in site_list])
             result = await asyncio.to_thread(web_research, f"({sites_q}) {q}", 3, 4000, serper_key)
             if "No search results" in result or "could not extract" in result.lower():
                 result = ""
-        if not result:
+        if not result and fallback_open:
             result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
         return result
+
+    async def _do_search_parts(q: str) -> str:
+        """Market price of a part from external supplier sites — labelled as a
+        third-party reference, NOT our price."""
+        res = await _do_web_research(q, sites=parts_sites)
+        if not res or "No search results" in res:
+            return "СТОРОННЯ БАЗА ЦІН ЗАПЧАСТИН: ринкову ціну не знайдено."
+        return ("[СТОРОННЯ БАЗА ЦІН ЗАПЧАСТИН — це РИНКОВІ ціни постачальників, НЕ наші ціни. "
+                "Подавай клієнту як орієнтовну ринкову вартість деталі, яку треба купувати окремо]\n" + res)
 
     def _is_empty(result: str) -> bool:
         """True if a tool returned no useful facts (only emptiness markers)."""
@@ -493,11 +508,17 @@ async def run_agent(
                 # No exact internal hit -> the price list isn't proof we DON'T do
                 # it (e.g. blender = small appliance, listed on the site, not in
                 # the price table). Escalate to the site/web before answering.
-                if not catalog_hit and not knowledge_hit and "web_research" in enabled_tools:
-                    r = await _do_web_research(text)
-                    gathered.append(("web_research", text, r))
-                    actions_done.add("web_research")
-                    emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:800])
+                if not catalog_hit and not knowledge_hit:
+                    if parts_sites and "search_parts" in enabled_tools:
+                        r = await _do_search_parts(text)
+                        gathered.append(("search_parts", text, r))
+                        actions_done.add("search_parts")
+                        emit(f"AGENT TOOL #{iteration}", "search_parts (forced)", str(r)[:800])
+                    elif "web_research" in enabled_tools:
+                        r = await _do_web_research(text)
+                        gathered.append(("web_research", text, r))
+                        actions_done.add("web_research")
+                        emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:800])
                 continue
             break
 
@@ -522,6 +543,8 @@ async def run_agent(
             result = await _tool_search_catalog(query or text, tenant_id, db)
         elif action == "search_knowledge":
             result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
+        elif action == "search_parts":
+            result = await _do_search_parts(query or text)
         elif action == "web_research":
             result = await _do_web_research(query or text)
         elif action == "open_url":

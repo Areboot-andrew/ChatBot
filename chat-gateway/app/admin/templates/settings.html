@@ -134,6 +134,7 @@
                     ('list_categories', 'Категорії — список напрямків послуг (огляд)'),
                     ('search_catalog', 'Каталог/Прайси — ціни та послуги з нашої бази'),
                     ('search_knowledge', 'База знань — FAQ, гарантія, документи (RAG)'),
+                    ('search_parts', 'Запчастини — ринкові ціни деталей зі сторонніх сайтів'),
                     ('web_research', 'Інтернет-дослідження — пошук + читання знайдених сайтів'),
                     ('open_url', 'Відкрити URL — читання конкретного посилання'),
                     ('get_business_info', 'Бізнес-факти — адреса, години, оплата (з полів нижче)'),
@@ -153,6 +154,10 @@
             <p class="text-sm text-gray-400 mb-3">За замовчуванням бот шукає через DuckDuckGo (безкоштовно, без ключа). Якщо вказати ключ <a href="https://serper.dev" target="_blank" class="text-blue-400 hover:underline">Serper.dev</a> — пошук піде через справжній Google (2500 запитів безкоштовно). Знайдені сторінки бот у будь-якому разі відкриває і читає повністю.</p>
             <label for="serper_api_key" class="block mb-2 text-sm font-medium text-gray-300">Serper API Key (опційно)</label>
             <input type="password" name="serper_api_key" id="serper_api_key" autocomplete="off" value="{{ settings.meta.get('serper_api_key', '') if settings and settings.meta else '' }}" placeholder="Залиште порожнім для DuckDuckGo" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+
+            <label for="parts_sites" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти запчастин (ринкові ціни деталей, через кому)</label>
+            <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: brain.com.ua, allo.ua, rozetka.com.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+            <p class="mt-1 text-xs text-gray-500">Коли деталі немає в нашому прайсі, бот шукає ринкову ціну запчастини саме на цих сайтах і подає її клієнту як <b>сторонню ринкову ціну</b> (деталь треба купувати), а не як нашу.</p>
         </div>
 
         <!-- Marketing Protocols -->

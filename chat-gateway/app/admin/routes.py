@@ -709,6 +709,7 @@ async def update_settings(
     agent_max_iterations: str = Form("4"),
     enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
+    parts_sites: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -741,6 +742,7 @@ async def update_settings(
             # Empty selection means "all tools" (agent falls back to ALL_TOOLS).
             meta_data["enabled_tools"] = enabled_tools or []
             meta_data["serper_api_key"] = serper_api_key.strip()
+            meta_data["parts_sites"] = parts_sites.strip()
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
