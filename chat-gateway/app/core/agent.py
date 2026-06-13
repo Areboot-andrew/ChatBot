@@ -257,6 +257,31 @@ async def run_agent(
     api_key = meta.get("llm_api_key")
     model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
 
+    serper_key = meta.get("serper_api_key") or None
+    fallback_sites = meta.get("fallback_sites", "")
+
+    async def _do_web_research(q: str) -> str:
+        """Web research, trusted sites first (panel), then open web."""
+        result = ""
+        if fallback_sites:
+            sites = [s.strip() for s in fallback_sites.split(",") if s.strip()]
+            sites_q = " OR ".join([f"site:{s}" for s in sites])
+            result = await asyncio.to_thread(web_research, f"({sites_q}) {q}", 3, 4000, serper_key)
+            if "No search results" in result or "could not extract" in result.lower():
+                result = ""
+        if not result:
+            result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
+        return result
+
+    def _is_empty(result: str) -> bool:
+        """True if a tool returned no useful facts (only emptiness markers)."""
+        if not result:
+            return True
+        low = result.lower()
+        markers = ["нічого не знайдено", "каталог порожній", "no search results",
+                   "could not extract", "не знайдено у базі", "не налаштована"]
+        return any(m in low for m in markers)
+
     def build_context_block() -> str:
         parts = []
         if memory:
@@ -317,22 +342,34 @@ async def run_agent(
             # substantive question without having gathered ANY facts, force a
             # catalog + knowledge sweep first, then let it decide again with
             # facts in hand. Prevents answering services/prices from memory.
-            if (action == "answer" and not gathered and not forced_lookup_done
+            if (action == "answer" and not forced_lookup_done
                     and _looks_substantive(text)
-                    and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools)):
+                    and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools or "web_research" in enabled_tools)):
                 forced_lookup_done = True
                 emit(f"AGENT GUARD #{iteration}", "Примусовий пошук",
-                     "Предметне питання без зібраних фактів — форсую catalog+knowledge перед відповіддю")
+                     "Предметне питання — форсую перевірку: каталог → база знань → сайт/інтернет")
+                catalog_hit = False
+                knowledge_hit = False
                 if "search_catalog" in enabled_tools:
                     r = await _tool_search_catalog(text, tenant_id, db)
                     gathered.append(("search_catalog", text, r))
                     actions_done.add("search_catalog")
+                    catalog_hit = not _is_empty(r) and "доступні категорії" not in r.lower()
                     emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:800])
                 if "search_knowledge" in enabled_tools:
                     r = await _tool_search_knowledge(text, tenant_id, db, settings)
                     gathered.append(("search_knowledge", text, r))
                     actions_done.add("search_knowledge")
+                    knowledge_hit = not _is_empty(r)
                     emit(f"AGENT TOOL #{iteration}", "search_knowledge (forced)", str(r)[:800])
+                # No exact internal hit -> the price list isn't proof we DON'T do
+                # it (e.g. blender = small appliance, listed on the site, not in
+                # the price table). Escalate to the site/web before answering.
+                if not catalog_hit and not knowledge_hit and "web_research" in enabled_tools:
+                    r = await _do_web_research(text)
+                    gathered.append(("web_research", text, r))
+                    actions_done.add("web_research")
+                    emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:800])
                 continue
             break
 
@@ -348,19 +385,7 @@ async def run_agent(
         elif action == "search_knowledge":
             result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
         elif action == "web_research":
-            q = query or text
-            serper_key = meta.get("serper_api_key") or None
-            # Tenant trusted sites first (panel: "Довірені сайти"), then open web.
-            fallback_sites = meta.get("fallback_sites", "")
-            result = ""
-            if fallback_sites:
-                sites = [s.strip() for s in fallback_sites.split(",") if s.strip()]
-                sites_q = " OR ".join([f"site:{s}" for s in sites])
-                result = await asyncio.to_thread(web_research, f"({sites_q}) {q}", 3, 4000, serper_key)
-                if "No search results" in result or "could not extract" in result.lower():
-                    result = ""
-            if not result:
-                result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
+            result = await _do_web_research(query or text)
         elif action == "open_url":
             result = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
         elif action == "get_business_info":
