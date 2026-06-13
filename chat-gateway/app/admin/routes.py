@@ -503,6 +503,120 @@ async def _register_telegram_webhook(channel_id: uuid.UUID, token: str):
                 logging.getLogger(__name__).info(f"Webhook registered: {webhook_url}")
     except Exception as e:
         logging.getLogger(__name__).error(f"setWebhook error for channel {channel_id}: {e}")
+# --- CONVERSATIONS (Діалоги: жива стрічка + архів) ---
+@router.get("/conversations", response_class=HTMLResponse)
+async def conversations_page(
+    request: Request,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    tenants = await get_all_tenants(db)
+    return templates.TemplateResponse(request=request, name="conversations.html", context={
+        "request": request, "user": user, "tenants": tenants, "current_tenant_id": tenant_id
+    })
+
+
+@router.get("/api/conversations/list")
+async def conversations_list(
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Archive: conversations with last message + counts, newest first."""
+    from app.models.conversation import Conversation, Message
+    from app.models.channel import Channel
+    from sqlalchemy import func, desc
+    if not tenant_id:
+        return {"conversations": []}
+    res = await db.execute(
+        select(Conversation, Channel.type, Channel.name,
+               func.count(Message.id), func.max(Message.created_at))
+        .join(Message, Message.conversation_id == Conversation.id, isouter=True)
+        .join(Channel, Channel.id == Conversation.channel_id, isouter=True)
+        .where(Conversation.tenant_id == tenant_id)
+        .group_by(Conversation.id, Channel.type, Channel.name)
+        .order_by(desc(func.max(Message.created_at)))
+        .limit(200)
+    )
+    items = []
+    for conv, ch_type, ch_name, cnt, last_at in res.all():
+        # last message text
+        rl = await db.execute(
+            select(Message.role, Message.content).where(Message.conversation_id == conv.id)
+            .order_by(Message.created_at.desc()).limit(1))
+        last = rl.first()
+        items.append({
+            "id": str(conv.id),
+            "chat_id": conv.external_chat_id,
+            "channel_type": ch_type or "?",
+            "channel_name": ch_name or "",
+            "count": cnt or 0,
+            "last_at": last_at.isoformat() if last_at else None,
+            "last_role": last[0] if last else "",
+            "last_text": (last[1][:120] if last and last[1] else ""),
+        })
+    return {"conversations": items}
+
+
+@router.get("/api/conversations/{conv_id}/messages")
+async def conversation_messages(
+    conv_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    from app.models.conversation import Conversation, Message
+    res_c = await db.execute(select(Conversation).where(
+        Conversation.id == conv_id, Conversation.tenant_id == tenant_id))
+    if not res_c.scalars().first():
+        return {"messages": []}
+    res = await db.execute(
+        select(Message.role, Message.content, Message.created_at)
+        .where(Message.conversation_id == conv_id).order_by(Message.created_at))
+    return {"messages": [
+        {"role": r, "content": c, "at": t.isoformat() if t else None}
+        for r, c, t in res.all()
+    ]}
+
+
+@router.get("/api/conversations/feed")
+async def conversations_feed(
+    since: str = "",
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """Live feed: messages newer than `since` (ISO ts), across all chats."""
+    from app.models.conversation import Conversation, Message
+    from app.models.channel import Channel
+    from datetime import datetime, timezone, timedelta
+    if not tenant_id:
+        return {"messages": [], "now": ""}
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            since_dt = datetime.now(timezone.utc) - timedelta(minutes=5)
+    else:
+        since_dt = datetime.now(timezone.utc) - timedelta(minutes=2)
+    res = await db.execute(
+        select(Message.role, Message.content, Message.created_at,
+               Conversation.external_chat_id, Channel.type)
+        .join(Conversation, Conversation.id == Message.conversation_id)
+        .join(Channel, Channel.id == Conversation.channel_id, isouter=True)
+        .where(Conversation.tenant_id == tenant_id, Message.created_at > since_dt)
+        .order_by(Message.created_at).limit(100)
+    )
+    msgs = [
+        {"role": r, "content": c, "at": t.isoformat() if t else None,
+         "chat_id": chat, "channel_type": ch or "?"}
+        for r, c, t, chat, ch in res.all()
+    ]
+    now = datetime.now(timezone.utc).isoformat()
+    return {"messages": msgs, "now": now}
+
+
 # --- HELP / DIAGNOSTICS ---
 @router.get("/help", response_class=HTMLResponse)
 async def help_page(

@@ -101,6 +101,12 @@ class UserbotManager:
             await HistoryManager.add_message(hist_channel, chat_id, "user", text)
             await HistoryManager.add_message(hist_channel, chat_id, "assistant", response)
 
+            from app.core.transcript import log_message
+            from app.database import async_session_maker
+            async with async_session_maker() as logdb:
+                await log_message(logdb, tenant_id, channel_id, chat_id, "user", text)
+                await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response)
+
             await event.respond(response)
         except Exception:
             logger.exception(f"Userbot channel {channel_id}: error handling message")
