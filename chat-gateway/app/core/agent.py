@@ -172,6 +172,11 @@ _CATALOG_SYNONYMS = {
     "батарея": ["акумулятор", "акб"], "батарею": ["акумулятор", "акб"],
     "акб": ["акумулятор"], "зарядка": ["роз'єм", "живлення"],
     "зарядки": ["роз'єм", "живлення"], "кнопка": ["шлейф"], "кнопки": ["шлейф"],
+    # brand transliteration: client writes Cyrillic, price list often Latin
+    "айфон": ["iphone"], "айфону": ["iphone"], "айфона": ["iphone"],
+    "самсунг": ["samsung"], "ксіомі": ["xiaomi"], "сяомі": ["xiaomi"],
+    "хуавей": ["huawei"], "ноут": ["ноутбук", "laptop"], "макбук": ["macbook"],
+    "модуль": ["дисплейний модуль", "матриц", "дисплей"],
 }
 
 
@@ -369,7 +374,9 @@ async def run_agent(
             return True
         low = result.lower()
         markers = ["нічого не знайдено", "каталог порожній", "no search results",
-                   "could not extract", "не знайдено у базі", "не налаштована"]
+                   "could not extract", "не знайдено у базі", "не налаштована",
+                   # catalog returned only the category list, not an actual price
+                   "прямого збігу немає", "категорії послуг (оберіть"]
         return any(m in low for m in markers)
 
     # Persistent per-chat lookup memory (survives between messages): things the
@@ -473,7 +480,9 @@ async def run_agent(
                     r = await _tool_search_catalog(text, tenant_id, db)
                     gathered.append(("search_catalog", text, r))
                     actions_done.add("search_catalog")
-                    catalog_hit = not _is_empty(r) and "доступні категорії" not in r.lower()
+                    # real price hit only — a category list is NOT a hit, so the
+                    # waterfall continues to the web (e.g. iPhone 17 not in catalog)
+                    catalog_hit = not _is_empty(r)
                     emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:800])
                 if "search_knowledge" in enabled_tools:
                     r = await _tool_search_knowledge(text, tenant_id, db, settings)
