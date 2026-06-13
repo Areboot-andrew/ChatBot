@@ -74,7 +74,7 @@
                         <tr>
                             <th class="px-4 py-3">Назва (Код)</th>
                             <th class="px-4 py-3">Тригери (Патерни)</th>
-                            <th class="px-4 py-3">Дія (Handler)</th>
+                            <th class="px-4 py-3">Джерело / промпти</th>
                             <th class="px-4 py-3">Дії</th>
                         </tr>
                     </thead>
@@ -84,7 +84,12 @@
                             <td class="px-4 py-4 font-medium text-gray-200">{{ logic.label }} <span class="text-xs text-gray-500 block mt-1">{{ logic.code }}</span></td>
                             <td class="px-4 py-4 text-xs max-w-[150px] truncate" title="{{ logic.intent_patterns | join(', ') }}">{{ logic.intent_patterns | join(', ') }}</td>
                             <td class="px-4 py-4">
-                                <span class="bg-purple-900/30 text-purple-400 border border-purple-800/50 px-2 py-1 rounded text-xs">{{ logic.handler }}</span>
+                                <span class="bg-purple-900/30 text-purple-400 border border-purple-800/50 px-2 py-1 rounded text-xs">{{ logic.meta.get('tool_name', logic.handler) if logic.meta else logic.handler }}</span>
+                                {% if logic.meta and logic.meta.get('result_validation_prompt') %}
+                                <span class="block mt-2 text-[10px] text-green-400">перевірка налаштована</span>
+                                {% else %}
+                                <span class="block mt-2 text-[10px] text-yellow-400">потрібен промпт перевірки</span>
+                                {% endif %}
                             </td>
                             <td class="px-4 py-4"><a href="/admin/knowledge/logic/{{ logic.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a></td>
                         </tr>

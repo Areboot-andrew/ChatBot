@@ -201,40 +201,51 @@ async def create_tenant(
     await db.commit()
     await db.refresh(new_tenant)
     
+    from app.core.prompt_defaults import (
+        DEFAULT_ANSWER_STYLE, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES,
+        DEFAULT_PARTS_INSTRUCTION, ROUTE_PROMPTS,
+    )
+    from app.core.agent import _CATALOG_SYNONYMS
+    from pathlib import Path
+    persona_path = Path(__file__).resolve().parents[1] / "givi_system_prompt.md"
+    default_persona = persona_path.read_text(encoding="utf-8")
     default_settings = BotSetting(
         tenant_id=new_tenant.id,
-        system_prompt="""You are "Інженер Андрон", a live hardware-and-repair master for the "texno.plus" service center. You know all hardware inside out.
-
-MAIN LANGUAGE
-- Always answer clients in Ukrainian.
-- The internal rules are written in English only to keep behavior structured.
-
-TONE & STYLE (CRITICAL)
-- You are EXTREMELY GRUFF, BLUNT, and DIRECT. You are a tired mechanic, not a support agent.
-- NEVER be polite. NEVER use customer service phrases.
-- Speak short, dry, technical, human. 
-- NEVER offer unsolicited help (e.g. NEVER say "Якщо хочеш, дай модель"). Just state the facts.
-- Use normal workshop words when natural: "фігня", "не чудимо", "гляну", "це не туди", "то робиться".
-- Default answer length: 1-3 short sentences. MAXIMUM 30 words.
-- No markdown formatting. No lists.
-- Attack the bad idea or fake specs, not the client.
-
-WORKING WITH SYSTEM CONTEXT
-- ALWAYS base your answer ONLY on the injected context.
-- Never invent specs, prices, stock, repair facts, or compatibility.
-
-WORKING HOURS & CONTACTS
-- Working schedule: Monday to Saturday from 11:00 to 17:00 (Saturday until 16:30).
-- Phone: 0661701282
-
-VOCABULARY RULES (CRITICAL)
-- NEVER USE the word starting with "лагод...". Use "ремонтувати" or "подивитись" instead.
-- NEVER USE corporate phrases like "уточніть потребу", "опишіть запит", "дякуємо", "радий бути корисним", "чим можу допомогти". ALWAYS speak like a tired mechanic.""",
+        system_prompt=default_persona,
         llm_model="gemma-4",
         temperature="0.7",
-        max_tokens="1024"
+        max_tokens="1024",
+        meta={
+            "engine": "agent",
+            "agent_max_iterations": "5",
+            "enabled_tools": [],
+            "agent_decision_rules": DEFAULT_DECISION_RULES,
+            "answer_style": DEFAULT_ANSWER_STYLE,
+            "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
+            "tpl_evaluation_rules": DEFAULT_EVALUATION_RULES,
+            "catalog_synonyms": "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items()),
+            "router_json_mode": True,
+        },
     )
     db.add(default_settings)
+    route_rows = [
+        ("catalog", "Наш каталог: товари, послуги та ціни", "qa_handler", ["чи є", "чи робите", "ціна", "прайс"]),
+        ("qa", "Затверджені Q&A та документи", "qa_handler", ["гарантія", "умови", "правила"]),
+        ("web_search", "Зовнішні характеристики та ідентифікація", "web_search_handler", ["характеристики", "сумісність", "що це"]),
+        ("external_price", "Зовнішні ціни та постачальники", "web_search_handler", ["ціна деталі", "ринкова ціна", "у постачальників"]),
+        ("business_info", "Графік, адреса, оплата та доставка", "qa_handler", ["коли працюєте", "адреса", "оплата", "доставка"]),
+        ("handoff", "Передача оператору", "escalate", ["людина", "оператор", "менеджер"]),
+    ]
+    for code_suffix, label, handler, patterns in route_rows:
+        db.add(KnowledgeType(
+            tenant_id=new_tenant.id,
+            code=code_suffix,
+            label=label,
+            handler=handler,
+            intent_patterns=patterns,
+            enabled=True,
+            meta=dict(ROUTE_PROMPTS[code_suffix]),
+        ))
     await db.commit()
     return RedirectResponse(url="/admin/tenants", status_code=303)
 
@@ -799,7 +810,7 @@ async def export_config(
     cfg = {"_about": "Tenant config: all editable prompts & routing. Engine "
                      "mechanics (JSON action format, loop) stay in code. Import "
                      "this file in Settings to fill everything.",
-           "columns": {}, "meta": {}}
+           "columns": {}, "meta": {}, "routes": []}
     if s:
         for c in _CONFIG_COLUMNS:
             cfg["columns"][c] = getattr(s, c, None)
@@ -807,6 +818,20 @@ async def export_config(
         for k in _CONFIG_META_KEYS:
             if k in meta:
                 cfg["meta"][k] = meta[k]
+        route_res = await db.execute(
+            select(KnowledgeType).where(KnowledgeType.tenant_id == tenant_id).order_by(KnowledgeType.priority)
+        )
+        cfg["routes"] = [
+            {
+                "code": route.code,
+                "label": route.label,
+                "handler": route.handler,
+                "intent_patterns": route.intent_patterns or [],
+                "enabled": bool(route.enabled),
+                "meta": route.meta or {},
+            }
+            for route in route_res.scalars().all()
+        ]
     data = _json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
     return _SR(iter([data]), media_type="application/json",
                headers={"Content-Disposition": 'attachment; filename="tenant_config.json"'})
@@ -843,6 +868,22 @@ async def import_config(
     s.meta = meta
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(s, "meta")
+    for route_data in cfg.get("routes", []) or []:
+        code = str(route_data.get("code") or "").strip()
+        if not code:
+            continue
+        route_res = await db.execute(select(KnowledgeType).where(
+            KnowledgeType.tenant_id == tenant_id, KnowledgeType.code == code))
+        route = route_res.scalars().first()
+        if not route:
+            route = KnowledgeType(tenant_id=tenant_id, code=code, label=code, handler="fallback")
+            db.add(route)
+        route.label = str(route_data.get("label") or code)
+        route.handler = str(route_data.get("handler") or "fallback")
+        route.intent_patterns = list(route_data.get("intent_patterns") or [])
+        route.enabled = bool(route_data.get("enabled", True))
+        route.meta = dict(route_data.get("meta") or {})
+        flag_modified(route, "meta")
     await db.commit()
     return RedirectResponse(url="/admin/settings?ok=imported", status_code=303)
 
@@ -1504,10 +1545,16 @@ async def logic_create(
     code: str = Form(...),
     intent_patterns: str = Form(...),
     handler: str = Form(...),
+    tool_name: str = Form(""),
     target_category: str = Form(""),
     target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
     reasoning: str = Form(""),
+    source_description: str = Form(""),
+    query_prompt: str = Form(""),
+    result_validation_prompt: str = Form(""),
+    next_step_prompt: str = Form(""),
+    no_result_prompt: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -1515,7 +1562,18 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-        meta_data = {"target_category": target_category, "fallback_action": fallback_action, "target_url": target_url, "reasoning": reasoning.strip()}
+        meta_data = {
+            "target_category": target_category,
+            "fallback_action": fallback_action,
+            "target_url": target_url,
+            "tool_name": tool_name.strip(),
+            "reasoning": reasoning.strip(),
+            "source_description": source_description.strip(),
+            "query_prompt": query_prompt.strip(),
+            "result_validation_prompt": result_validation_prompt.strip(),
+            "next_step_prompt": next_step_prompt.strip(),
+            "no_result_prompt": no_result_prompt.strip(),
+        }
         logic = KnowledgeType(tenant_id=tenant_id, label=label, code=code, intent_patterns=patterns, handler=handler, enabled=enabled, meta=meta_data)
         db.add(logic)
         await db.commit()
@@ -1545,10 +1603,16 @@ async def logic_edit(
     code: str = Form(...),
     intent_patterns: str = Form(...),
     handler: str = Form(...),
+    tool_name: str = Form(""),
     target_category: str = Form(""),
     target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
     reasoning: str = Form(""),
+    source_description: str = Form(""),
+    query_prompt: str = Form(""),
+    result_validation_prompt: str = Form(""),
+    next_step_prompt: str = Form(""),
+    no_result_prompt: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -1567,7 +1631,13 @@ async def logic_edit(
             meta_data["target_category"] = target_category
             meta_data["fallback_action"] = fallback_action
             meta_data["target_url"] = target_url
+            meta_data["tool_name"] = tool_name.strip()
             meta_data["reasoning"] = reasoning.strip()
+            meta_data["source_description"] = source_description.strip()
+            meta_data["query_prompt"] = query_prompt.strip()
+            meta_data["result_validation_prompt"] = result_validation_prompt.strip()
+            meta_data["next_step_prompt"] = next_step_prompt.strip()
+            meta_data["no_result_prompt"] = no_result_prompt.strip()
             logic.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified

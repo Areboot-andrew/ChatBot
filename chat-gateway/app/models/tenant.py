@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, func
+from sqlalchemy import Column, String, Boolean, DateTime, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
@@ -40,10 +40,11 @@ class BotSetting(Base):
 
 class KnowledgeType(Base):
     __tablename__ = "knowledge_types"
+    __table_args__ = (UniqueConstraint("tenant_id", "code", name="uq_knowledge_type_tenant_code"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
-    code = Column(String, unique=True, nullable=False)
+    code = Column(String, nullable=False)
     label = Column(String, nullable=False)
     handler = Column(String, nullable=False)
     intent_patterns = Column(JSONB, default=list) # Storing as list of strings

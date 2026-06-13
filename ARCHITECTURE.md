@@ -3,6 +3,10 @@
 > Жива карта системи: що працює, де заглушки, що недороблено.
 > Оновлювати при кожній суттєвій зміні ядра.
 
+> Актуально з міграції `a3b4c5d6e7f8`: кожен результат інструмента проходить
+> окрему модельну перевірку за редагованими промптами роута. Сирі результати
+> більше не передаються у фінальну відповідь.
+
 ## 1. Загальний потік повідомлення
 
 ```
@@ -42,26 +46,24 @@ run_agent(text, history, tenant_id, db, settings, trace, memory)
 │    persona (settings.system_prompt)
 │  + [BUSINESS RULES] (settings.business_rules)        ← завжди
 │  + [CHAT MEMORY] (memory, видимі ключі)
-│  + [ALREADY CHECKED THIS CHAT] (memory["_facts"])    ← пам'ять чату
-│  + [GATHERED FACTS] (зібране цього ходу)
+│  + [GATHERED FACTS] (лише VERIFIED ROUTE RESULT)
 │  + ROUTER_PROTOCOL + [TENANT ROUTING HINTS] (зі Схеми Логіки)
 │
 ├─ LOOP (max = meta.agent_max_iterations, дефолт 5):
 │    │
 │    ├─ chat() → JSON рішення:
-│    │     {"action", "query", "reason", "memory_patch"}
+│    │     {"route_code", "action", "question", "needed_fact",
+│    │      "query", "price_requested", "reason", "memory_patch"}
 │    │
 │    ├─ memory_patch → оновлює memory (модель сама пише факти чату)
 │    │
-│    ├─ action == "answer"?
-│    │     ├─ так + предметне питання + ще нема фактів
-│    │     │     → GUARD: форсований waterfall
-│    │     │       _tool_search_catalog → _tool_search_knowledge → _do_web_research
-│    │     │       (поки не пересвідчиться; прайс ≠ доказ що НЕ робимо)
-│    │     │     → continue (вирішує знову з фактами)
-│    │     └─ інакше → вихід з циклу
+│    ├─ action == "answer"? → вихід з циклу
 │    │
-│    └─ виконання інструменту (див. §3), результат → gathered[]
+│    └─ виконання інструменту (див. §3)
+│         → сирий результат
+│         → ROUTE_RESULT_VALIDATION + промпти вибраного KnowledgeType
+│         → релевантність / достатність / підтверджені факти / next action
+│         → тільки перевірена вижимка у gathered[]
 │
 ├─ FINAL ANSWER MODE:
 │    persona + business_rules + [MARKETING] + контекст
@@ -70,15 +72,16 @@ run_agent(text, history, tenant_id, db, settings, trace, memory)
 │  + ANSWER_PROTOCOL
 │    → chat() → жива відповідь клієнту
 │
-└─ Зберегти знахідки ходу в memory["_facts"] (макс 12, dedupe)
+└─ Зберегти тільки memory_patch (модель/вибір/етап), без сирих пошуків
    return (answer, memory)
 ```
 
-**Запобіжники (для локальної Gemma):**
-- `_looks_substantive()` — відрізняє предметне питання від привітання.
-- GUARD waterfall — не дає відповісти з памʼяті без перевірки джерел.
-- `_is_empty()` — оцінює, чи інструмент дав корисний факт.
-- Повтор інструмента дозволений лише з **іншим** query (drill-down), однаковий блокується.
+**Запобіжники:**
+- кожен роут має окремі редаговані промпти пошуку, перевірки та fallback;
+- повний зміст знайденої фрази звіряється з внутрішнім питанням;
+- сирий результат не потрапляє у фінальну модель;
+- числові ціни відкидаються, якщо клієнт прямо не питав ціну;
+- повтор інструмента дозволений лише з **іншим** query, однаковий блокується.
 
 ---
 
@@ -128,8 +131,8 @@ web_research(query, max_pages, page_chars, serper_key)
 - Telegram-userbot: `tg_user:{channel_id}:{chat_id}`
 - Webchat: `webchat:{channel_id}:{session_id}`
 
-`memory["_facts"]` = службовий список вже виконаних пошуків чату → інжектиться як
-`[ALREADY CHECKED THIS CHAT]`, щоб агент не повторювався і робив фолбек на знайдене.
+Пам'ять агента містить лише короткі сталі факти з `memory_patch`. Сирі пошуки та
+їхні дампи між повідомленнями не зберігаються.
 
 ---
 
@@ -182,7 +185,7 @@ web_research(query, max_pages, page_chars, serper_key)
 ```
 chat-gateway/app/
 ├── core/
-│   ├── agent.py         ← АГЕНТНЕ ЯДРО (run_agent, інструменти, GUARD)
+│   ├── agent.py         ← АГЕНТНЕ ЯДРО (router, tools, route validation, answer)
 │   ├── pipeline.py      ← вхідна точка, перемикач engine
 │   ├── tools.py         ← web_research, fetch_and_parse_url
 │   ├── rag.py           ← Qdrant: vectorize + search_knowledge

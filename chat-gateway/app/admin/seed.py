@@ -92,23 +92,36 @@ async def seed_admin():
         res_kt = await db.execute(select(KnowledgeType).where(KnowledgeType.tenant_id == tenant.id))
         if not res_kt.scalars().first():
             logger.info("Seeding default intents...")
+            from app.core.prompt_defaults import ROUTE_PROMPTS
             intents_data = [
-                {"code": "qa", "label": "Відповіді на питання (Послуги та Ціни)", "handler": "qa_handler", "intent_patterns": ["скільки коштує", "ціна", "прайс", "заміна", "ремонт", "терміни"]},
-                {"code": "web_search", "label": "Web Search (Only if exact technical specs are unknown to you. Formulate exact English query)", "handler": "web_search_handler", "intent_patterns": ["характеристики", "сумісність", "socket", "який процесор", "скільки пам'яті"]},
-                {"code": "handoff", "label": "Перевід на оператора", "handler": "escalate", "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "допомога", "зв'язок", "записатись"]},
-                {"code": "repair_check", "label": "Чи ремонтуємо прилад", "handler": "qa_handler",
-                 "intent_patterns": ["ви ремонтуєте", "чи робите", "берете в ремонт", "можете полагодити", "ремонтуєте"],
-                 "reasoning": "Питання типу «ви ремонтуєте {прилад}». Витягни назву приладу. Якщо не знаєш точно що це за пристрій — знайди в інтернеті його категорію. Перевір каталог і наш сайт. Прайс — це НЕ повний список: відсутність у прайсі не означає що ми це не робимо (напр. блендер/міксер = дрібна побутова техніка). Якщо це електроніка або побутова техніка — ми ремонтуємо, запропонуй привезти на безкоштовну діагностику. Не відмовляй, поки не перевірив усі джерела."},
-                {"code": "unknown", "label": "Невідомий запит", "handler": "fallback", "intent_patterns": []}
+                {"code": "catalog", "label": "Наш каталог: товари, послуги та ціни", "handler": "qa_handler",
+                 "intent_patterns": ["чи є", "чи робите", "ремонтуєте", "скільки коштує", "ціна", "прайс"],
+                 "prompt_key": "catalog"},
+                {"code": "qa", "label": "Затверджені Q&A та документи", "handler": "qa_handler",
+                 "intent_patterns": ["гарантія", "умови", "як відбувається", "терміни", "правила"],
+                 "prompt_key": "qa"},
+                {"code": "web_search", "label": "Зовнішні характеристики та ідентифікація", "handler": "web_search_handler",
+                 "intent_patterns": ["характеристики", "сумісність", "що це", "яка модель", "специфікація"],
+                 "prompt_key": "web_search"},
+                {"code": "external_price", "label": "Зовнішні ціни та постачальники", "handler": "web_search_handler",
+                 "intent_patterns": ["ціна деталі", "ціна комплектуючої", "у постачальників", "ринкова ціна", "наявність деталі"],
+                 "prompt_key": "external_price"},
+                {"code": "business_info", "label": "Графік, адреса, оплата та доставка", "handler": "qa_handler",
+                 "intent_patterns": ["коли працюєте", "адреса", "телефон", "оплата", "доставка", "коли прийти"],
+                 "prompt_key": "business_info"},
+                {"code": "handoff", "label": "Передача оператору", "handler": "escalate",
+                 "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "подзвонити"],
+                 "prompt_key": "handoff"},
             ]
             for intent in intents_data:
+                route_meta = dict(ROUTE_PROMPTS[intent["prompt_key"]])
                 kt = KnowledgeType(
                     tenant_id=tenant.id,
                     code=intent["code"],
                     label=intent["label"],
                     handler=intent["handler"],
                     intent_patterns=intent["intent_patterns"],
-                    meta={"reasoning": intent.get("reasoning", "")}
+                    meta=route_meta,
                 )
                 db.add(kt)
             await db.commit()
@@ -167,8 +180,11 @@ async def seed_default_prompts(db):
     from sqlalchemy.future import select as _select
     from sqlalchemy.orm.attributes import flag_modified
     from app.models.tenant import BotSetting
-    from app.core.agent import (DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE,
-                                DEFAULT_PARTS_INSTRUCTION, _CATALOG_SYNONYMS)
+    from app.core.agent import _CATALOG_SYNONYMS
+    from app.core.prompt_defaults import (
+        DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE, DEFAULT_PARTS_INSTRUCTION,
+        DEFAULT_EVALUATION_RULES,
+    )
 
     synonyms_text = "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items())
     defaults = {
@@ -176,6 +192,7 @@ async def seed_default_prompts(db):
         "answer_style": DEFAULT_ANSWER_STYLE,
         "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
         "catalog_synonyms": synonyms_text,
+        "tpl_evaluation_rules": DEFAULT_EVALUATION_RULES,
     }
     res = await db.execute(_select(BotSetting))
     changed = 0

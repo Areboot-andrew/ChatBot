@@ -27,8 +27,45 @@
 
         <div>
             <label for="reasoning" class="block mb-2 text-sm font-medium text-gray-300">Інструкція міркування для моделі (узагальнення)</label>
-            <p class="text-xs text-gray-500 mb-2">Опишіть словами, як модель має думати над цим класом питань. Можна писати шаблон зі слотом у фігурних дужках, напр. <code>{прилад}</code> — модель сама підставить що сказав клієнт (міксер, блендер...). Приклад: «Питання типу "ви ремонтуєте {прилад}". Витягни назву приладу. Якщо не знаєш що це — знайди в інтернеті його категорію. Перевір каталог і сайт. Якщо це електроніка чи побутова техніка — ми ремонтуємо. Не відмовляй без перевірки.»</p>
-            <textarea name="reasoning" id="reasoning" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Питання типу «ви ремонтуєте {прилад}». Витягни {прилад}, зрозумій що це за пристрій (загугли якщо треба), перевір каталог і сайт, і тільки тоді відповідай.">{{ logic.meta.get('reasoning', '') if logic and logic.meta else '' }}</textarea>
+            <p class="text-xs text-gray-500 mb-2">Англомовний керівний промпт економить контекст. Поясніть моделі, як розпізнати цей клас запитів, яку суть витягнути з усієї розмови та який факт потрібен для відповіді. Мова клієнтської відповіді задається головною персоною окремо.</p>
+            <textarea name="reasoning" id="reasoning" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Recognize requests asking whether the business handles {item}. Extract the exact item, device type, model and requested operation from the whole conversation. Do not treat a price request as a general availability request.">{{ logic.meta.get('reasoning', '') if logic and logic.meta else '' }}</textarea>
+        </div>
+
+        <div class="p-4 bg-blue-950/20 border border-blue-900/50 rounded-lg space-y-5">
+            <div>
+                <h4 class="text-sm font-semibold text-blue-300">Промпти роута: пошук та перевірка результату</h4>
+                <p class="mt-1 text-xs text-gray-400">Ці тексти викликаються окремо від фінальної відповіді. Сирий прайс, HTML або текст сайту не передається клієнтській моделі, доки модель-перевіряльник не підтвердить, що знайдені фрази відповідають внутрішньому питанню.</p>
+            </div>
+
+            <div>
+                <label for="source_description" class="block mb-2 text-sm font-medium text-gray-300">Що це за джерело даних</label>
+                <p class="text-xs text-gray-500 mb-2">Поясніть моделі зміст і межі довіри до цієї бази: наш каталог, сторонні ринкові ціни, FAQ, сайт постачальника тощо.</p>
+                <textarea name="source_description" id="source_description" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="This source is our internal catalog. Category and service phrases describe what our business handles. Prices are our prices only when the matched row belongs to the same item type and requested service.">{{ logic.meta.get('source_description', '') if logic and logic.meta else '' }}</textarea>
+            </div>
+
+            <div>
+                <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">Як сформувати запит до джерела</label>
+                <p class="text-xs text-gray-500 mb-2">Запит має бути повною осмисленою фразою: предмет, тип, модель, потрібний факт або дія. Не набір випадкових ключових слів.</p>
+                <textarea name="query_prompt" id="query_prompt" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Build a concise semantic search phrase from the active conversation. Include the exact item type, model and requested operation. Include price wording only when the client actually asked for a price.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
+            </div>
+
+            <div>
+                <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">Як перевірити знайдені фрази</label>
+                <p class="text-xs text-gray-500 mb-2">Головний захист від вигаданих відповідей. Модель повинна порівняти повний зміст питання з повним змістом результату, відкинути інші типи товарів/пристроїв і повернути лише підтверджені факти.</p>
+                <textarea name="result_validation_prompt" id="result_validation_prompt" rows="7" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Compare the complete meaning of the search task with the complete meaning of every candidate phrase. A shared word is not enough. The item type, model when required, requested operation and requested fact must agree. Reject rows about another device or product category. Never infer a missing number. Return only facts explicitly supported by matching phrases.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
+            </div>
+
+            <div>
+                <label for="next_step_prompt" class="block mb-2 text-sm font-medium text-gray-300">Що робити після перевірки</label>
+                <p class="text-xs text-gray-500 mb-2">Опишіть, коли результату достатньо, а коли агент має переформулювати запит або звернутися до іншого джерела.</p>
+                <textarea name="next_step_prompt" id="next_step_prompt" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="If the verified facts answer the required question, mark the result sufficient. If only a broad category is confirmed, use it only for service availability. If a concrete price/specification is still missing, mark insufficient and recommend the next configured source.">{{ logic.meta.get('next_step_prompt', '') if logic and logic.meta else '' }}</textarea>
+            </div>
+
+            <div>
+                <label for="no_result_prompt" class="block mb-2 text-sm font-medium text-gray-300">Що сказати, якщо даних немає</label>
+                <p class="text-xs text-gray-500 mb-2">Це не готова репліка, а факт-настанова для фінальної моделі. Вона застосовується лише після невдалих дозволених пошуків і повинна відповідати наміру клієнта.</p>
+                <textarea name="no_result_prompt" id="no_result_prompt" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="If the client asked for a price and no verified supplier price exists, state that the exact price is currently unavailable from configured suppliers. Do not invent a range. If price was not asked, do not mention price.">{{ logic.meta.get('no_result_prompt', '') if logic and logic.meta else '' }}</textarea>
+            </div>
         </div>
 
         <div class="p-4 bg-gray-950 border border-gray-800 rounded-lg space-y-4">
@@ -42,6 +79,23 @@
                     <option value="site_search" {% if logic and logic.handler == 'site_search' %}selected{% endif %}>Парсинг вказаного сайту</option>
                     <option value="escalate" {% if logic and logic.handler == 'escalate' %}selected{% endif %}>Перевести на оператора (Людину)</option>
                     <option value="fallback" {% if logic and logic.handler == 'fallback' %}selected{% endif %}>Базова відповідь (Fallback)</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="tool_name" class="block mb-2 text-sm font-medium text-gray-300">Конкретний інструмент агента</label>
+                <p class="text-xs text-gray-500 mb-2">Один роут бажано прив'язувати до одного джерела. Порожньо залишає старе автоматичне зіставлення через «Дію бота».</p>
+                {% set selected_tool = logic.meta.get('tool_name', '') if logic and logic.meta else '' %}
+                <select id="tool_name" name="tool_name" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+                    <option value="" {% if not selected_tool %}selected{% endif %}>Автоматично зі старого handler</option>
+                    <option value="list_categories" {% if selected_tool == 'list_categories' %}selected{% endif %}>Категорії каталогу</option>
+                    <option value="search_catalog" {% if selected_tool == 'search_catalog' %}selected{% endif %}>Каталог / наші ціни</option>
+                    <option value="search_knowledge" {% if selected_tool == 'search_knowledge' %}selected{% endif %}>Q&amp;A та документи</option>
+                    <option value="search_parts" {% if selected_tool == 'search_parts' %}selected{% endif %}>Зовнішні ціни / постачальники</option>
+                    <option value="web_research" {% if selected_tool == 'web_research' %}selected{% endif %}>Google та читання сторінок</option>
+                    <option value="open_url" {% if selected_tool == 'open_url' %}selected{% endif %}>Конкретний сайт / URL-шаблон</option>
+                    <option value="get_business_info" {% if selected_tool == 'get_business_info' %}selected{% endif %}>Бізнес-факти</option>
+                    <option value="escalate" {% if selected_tool == 'escalate' %}selected{% endif %}>Оператор</option>
                 </select>
             </div>
             

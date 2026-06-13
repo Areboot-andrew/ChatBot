@@ -120,7 +120,7 @@
         <!-- Agent Decision Rules -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Правила рішень агента (як діяти, куди по дані)</h3>
-            <p class="text-sm text-gray-400 mb-3">Як бот має <b>думати й куди звертатись по дані</b> у різних випадках: привітання → відповідь; «чи робите X» → каталог; ціна деталі → постачальники/гугл; графік → бізнес-факти, тощо. Це керує логікою рішень. <b>Формат дій і сам цикл</b> — у двигуні, їх не чіпаємо. Порожньо = розумний дефолт.</p>
+            <p class="text-sm text-gray-400 mb-3">Англомовний керівний промпт: як бот має <b>розуміти намір, формувати внутрішнє питання й обирати роут</b>. Англійська економить контекст; мову відповіді клієнту задає головна персона. <b>Формат дій і цикл</b> лишаються в універсальному двигуні.</p>
             <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
@@ -135,7 +135,7 @@
         <!-- Answer Style -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Стиль фінальної відповіді (тон)</h3>
-            <p class="text-sm text-gray-400 mb-3">Як бот має <b>писати</b> відповідь клієнту: тон, жива мова, гумор, що НЕ робити (напр. не сипати цінами без запиту, перефразовувати, не вивалювати прайс). Це окремий промпт для написання відповіді. Порожньо = розумний дефолт.</p>
+            <p class="text-sm text-gray-400 mb-3">Окремий англомовний контрольний промпт фінальної фази: використовувати лише підтверджені факти, не показувати службове та не змінювати зміст джерела. Конкретний тон і українська мова лишаються у головній персоні.</p>
             <textarea name="answer_style" rows="6" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Пиши живою розмовною українською, коротко, з легким гумором. Не сип цінами якщо не питають...">{{ settings.meta.get('answer_style', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
@@ -170,7 +170,7 @@
                     ('list_categories', 'Категорії — список напрямків послуг (огляд)'),
                     ('search_catalog', 'Каталог/Прайси — ціни та послуги з нашої бази'),
                     ('search_knowledge', 'База знань — FAQ, гарантія, документи (RAG)'),
-                    ('search_parts', 'Запчастини — ринкові ціни деталей зі сторонніх сайтів'),
+                    ('search_parts', 'Зовнішні джерела — постачальники та ринкові ціни'),
                     ('web_research', 'Інтернет-дослідження — пошук + читання знайдених сайтів'),
                     ('open_url', 'Відкрити URL — читання конкретного посилання'),
                     ('get_business_info', 'Бізнес-факти — адреса, години, оплата (з полів нижче)'),
@@ -191,17 +191,17 @@
             <label for="serper_api_key" class="block mb-2 text-sm font-medium text-gray-300">Google (Serper) API Key</label>
             <input type="password" name="serper_api_key" id="serper_api_key" autocomplete="off" value="{{ settings.meta.get('serper_api_key', '') if settings and settings.meta else '' }}" placeholder="Порожньо = спільний вшитий ключ Google" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
 
-            <label for="parts_sites" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти запчастин (ринкові ціни деталей, через кому)</label>
-            <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: brain.com.ua, allo.ua, rozetka.com.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-            <p class="mt-1 text-xs text-gray-500">Коли деталі немає в нашому прайсі, бот шукає ринкову ціну запчастини саме на цих сайтах і подає її клієнту як <b>сторонню ринкову ціну</b> (деталь треба купувати), а не як нашу.</p>
+            <label for="parts_sites" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти зовнішніх постачальників / ринкових джерел (через кому)</label>
+            <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: supplier.ua, marketplace.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+            <p class="mt-1 text-xs text-gray-500">Для сервісу це можуть бути постачальники запчастин, для магазину квітів — оптові бази. Дані цього джерела є сторонніми, доки промпт роута явно не визначить інше.</p>
 
             <label for="price_search_urls" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти-прайси з прямим пошуком (URL-шаблони, по одному на рядок)</label>
             <textarea name="price_search_urls" id="price_search_urls" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="https://brain.com.ua/search/?q={query}&#10;https://hotline.ua/sr/?q={query}">{{ settings.meta.get('price_search_urls', '') if settings and settings.meta else '' }}</textarea>
             <p class="mt-1 text-xs text-gray-500">Якщо сайт має пошук через URL — впишіть шаблон із <code>{query}</code>. Бот підставить нормалізований запит (модель/деталь), відкриє сторінку і спарсить ціни. Це швидше і точніше за гугл; гугл лишається запасним.</p>
 
-            <label for="parts_instruction" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Логіка пошуку запчастин (редагується, керує роутом)</label>
+            <label for="parts_instruction" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Загальна логіка зовнішніх постачальників (редагується)</label>
             <textarea name="parts_instruction" id="parts_instruction" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Опишіть словами порядок і як подавати ціну...">{{ settings.meta.get('parts_instruction', '') if settings and settings.meta else '' }}</textarea>
-            <p class="mt-1 text-xs text-gray-500">Опишіть словами логіку: спершу Сайти запчастин (парсинг) → потім гугл; для конкретної моделі — гуглити одразу потрібну запчастину, ціни орієнтовно від-до, плюс наша робота. Цей текст керує поведінкою бота — не код. Порожньо = розумний дефолт.</p>
+            <p class="mt-1 text-xs text-gray-500">Англійською опишіть спільне правило для зовнішнього джерела: порядок сайтів, що означають ціни/наявність та як відділяти їх від внутрішніх даних. Детальна перевірка задається у відповідному роуті «Схеми логіки».</p>
         </div>
 
         <!-- Marketing Protocols -->
@@ -240,7 +240,7 @@
         <!-- Evaluation Rules -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Правила оцінки контексту (Анти-галюцинації)</h3>
-            <p class="text-sm text-gray-400 mb-3">Найважливіший блок інструкцій, який додається в самий кінець системного промпта. Визначає, як жорстко модель має спиратися на факти і як їй забороняти вигадувати.</p>
+            <p class="text-sm text-gray-400 mb-3">Фінальна політика доказів: модель може використовувати лише блоки <code>VERIFIED ROUTE RESULT</code>. Налаштування семантичної перевірки кожного конкретного джерела знаходяться у «База знань → Схема логіки».</p>
             <textarea name="tpl_evaluation_rules" rows="6" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="--- [ABSOLUTE RULE: HALLUCINATION BAN] ...">{{ settings.meta.get('tpl_evaluation_rules', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
