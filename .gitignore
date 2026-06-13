@@ -78,5 +78,7 @@ Thumbs.db
 # Any random temp files
 *.tmp
 
-# Ignore old mockups
+# Ignore old mockups (but NOT the app's Jinja templates!)
 *.html
+!chat-gateway/app/admin/templates/**/*.html
+!chat-gateway/app/admin/templates/*.html

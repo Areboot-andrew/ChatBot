@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Довідка{% endblock %}
+{% block header %}Довідка — як працює бот{% endblock %}
+{% block content %}
+<div class="max-w-4xl space-y-6">
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">Як бот думає над повідомленням</h2>
+    <p class="text-sm text-gray-400 mb-3">Бот працює як <b>агент</b>: на кожне повідомлення він сам вирішує, де шукати відповідь, робить кілька кроків «на бекфоні», і тільки потім відповідає клієнту живою мовою. Етапи (видно в Тест-чаті):</p>
+    <ol class="list-decimal list-inside text-sm text-gray-300 space-y-1">
+      <li><b>Роутер</b> — модель повертає рішення: який інструмент викликати або що вже можна відповідати.</li>
+      <li><b>Інструмент</b> — виконується (каталог / база знань / інтернет / бізнес-факти).</li>
+      <li>Крок повторюється, поки модель не збере достатньо фактів (ліміт кроків — у Налаштуваннях).</li>
+      <li><b>Фінальна відповідь</b> — модель пише клієнту, спираючись ТІЛЬКИ на зібрані факти.</li>
+    </ol>
+    <p class="text-xs text-gray-500 mt-3">Привітання («привіт», «дякую») інструментів не викликають — одразу відповідь у вашому тоні.</p>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">Інструменти агента</h2>
+    <table class="w-full text-sm text-left text-gray-300">
+      <tbody class="divide-y divide-gray-800">
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">list_categories</td><td class="py-2">Список категорій послуг (дешево, без цін) — щоб побачити, що ви взагалі робите.</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">search_catalog</td><td class="py-2">Пошук по прайсу <b>поетапно</b>: за назвою послуги → за категорією → список категорій. Не вантажить усі ціни одразу.</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">search_knowledge</td><td class="py-2">База знань: Q&A та документи (RAG).</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">web_research</td><td class="py-2">Пошук в інтернеті + <b>реальний захід на знайдені сайти</b> і читання тексту. Спершу по Довірених сайтах.</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">open_url</td><td class="py-2">Відкрити конкретне посилання і прочитати його.</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">get_business_info</td><td class="py-2">Адреса, години, телефон, оплата (з вкладки «Бізнес-факти»).</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">escalate</td><td class="py-2">Передати оператору.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">Де що налаштовувати</h2>
+    <table class="w-full text-sm text-left text-gray-300">
+      <tbody class="divide-y divide-gray-800">
+        <tr><td class="py-2 pr-4 align-top">Тон, персона, бізнес-правила, маркетинг, режим агента, інструменти, Serper-ключ</td><td class="py-2">⚙️ <b>Налаштування Бота</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Контакти, години, оплата (бот тягне на запит клієнта)</td><td class="py-2">📚 <b>База знань → Бізнес-факти</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Q&A, документи-мануали</td><td class="py-2">📚 <b>База знань</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Прайси (шаблон, експорт, імпорт XLSX/CSV з мапінгом)</td><td class="py-2">📋 <b>Прайси та Послуги</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Інтенти + <b>інструкції міркування зі слотом</b> (узагальнення)</td><td class="py-2">📚 <b>База знань → Схема Логіки</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Telegram-бот, Telegram особистий акаунт, чат на сайті</td><td class="py-2">📡 <b>Канали</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">Приклади (як бот поведеться)</h2>
+    <div class="space-y-3 text-sm">
+      <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«привіт»</span></p>
+        <p class="text-gray-500 text-xs mt-1">→ Без пошуку. Відповідь у вашому тоні: «Привіт. Що зламалось?»</p>
+      </div>
+      <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«скільки коштує почистити ноутбук»</span></p>
+        <p class="text-gray-500 text-xs mt-1">→ search_catalog(«чистка ноутбука») → ціна з прайсу + «точно після безкоштовної діагностики».</p>
+      </div>
+      <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«ремонтуєте міксери?»</span></p>
+        <p class="text-gray-500 text-xs mt-1">→ каталог → нема прямого → база знань → сайт/інтернет (Довірені сайти). Якщо підтвердилось, що робите дрібну побутову — «так, привозьте на діагностику», а не вгадане «ні».</p>
+      </div>
+      <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«які у вас години роботи»</span></p>
+        <p class="text-gray-500 text-xs mt-1">→ get_business_info(hours) → відповідь з ваших Бізнес-фактів (або із сайту texno.plus, якщо поле порожнє).</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+    <h2 class="text-lg font-semibold text-gray-100 mb-3">🔧 Діагностика парсера сайтів</h2>
+    <p class="text-sm text-gray-400 mb-3">Перевірте, чи бот коректно читає сторінку. Введіть URL — побачите, який текст він витягує.</p>
+    <div class="flex gap-3 mb-3">
+      <input type="url" id="parse-url" placeholder="https://texno.plus" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+      <button onclick="testParse()" id="btn-parse" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap">Перевірити парсинг</button>
+    </div>
+    <p class="text-sm text-gray-400 mb-3">Або перевірте веб-пошук (як бот шукає в інтернеті):</p>
+    <div class="flex gap-3 mb-3">
+      <input type="text" id="search-q" placeholder="ремонт телевізора lg ціна" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+      <button onclick="testSearch()" id="btn-search" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm whitespace-nowrap">Перевірити пошук</button>
+    </div>
+    <pre id="parse-result" class="hidden bg-gray-950 border border-gray-800 rounded-lg p-3 text-xs text-gray-300 whitespace-pre-wrap break-words max-h-96 overflow-auto"></pre>
+  </div>
+</div>
+
+<script>
+async function testParse(){
+  const url = document.getElementById('parse-url').value.trim();
+  if(!url){ alert('Введіть URL'); return; }
+  const out = document.getElementById('parse-result');
+  const btn = document.getElementById('btn-parse');
+  btn.disabled = true; btn.textContent = 'Читаю...';
+  out.classList.remove('hidden'); out.textContent = 'Завантаження...';
+  try {
+    const fd = new FormData(); fd.append('url', url);
+    const res = await fetch('/admin/api/test-parse', { method:'POST', body: fd });
+    const d = await res.json();
+    out.textContent = d.ok ? ('✔ Витягнуто ' + d.length + ' символів:\n\n' + d.text) : ('✖ ' + d.detail);
+  } catch(e){ out.textContent = '✖ ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Перевірити парсинг';
+}
+async function testSearch(){
+  const q = document.getElementById('search-q').value.trim();
+  if(!q){ alert('Введіть запит'); return; }
+  const out = document.getElementById('parse-result');
+  const btn = document.getElementById('btn-search');
+  btn.disabled = true; btn.textContent = 'Шукаю...';
+  out.classList.remove('hidden'); out.textContent = 'Пошук + читання сайтів...';
+  try {
+    const fd = new FormData(); fd.append('query', q);
+    const res = await fetch('/admin/api/test-search', { method:'POST', body: fd });
+    const d = await res.json();
+    out.textContent = d.ok ? d.text : ('✖ ' + d.detail);
+  } catch(e){ out.textContent = '✖ ' + e.message; }
+  btn.disabled = false; btn.textContent = 'Перевірити пошук';
+}
+</script>
+{% endblock %}
