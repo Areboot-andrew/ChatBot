@@ -32,6 +32,7 @@
 <script>
 var lastTs = '';
 var liveTimer = null;
+var liveSeq = 0;
 
 function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 function chIcon(t){ return ({telegram:'✈️', telegram_userbot:'👤', webchat:'🌐'})[t] || '💬'; }
@@ -56,8 +57,19 @@ async function pollLive(){
       d.messages.forEach(function(m){
         var who = m.role==='user' ? '<span class="text-green-400">клієнт</span>' : '<span class="text-blue-400">бот</span>';
         var el = document.createElement('div');
-        el.className = 'border-b border-gray-800/60 pb-1';
-        el.innerHTML = '<span class="text-gray-600">'+fmt(m.at)+'</span> '+chIcon(m.channel_type)+' <span class="text-gray-500">#'+esc(m.chat_id)+'</span> '+who+': <span class="text-gray-200">'+esc(m.content)+'</span>';
+        el.className = 'border-b border-gray-800/60 pb-2';
+        var head = '<span class="text-gray-600">'+fmt(m.at)+'</span> '+chIcon(m.channel_type)+' <span class="text-gray-500">#'+esc(m.chat_id)+'</span> '+who+': <span class="text-gray-200">'+esc(m.content)+'</span>';
+        var trace = '';
+        if(m.role!=='user' && m.trace && m.trace.length){
+          var tid = 'lt-' + (liveSeq++);
+          var steps = m.trace.map(function(s){
+            var color = (''+s.status).toLowerCase().indexOf('помилк')>=0 ? 'text-red-400' : 'text-amber-300';
+            return '<div class="mt-1"><span class="'+color+'">▸ '+esc(s.step)+'</span> <span class="text-gray-500">['+esc(s.status)+'] '+esc(s.time)+'</span>\n<span class="text-gray-400">'+esc(s.details)+'</span></div>';
+          }).join('');
+          trace = '<button onclick="document.getElementById(\''+tid+'\').classList.toggle(\'hidden\')" class="text-[11px] text-blue-400 ml-6 mt-1 block">🔍 робота агента ('+m.trace.length+' кроків)</button>'+
+            '<div id="'+tid+'" class="hidden ml-6 mt-1 bg-black/40 border border-gray-800 rounded p-2 text-[11px] whitespace-pre-wrap">'+steps+'</div>';
+        }
+        el.innerHTML = head + trace;
         stream.appendChild(el);
       });
       if(document.getElementById('autoscroll').checked) stream.scrollTop = stream.scrollHeight;

@@ -603,7 +603,7 @@ async def conversations_feed(
         since_dt = datetime.now(timezone.utc) - timedelta(minutes=2)
     res = await db.execute(
         select(Message.role, Message.content, Message.created_at,
-               Conversation.external_chat_id, Channel.type)
+               Conversation.external_chat_id, Channel.type, Message.meta)
         .join(Conversation, Conversation.id == Message.conversation_id)
         .join(Channel, Channel.id == Conversation.channel_id, isouter=True)
         .where(Conversation.tenant_id == tenant_id, Message.created_at > since_dt)
@@ -611,8 +611,9 @@ async def conversations_feed(
     )
     msgs = [
         {"role": r, "content": c, "at": t.isoformat() if t else None,
-         "chat_id": chat, "channel_type": ch or "?"}
-        for r, c, t, chat, ch in res.all()
+         "chat_id": chat, "channel_type": ch or "?",
+         "trace": (m or {}).get("trace", []) if isinstance(m, dict) else []}
+        for r, c, t, chat, ch, m in res.all()
     ]
     now = datetime.now(timezone.utc).isoformat()
     return {"messages": msgs, "now": now}

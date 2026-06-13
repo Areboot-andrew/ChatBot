@@ -13,7 +13,7 @@ from app.models.conversation import Conversation, Message
 logger = logging.getLogger(__name__)
 
 
-def make_trace_collector(limit_chars: int = 600):
+def make_trace_collector(limit_chars: int = 1500):
     """Returns (callback, steps). Pass callback as `trace` to the pipeline; the
     collected steps can be stored in Message.meta to show 'what the bot did'."""
     steps = []
