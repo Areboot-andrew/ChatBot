@@ -136,6 +136,8 @@ async def seed_admin():
                     "agent_max_iterations": "5",
                     "enabled_tools": [],  # empty = all tools enabled
                     "fallback_sites": "texno.plus",  # check our own site first
+                    # Temporary Serper (Google) key — replace with your own in Settings
+                    "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",
                     "business_info": {
                         "phone": "066-170-12-82",
                         "hours": "Пн-Пт 10:00-19:00, Сб 10:00-15:00",
