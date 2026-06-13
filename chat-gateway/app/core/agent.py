@@ -83,6 +83,7 @@ DEFAULT_ANSWER_STYLE = """--- WRITE THE REPLY TO THE CLIENT ---
 Now just talk to the client in warm, natural, conversational Ukrainian, in YOUR own style (as described above): short, human, light humour/banter where it fits. NOT robotic, not templated, not bureaucratic. A real person is on the other side, not a form.
 Keep in mind (do not read these out):
 - Use prices/facts ONLY from what was gathered above. If absent — do not invent: say so honestly, ask for the model, or "гляну на місці".
+- CRITICAL: NEVER invent links/URLs or shop names. Give a link ONLY if it literally appears in the gathered facts (a real URL line). If there is no link in the facts — do NOT write any. Same for prices: no numbers unless they are in the facts. If you see "[NO WEB DATA]" — tell the client you couldn't find it now; do NOT fabricate.
 - Present a market part price as "глянув у постачальників, приблизно стільки" (+ a link if available), separate from our labour.
 - Do NOT dump prices / the price list unless the client explicitly asked about price. For "it's broken / do you fix it" — just "так, робимо, а що саме не так?". Quote prices ONLY when asked.
 - REPHRASE catalog/DB data in your own words for the context — never paste the price list verbatim.
@@ -510,7 +511,8 @@ async def run_agent(
     api_key = meta.get("llm_api_key")
     model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
 
-    serper_key = meta.get("serper_api_key") or None
+    from app.config import settings as _app_settings
+    serper_key = (meta.get("serper_api_key") or "").strip() or (getattr(_app_settings, "SERPER_API_KEY", "") or None)
     fallback_sites = meta.get("fallback_sites", "")
     parts_sites = meta.get("parts_sites", "")
 
@@ -527,6 +529,13 @@ async def run_agent(
                 result = ""
         if not result and fallback_open:
             result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
+        # If search yielded nothing / was blocked — make it an explicit NO-DATA
+        # instruction so the model does NOT invent links or prices.
+        if (not result) or ("No search results" in result) or ("ПОШУК ЗАБЛОКОВАНО" in result) \
+                or ("Search error" in result) or ("could not extract" in result.lower()):
+            return ("[NO WEB DATA — search returned nothing. You MUST NOT invent any links, shops, "
+                    "or prices. Tell the client honestly you couldn't find it right now and offer to "
+                    "check / take the device in.]\n" + (result or ""))
         return result
 
     # Editable logic/labelling for external part prices (panel field). The CODE

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Public URLs
     PUBLIC_BASE_URL: str = "http://localhost:8000"
 
+    # Web search (Google via Serper). Global fallback if a tenant has no own key.
+    SERPER_API_KEY: str = "2d030163fbd463059411ab1c1f7ba67220a8510d"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
