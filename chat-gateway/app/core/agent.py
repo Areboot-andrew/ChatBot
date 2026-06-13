@@ -393,14 +393,21 @@ async def run_agent(
 
     escalated = False
 
+    # Short business identity for the ROUTER stage (full persona/tone is only for
+    # the final answer — at routing it just makes small models ignore the JSON).
+    identity = persona.split("\n\n")[0][:600] if persona else ""
+
     for iteration in range(1, max_iter + 1):
-        sys_prompt = persona
+        # ROUTER protocol FIRST so the model obeys the JSON format instead of the
+        # persona's "talk to the client" tone.
+        sys_prompt = router_protocol
+        sys_prompt += "\n\n[WHO YOU ARE]\n" + identity
         if business_rules:
             sys_prompt += "\n\n[BUSINESS RULES]\n" + business_rules
         context_block = build_context_block()
         if context_block:
             sys_prompt += "\n\n" + context_block
-        sys_prompt += "\n\n" + router_protocol
+        sys_prompt += "\n\nReturn ONLY the JSON decision now."
 
         messages = [{"role": "system", "content": sys_prompt}]
         recent = (history or [])[-6:]
@@ -417,9 +424,11 @@ async def run_agent(
         try:
             decision = _extract_json(raw)
         except (ValueError, json.JSONDecodeError) as e:
-            # Model broke protocol — treat its text as readiness to answer.
-            emit(f"AGENT ROUTER #{iteration}", "JSON помилка", f"{e}\nRAW: {raw[:300]}", f"{time.time() - t0:.2f}s")
-            break
+            # Model broke the JSON protocol. Do NOT give up here (that would skip
+            # tool use entirely). Treat as "answer" so the GUARD below still
+            # forces the needed lookups before the final reply.
+            emit(f"AGENT ROUTER #{iteration}", "JSON помилка → GUARD", f"{e}\nRAW: {raw[:200]}", f"{time.time() - t0:.2f}s")
+            decision = {"action": "answer", "query": "", "reason": "json_parse_failed", "memory_patch": {}}
 
         action = str(decision.get("action", "answer")).lower().strip()
         query = str(decision.get("query", "") or "")
