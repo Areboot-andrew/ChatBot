@@ -713,6 +713,7 @@ async def update_settings(
     parts_sites: str = Form(""),
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
+    agent_decision_rules: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -748,6 +749,7 @@ async def update_settings(
             meta_data["parts_sites"] = parts_sites.strip()
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
+            meta_data["agent_decision_rules"] = agent_decision_rules.strip()
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified

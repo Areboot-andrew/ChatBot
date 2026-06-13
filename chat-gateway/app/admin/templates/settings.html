@@ -107,6 +107,13 @@
             <textarea name="business_rules" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Ми не ремонтуємо залиті водою пристрої без повної передоплати.">{{ settings.business_rules if settings and settings.business_rules else '' }}</textarea>
         </div>
 
+        <!-- Agent Decision Rules -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Правила рішень агента (як діяти, куди по дані)</h3>
+            <p class="text-sm text-gray-400 mb-3">Як бот має <b>думати й куди звертатись по дані</b> у різних випадках: привітання → відповідь; «чи робите X» → каталог; ціна деталі → постачальники/гугл; графік → бізнес-факти, тощо. Це керує логікою рішень. <b>Формат дій і сам цикл</b> — у двигуні, їх не чіпаємо. Порожньо = розумний дефолт.</p>
+            <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
+        </div>
+
         <!-- Answer Style -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Стиль фінальної відповіді (тон)</h3>

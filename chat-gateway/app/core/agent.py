@@ -42,6 +42,9 @@ TOOL_DESCRIPTIONS = {
     "escalate": '"escalate": hand off to a human operator. Use when the client explicitly asks for a human or the conversation is stuck.',
 }
 
+# ENGINE MECHANICS — hardcoded by design (JSON action format, the loop). This is
+# syntax, not business logic. The {decision_rules} block below is EDITABLE per
+# tenant (meta.agent_decision_rules) — it controls HOW to act / where to get data.
 ROUTER_PROTOCOL = """MODE: ROUTER_DECISION
 You are deciding the NEXT STEP for answering the client. You are NOT talking to the client now.
 Return ONLY valid compact JSON, no markdown, no explanations:
@@ -51,27 +54,28 @@ Allowed actions:
 {tools_block}
 "answer": you already have enough verified facts (or none are needed — greetings, small talk, tone-only replies). This ends the loop.
 
-Decision rules:
-- Greetings, thanks, small talk, emotions → "answer" immediately. NEVER search for greetings.
-- ANY question about whether we do / repair / sell / service something, about prices, services, availability, conditions, hours, address — you MUST gather facts BEFORE answering. Do NOT answer such questions from your own memory. If [GATHERED FACTS] is still empty, you are NOT allowed to "answer" a substantive question yet — pick a tool.
-- "чи ремонтуєте X / робите ви X / маєте X / скільки коштує X" → search_catalog (it also returns the list of our categories so you can confirm or deny). Then search_knowledge if still unclear.
-- Follow the chronology of the chat. Previous client requests stay active context until the topic clearly changes.
-- Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
-- Price of a SPARE PART for a model not in our catalog → search_parts (it queries external supplier sites and returns a THIRD-PARTY market price, not ours).
-- Technical specs, compatibility, repair data missing from internal sources → web_research.
-- Search QUERIES: try BOTH languages depending on the source — Ukrainian wording for local UA shops/parts and prices ("модуль iPhone 15 ціна купити"), English for worldwide specs/datasheets ("iPhone 15 display module replacement"). Do not limit yourself to one language; reformulate if the first query finds nothing.
-- If a concrete model/detail is missing and needed → "answer" (you will ask the client for it).
-- Do not repeat an action that already returned results this turn. If a lookup is listed under [ALREADY CHECKED THIS CHAT], reuse that result instead of searching again. Maximum {max_iter} steps, then you must "answer".
-- "memory_patch": durable facts about THIS client chat worth remembering (device model, chosen option, stage). Keys/values short strings. Empty object if nothing new.
+{decision_rules}
 
-Format examples ONLY (the words/devices here are placeholders — NEVER reuse them
-in your answer; always use the CLIENT'S actual words and device):
+Mechanics: do not repeat an action that already returned results this turn; if a lookup is under [ALREADY CHECKED THIS CHAT], reuse it. Maximum {max_iter} steps, then you must "answer". "memory_patch": durable facts about THIS chat (device model, chosen option, stage); empty object if nothing new.
+Format examples ONLY (placeholders — always use the CLIENT'S real words/device):
 Client: <greeting> -> {"action":"answer","query":"","reason":"greeting","memory_patch":{}}
 Client: <do you service X?> -> {"action":"search_catalog","query":"<X>","reason":"check service","memory_patch":{}}
 Client: <price of service for device Y> -> {"action":"search_catalog","query":"<service Y>","reason":"price lookup","memory_patch":{}}
 Client: <working hours / address?> -> {"action":"get_business_info","query":"hours","reason":"business fact","memory_patch":{}}
-Answer ONLY about the device the CLIENT mentioned. Do not introduce a different device.
-"""
+Answer ONLY about the device the CLIENT mentioned. Do not introduce a different device."""
+
+
+# EDITABLE decision rules (meta.agent_decision_rules) — HOW to act / where to get
+# data / what data we have. Default in English; tenant can fully override in panel.
+DEFAULT_DECISION_RULES = """Decision rules (how to act, where to get data):
+- Greetings, thanks, small talk, emotions → "answer" immediately. NEVER search for greetings.
+- A problem description ("не вмикається", "слабо тягне") is NOT a price question — accept it, ask the model; do not pull prices.
+- "do you repair/sell X?" → search_catalog (it lists our categories to confirm or deny).
+- Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
+- Price of a SPARE PART for a model not in our catalog → search_parts (external supplier sites = third-party market price, not ours).
+- Technical specs / repair data missing internally → web_research. Our address/hours/payment → get_business_info.
+- Search queries: use Ukrainian for local shops/prices, English for worldwide specs; reformulate if nothing found.
+- Never answer a substantive question from memory while [GATHERED FACTS] is empty — pick a tool. If a needed model/detail is missing → "answer" to ask the client."""
 
 # Default final-answer style. Editable per tenant via meta.answer_style
 # (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
@@ -388,7 +392,11 @@ async def run_agent(
         pass
 
     tools_block = "\n".join([TOOL_DESCRIPTIONS[t] for t in enabled_tools if t in TOOL_DESCRIPTIONS])
-    router_protocol = ROUTER_PROTOCOL.replace("{tools_block}", tools_block).replace("{max_iter}", str(max_iter))
+    decision_rules = (meta.get("agent_decision_rules") or "").strip() or DEFAULT_DECISION_RULES
+    router_protocol = (ROUTER_PROTOCOL
+                       .replace("{tools_block}", tools_block)
+                       .replace("{decision_rules}", decision_rules)
+                       .replace("{max_iter}", str(max_iter)))
 
     # Tenant routing hints from the "Схема Логіки (Інтенти)" page: each enabled
     # KnowledgeType row becomes a hint line, so adding a step in the panel
