@@ -64,11 +64,13 @@ Decision rules:
 - Do not repeat an action that already returned results this turn. If a lookup is listed under [ALREADY CHECKED THIS CHAT], reuse that result instead of searching again. Maximum {max_iter} steps, then you must "answer".
 - "memory_patch": durable facts about THIS client chat worth remembering (device model, chosen option, stage). Keys/values short strings. Empty object if nothing new.
 
-Examples:
-Client: "привіт" -> {"action":"answer","query":"","reason":"greeting","memory_patch":{}}
-Client: "ремонтуєте блендери?" -> {"action":"search_catalog","query":"блендер","reason":"check if we service this","memory_patch":{}}
-Client: "скільки коштує почистити ноутбук" -> {"action":"search_catalog","query":"чистка ноутбука","reason":"price lookup","memory_patch":{}}
-Client: "які у вас години роботи" -> {"action":"get_business_info","query":"hours","reason":"business fact","memory_patch":{}}
+Format examples ONLY (the words/devices here are placeholders — NEVER reuse them
+in your answer; always use the CLIENT'S actual words and device):
+Client: <greeting> -> {"action":"answer","query":"","reason":"greeting","memory_patch":{}}
+Client: <do you service X?> -> {"action":"search_catalog","query":"<X>","reason":"check service","memory_patch":{}}
+Client: <price of service for device Y> -> {"action":"search_catalog","query":"<service Y>","reason":"price lookup","memory_patch":{}}
+Client: <working hours / address?> -> {"action":"get_business_info","query":"hours","reason":"business fact","memory_patch":{}}
+Answer ONLY about the device the CLIENT mentioned. Do not introduce a different device.
 """
 
 ANSWER_PROTOCOL = """MODE: FINAL_CLIENT_ANSWER
