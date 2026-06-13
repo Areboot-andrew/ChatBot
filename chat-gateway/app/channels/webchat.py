@@ -73,6 +73,28 @@ async def webchat_config(channel_id: uuid.UUID, request: Request):
         )
 
 
+@router.options("/webchat/{channel_id}/reset")
+async def webchat_reset_preflight(channel_id: uuid.UUID, request: Request):
+    return Response(status_code=204, headers=_cors_headers(request.headers.get("origin", "*")))
+
+
+@router.post("/webchat/{channel_id}/reset")
+async def webchat_reset(channel_id: uuid.UUID, request: Request):
+    """Clear history + agent memory for a session (button 'Новий чат')."""
+    from app.core.history import HistoryManager, MemoryManager
+    origin = request.headers.get("origin", "")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    session_id = str(body.get("session_id", "")).strip()[:64]
+    if session_id:
+        hist_channel = f"webchat:{channel_id}"
+        await HistoryManager.clear_history(hist_channel, session_id)
+        await MemoryManager.save_memory(f"{hist_channel}:{session_id}", {})
+    return JSONResponse({"ok": True}, headers=_cors_headers(origin))
+
+
 @router.post("/webchat/{channel_id}/chat")
 async def webchat_message(channel_id: uuid.UUID, request: Request):
     from app.database import async_session_maker
@@ -124,10 +146,9 @@ WIDGET_JS = r"""
   var BASE = '{BASE_URL}';
   if (!CHANNEL) { console.error('chat-widget: data-channel missing'); return; }
 
-  // sessionStorage: session lives only while this tab is open, so different
-  // visitors on the same browser/device never share chat memory or history.
-  var sid = sessionStorage.getItem('cw_sid_' + CHANNEL);
-  if (!sid) { sid = 'w' + Date.now() + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('cw_sid_' + CHANNEL, sid); }
+  // Fresh session on every page load / reload — the id lives only in this page
+  // instance, so reloading or revisiting starts a clean chat (no old history).
+  var sid = 'w' + Date.now() + Math.random().toString(36).slice(2, 10);
 
   var FONT = '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif';
   var css = document.createElement('style');
@@ -243,9 +264,8 @@ INLINE_JS = r"""
     var root = document.getElementById(TARGET);
     if (!root) { console.error('chat-inline: target #' + TARGET + ' not found'); return; }
 
-    // sessionStorage: per-tab session — different visitors never share memory.
-    var sid = sessionStorage.getItem('cwi_sid_' + CHANNEL);
-    if (!sid) { sid = 'i' + Date.now() + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('cwi_sid_' + CHANNEL, sid); }
+    // Fresh session on every page load / reload — clean chat each time.
+    var sid = 'i' + Date.now() + Math.random().toString(36).slice(2, 10);
 
     var IFONT = '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif';
     var css = document.createElement('style');
