@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.text(
             "UPDATE bot_settings SET system_prompt = cast(:p as text) "
             "WHERE (system_prompt LIKE '%Waterfall Search%' "
-            "OR (system_prompt LIKE '%Інженер Андрон%' AND system_prompt NOT LIKE '%isn't released yet%'))"
+            "OR (system_prompt LIKE '%Інженер Андрон%' AND system_prompt NOT LIKE '%release dates and new models%'))"
         ),
         {"p": prompt},
     )
