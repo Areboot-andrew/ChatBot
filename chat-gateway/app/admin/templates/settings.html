@@ -187,9 +187,9 @@
         <!-- Web Search Provider -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Пошук в інтернеті</h3>
-            <p class="text-sm text-gray-400 mb-3">За замовчуванням бот шукає через DuckDuckGo (безкоштовно, без ключа). Якщо вказати ключ <a href="https://serper.dev" target="_blank" class="text-blue-400 hover:underline">Serper.dev</a> — пошук піде через справжній Google (2500 запитів безкоштовно). Знайдені сторінки бот у будь-якому разі відкриває і читає повністю.</p>
-            <label for="serper_api_key" class="block mb-2 text-sm font-medium text-gray-300">Serper API Key (опційно)</label>
-            <input type="password" name="serper_api_key" id="serper_api_key" autocomplete="off" value="{{ settings.meta.get('serper_api_key', '') if settings and settings.meta else '' }}" placeholder="Залиште порожнім для DuckDuckGo" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
+            <p class="text-sm text-gray-400 mb-3">Пошук іде через <b>Google</b> (за допомогою <a href="https://serper.dev" target="_blank" class="text-blue-400 hover:underline">Serper.dev</a>) — ключ уже вшитий, працює з коробки. Можете вписати свій ключ Serper (2500 запитів/міс безкоштовно), коли спільний вичерпається. Знайдені сторінки бот відкриває і читає повністю.</p>
+            <label for="serper_api_key" class="block mb-2 text-sm font-medium text-gray-300">Google (Serper) API Key</label>
+            <input type="password" name="serper_api_key" id="serper_api_key" autocomplete="off" value="{{ settings.meta.get('serper_api_key', '') if settings and settings.meta else '' }}" placeholder="Порожньо = спільний вшитий ключ Google" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
 
             <label for="parts_sites" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти запчастин (ринкові ціни деталей, через кому)</label>
             <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: brain.com.ua, allo.ua, rozetka.com.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
@@ -220,7 +220,7 @@
                     <label for="escalation_policy" class="block mb-2 text-sm font-medium text-gray-300">Стратегія</label>
                     <select name="escalation_policy" id="escalation_policy" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                         <option value="handoff" {% if settings and settings.escalation_policy == 'handoff' %}selected{% endif %}>Передати оператору (Handoff) + Дати телефон</option>
-                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (DuckDuckGo) - Тільки для технічних параметрів</option>
+                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (інтернет) - для технічних параметрів</option>
                         <option value="info" {% if settings and settings.escalation_policy == 'info' %}selected{% endif %}>Просто вибачитись і зупинитись</option>
                     </select>
                 </div>

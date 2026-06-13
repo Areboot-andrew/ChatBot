@@ -38,7 +38,7 @@
                 <label for="handler" class="block mb-2 text-sm font-medium text-gray-300">Дія бота</label>
                 <select id="handler" name="handler" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <option value="qa_handler" {% if logic and logic.handler == 'qa_handler' %}selected{% endif %}>Пошук по базі прайсів / Qdrant</option>
-                    <option value="web_search_handler" {% if logic and logic.handler == 'web_search_handler' %}selected{% endif %}>Пошук в інтернеті (Google/DuckDuckGo)</option>
+                    <option value="web_search_handler" {% if logic and logic.handler == 'web_search_handler' %}selected{% endif %}>Пошук в інтернеті (Google)</option>
                     <option value="site_search" {% if logic and logic.handler == 'site_search' %}selected{% endif %}>Парсинг вказаного сайту</option>
                     <option value="escalate" {% if logic and logic.handler == 'escalate' %}selected{% endif %}>Перевести на оператора (Людину)</option>
                     <option value="fallback" {% if logic and logic.handler == 'fallback' %}selected{% endif %}>Базова відповідь (Fallback)</option>
@@ -48,7 +48,7 @@
             <div id="target_url_div" class="hidden">
                 <label for="target_url" class="block mb-2 text-sm font-medium text-gray-300">Шаблон пошуку або URL сайту</label>
                 <input type="text" name="target_url" id="target_url" value="{{ logic.meta.get('target_url', '') if logic and logic.meta else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="https://kompi.com.ua/search?q={query}">
-                <p class="mt-1 text-xs text-gray-400">Напишіть `texno.plus` для DuckDuckGo пошуку по сайту, або посилання з `{query}` для прямого парсингу сторінки.</p>
+                <p class="mt-1 text-xs text-gray-400">Напишіть `texno.plus` для пошуку Google по сайту, або посилання з `{query}` для прямого парсингу сторінки.</p>
             </div>
 
             <div class="hidden">
