@@ -107,6 +107,13 @@
             <textarea name="business_rules" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Ми не ремонтуємо залиті водою пристрої без повної передоплати.">{{ settings.business_rules if settings and settings.business_rules else '' }}</textarea>
         </div>
 
+        <!-- Answer Style -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Стиль фінальної відповіді (тон)</h3>
+            <p class="text-sm text-gray-400 mb-3">Як бот має <b>писати</b> відповідь клієнту: тон, жива мова, гумор, що НЕ робити (напр. не сипати цінами без запиту, перефразовувати, не вивалювати прайс). Це окремий промпт для написання відповіді. Порожньо = розумний дефолт.</p>
+            <textarea name="answer_style" rows="6" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Пиши живою розмовною українською, коротко, з легким гумором. Не сип цінами якщо не питають...">{{ settings.meta.get('answer_style', '') if settings and settings.meta else '' }}</textarea>
+        </div>
+
         <!-- Agent Engine -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>

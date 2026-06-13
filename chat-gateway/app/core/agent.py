@@ -73,7 +73,9 @@ Client: <working hours / address?> -> {"action":"get_business_info","query":"hou
 Answer ONLY about the device the CLIENT mentioned. Do not introduce a different device.
 """
 
-ANSWER_PROTOCOL = """--- НАПИШИ ВІДПОВІДЬ КЛІЄНТУ ---
+# Default final-answer style. Editable per tenant via meta.answer_style
+# (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
+DEFAULT_ANSWER_STYLE = """--- НАПИШИ ВІДПОВІДЬ КЛІЄНТУ ---
 Тепер ти просто говориш із клієнтом — живою, теплою, розмовною українською, у СВОЄМУ стилі (як описано вище): коротко, по-людськи, можна з легким гумором чи підколом, де доречно. НЕ як робот, не шаблонно, не канцелярит. Це жива людина по той бік, не форма.
 Прості орієнтири (не зачитуй — просто тримай у голові):
 - Ціни/факти бери ТІЛЬКИ зі зібраного вище. Нема — не вигадуй: скажи чесно, спитай модель або «гляну на місці».
@@ -743,7 +745,9 @@ async def run_agent(
         sys_prompt += ("\n\n[ВАЖЛИВО: клієнт НЕ питав ціну в цьому повідомленні. НЕ називай жодних сум, "
                        "діапазонів чи прайсу, навіть якщо вони є у фактах. Просто підтверди по-людськи "
                        "(«так, робимо») і спитай, що саме не працює / яка модель.]")
-    sys_prompt += "\n\n" + ANSWER_PROTOCOL
+    # Tone of the final reply — editable per tenant (panel), default in code.
+    answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
+    sys_prompt += "\n\n" + answer_style
 
     temp = 0.7
     max_tokens = 1024
