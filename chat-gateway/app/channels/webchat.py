@@ -124,8 +124,10 @@ WIDGET_JS = r"""
   var BASE = '{BASE_URL}';
   if (!CHANNEL) { console.error('chat-widget: data-channel missing'); return; }
 
-  var sid = localStorage.getItem('cw_sid_' + CHANNEL);
-  if (!sid) { sid = 'w' + Date.now() + Math.random().toString(36).slice(2, 10); localStorage.setItem('cw_sid_' + CHANNEL, sid); }
+  // sessionStorage: session lives only while this tab is open, so different
+  // visitors on the same browser/device never share chat memory or history.
+  var sid = sessionStorage.getItem('cw_sid_' + CHANNEL);
+  if (!sid) { sid = 'w' + Date.now() + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('cw_sid_' + CHANNEL, sid); }
 
   var FONT = '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif';
   var css = document.createElement('style');
@@ -241,8 +243,9 @@ INLINE_JS = r"""
     var root = document.getElementById(TARGET);
     if (!root) { console.error('chat-inline: target #' + TARGET + ' not found'); return; }
 
-    var sid = localStorage.getItem('cwi_sid_' + CHANNEL);
-    if (!sid) { sid = 'i' + Date.now() + Math.random().toString(36).slice(2, 10); localStorage.setItem('cwi_sid_' + CHANNEL, sid); }
+    // sessionStorage: per-tab session — different visitors never share memory.
+    var sid = sessionStorage.getItem('cwi_sid_' + CHANNEL);
+    if (!sid) { sid = 'i' + Date.now() + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('cwi_sid_' + CHANNEL, sid); }
 
     var IFONT = '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif';
     var css = document.createElement('style');
