@@ -270,15 +270,27 @@ def _expand_tokens(tokens: list) -> list:
     return out
 
 
+# Too-generic words that appear in almost every service name / category title.
+# Searching by them returns junk from all categories ("Ремонт плати" everywhere).
+_CATALOG_STOPWORDS = {
+    "ремонт", "ремонту", "заміна", "заміну", "діагностика", "діагностики",
+    "послуга", "послуги", "послуг", "техніки", "техніка", "пристрій", "пристрою",
+    "відремонтувати", "полагодити", "поломка", "несправність", "майстер",
+}
+
+
 async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession) -> str:
     """
     Targeted, paginated catalog search (keeps context small):
-    1. exact-ish match by service name (ILIKE tokens + synonyms);
-    2. else match by category title -> return that category's services;
+    1. exact-ish match by service name (ILIKE meaningful tokens + synonyms);
+    2. else find the matching CATEGORY and return only its services;
     3. else return the category list so the model can drill down step by step.
     """
-    tokens = _expand_tokens(_query_tokens(query))
+    raw = _query_tokens(query)
+    tokens = _expand_tokens([t for t in raw if t not in _CATALOG_STOPWORDS])
     if not tokens:
+        # only generic words (e.g. "ремонт пилососа" -> "пилосос" kept) — if even
+        # that is empty, show categories
         return await _tool_list_categories(tenant_id, db)
 
     # 1. by service name
@@ -293,18 +305,22 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
     if prices:
         return "\n".join([f"- {cat or 'Послуги'}: {p.name} — {p.price}" for p, cat in prices])
 
-    # 2. by category title -> drill into that category
+    # 2. find ONE matching category, return ONLY its services
     cat_conds = [ServiceCategory.title.ilike(f"%{tok}%") for tok in tokens]
-    res = await db.execute(
-        select(ServicePrice, ServiceCategory.title)
-        .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
-        .where(ServicePrice.tenant_id == tenant_id, or_(*cat_conds))
-        .limit(20)
+    res_c = await db.execute(
+        select(ServiceCategory.id, ServiceCategory.title)
+        .where(ServiceCategory.tenant_id == tenant_id, or_(*cat_conds)).limit(1)
     )
-    prices = res.all()
-    if prices:
-        cat = prices[0][1]
-        return f"Послуги категорії «{cat}»:\n" + "\n".join([f"- {p.name} — {p.price}" for p, _ in prices])
+    cat_row = res_c.first()
+    if cat_row:
+        cat_id, cat_title = cat_row
+        res = await db.execute(
+            select(ServicePrice.name, ServicePrice.price)
+            .where(ServicePrice.category_id == cat_id).limit(20)
+        )
+        rows = res.all()
+        if rows:
+            return f"Послуги категорії «{cat_title}»:\n" + "\n".join([f"- {n} — {p}" for n, p in rows])
 
     # 3. nothing -> category list for step-by-step drill-down
     return "Прямого збігу немає. " + await _tool_list_categories(tenant_id, db)
@@ -599,52 +615,46 @@ async def run_agent(
                     emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(rw)[:800])
                 continue
 
-            # Force a catalog/price sweep ONLY when the client actually asks for a
-            # price, or whether we service something. If they merely describe a
-            # problem ("слабо тягне", "хочу здати в ремонт") — DO NOT dump prices;
-            # let the model accept it for diagnostics and ask for the model.
+            # Capability question ("чи ремонтуєте X?", no price) → a single light
+            # catalog check is enough to confirm we do it. NO web, NO knowledge,
+            # no waterfall. Don't repeat if the model already searched.
+            already_catalog = any(a == "search_catalog" for a, _, _ in gathered)
             if (action == "answer" and not forced_lookup_done
-                    and (_wants_price(text) or _asks_capability(text))
-                    and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools or "web_research" in enabled_tools)):
+                    and _asks_capability(text) and not _wants_price(text)
+                    and "search_catalog" in enabled_tools):
                 forced_lookup_done = True
-                emit(f"AGENT GUARD #{iteration}", "Примусовий пошук",
-                     "Запит ціни/послуги — форсую: каталог → база знань → сайт/інтернет")
-                catalog_hit = False
-                knowledge_hit = False
-                if "search_catalog" in enabled_tools:
+                if not already_catalog:
                     r = await _tool_search_catalog(text, tenant_id, db)
                     gathered.append(("search_catalog", text, r))
                     actions_done.add("search_catalog")
-                    # real price hit only — a category list is NOT a hit, so the
-                    # waterfall continues to the web (e.g. iPhone 17 not in catalog)
+                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced, capability)", str(r)[:600])
+                continue
+
+            # Price question → catalog (+ knowledge), and the market only if the
+            # catalog has no real price. Reuse the model's own search if it did one.
+            if (action == "answer" and not forced_lookup_done
+                    and _wants_price(text)
+                    and ("search_catalog" in enabled_tools or "web_research" in enabled_tools)):
+                forced_lookup_done = True
+                emit(f"AGENT GUARD #{iteration}", "Примусовий пошук", "Запит ціни — каталог → (інтернет якщо нема)")
+                catalog_hit = any(not _is_empty(r) for a, _, r in gathered if a == "search_catalog")
+                if "search_catalog" in enabled_tools and not already_catalog:
+                    r = await _tool_search_catalog(text, tenant_id, db)
+                    gathered.append(("search_catalog", text, r))
+                    actions_done.add("search_catalog")
                     catalog_hit = not _is_empty(r)
-                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:800])
-                if "search_knowledge" in enabled_tools:
-                    r = await _tool_search_knowledge(text, tenant_id, db, settings)
-                    gathered.append(("search_knowledge", text, r))
-                    actions_done.add("search_knowledge")
-                    knowledge_hit = not _is_empty(r)
-                    emit(f"AGENT TOOL #{iteration}", "search_knowledge (forced)", str(r)[:800])
-                # No exact internal hit -> the price list isn't proof we DON'T do
-                # it (e.g. blender = small appliance, listed on the site, not in
-                # the price table). Escalate to the site/web before answering.
-                # Go to the market not only when nothing internal matched, but
-                # also when it's a specific model/part query (a generic catalog
-                # service is NOT the market price of that exact part).
-                need_market = (not catalog_hit and not knowledge_hit) or _looks_specific_part_query(text, history)
-                if need_market:
+                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:600])
+                if not catalog_hit:
                     if parts_sites and "search_parts" in enabled_tools:
                         r = await _do_search_parts(text)
                         gathered.append(("search_parts", text, r))
                         actions_done.add("search_parts")
-                        emit(f"AGENT TOOL #{iteration}", "search_parts (forced)", str(r)[:800])
+                        emit(f"AGENT TOOL #{iteration}", "search_parts (forced)", str(r)[:600])
                     elif "web_research" in enabled_tools:
                         r = await _do_web_research(text)
                         gathered.append(("web_research", text, r))
                         actions_done.add("web_research")
-                        emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:800])
-                    else:
-                        emit(f"AGENT GUARD #{iteration}", "Увага", "Потрібен інтернет-пошук, але web_research і search_parts ВИМКНЕНІ в Налаштуваннях")
+                        emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:600])
                 continue
             break
 
