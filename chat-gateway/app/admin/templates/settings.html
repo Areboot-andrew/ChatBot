@@ -158,6 +158,10 @@
             <label for="parts_sites" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Сайти запчастин (ринкові ціни деталей, через кому)</label>
             <input type="text" name="parts_sites" id="parts_sites" value="{{ settings.meta.get('parts_sites', '') if settings and settings.meta else '' }}" placeholder="Напр.: brain.com.ua, allo.ua, rozetka.com.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
             <p class="mt-1 text-xs text-gray-500">Коли деталі немає в нашому прайсі, бот шукає ринкову ціну запчастини саме на цих сайтах і подає її клієнту як <b>сторонню ринкову ціну</b> (деталь треба купувати), а не як нашу.</p>
+
+            <label for="parts_instruction" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Логіка пошуку запчастин (редагується, керує роутом)</label>
+            <textarea name="parts_instruction" id="parts_instruction" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Опишіть словами порядок і як подавати ціну...">{{ settings.meta.get('parts_instruction', '') if settings and settings.meta else '' }}</textarea>
+            <p class="mt-1 text-xs text-gray-500">Опишіть словами логіку: спершу Сайти запчастин (парсинг) → потім гугл; для конкретної моделі — гуглити одразу потрібну запчастину, ціни орієнтовно від-до, плюс наша робота. Цей текст керує поведінкою бота — не код. Порожньо = розумний дефолт.</p>
         </div>
 
         <!-- Marketing Protocols -->

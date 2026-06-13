@@ -396,14 +396,25 @@ async def run_agent(
             result = await asyncio.to_thread(web_research, q, 3, 4000, serper_key)
         return result
 
+    # Editable logic/labelling for external part prices (panel field). The CODE
+    # only does the mechanics (parts sites first, then open web); HOW to treat
+    # and present the result is this tenant text, not hardcoded.
+    DEFAULT_PARTS_INSTRUCTION = (
+        "Коли деталі немає в нашому прайсі: спершу шукай ринкову ціну на Сайтах запчастин (парсинг), "
+        "якщо там нема — гугли. Для конкретної моделі гугли одразу потрібну запчастину і дай орієнтовні "
+        "ціни ВІД і ДО. Додай вартість нашої роботи з каталогу. Ціну деталі подавай як СТОРОННЮ ринкову "
+        "(деталь купується окремо), точну назве майстер після огляду."
+    )
+    parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
+
     async def _do_search_parts(q: str) -> str:
-        """Market price of a part from external supplier sites — labelled as a
-        third-party reference, NOT our price."""
-        res = await _do_web_research(q, sites=parts_sites)
-        if not res or "No search results" in res:
-            return "СТОРОННЯ БАЗА ЦІН ЗАПЧАСТИН: ринкову ціну не знайдено."
-        return ("[СТОРОННЯ БАЗА ЦІН ЗАПЧАСТИН — це РИНКОВІ ціни постачальників, НЕ наші ціни. "
-                "Подавай клієнту як орієнтовну ринкову вартість деталі, яку треба купувати окремо]\n" + res)
+        """Market price of a part from external supplier sites first, then open
+        web. Treatment/labelling comes from the editable parts_instruction."""
+        res = await _do_web_research(q, sites=parts_sites)  # parts sites first, web fallback
+        header = "[ЗОВНІШНІ ЦІНИ ДЕТАЛЕЙ — РИНКОВІ, НЕ НАШІ. Інструкція трактування: " + parts_instruction + "]\n"
+        if not res or "No search results" in res or "ПОШУК ЗАБЛОКОВАНО" in res:
+            return header + (res or "ринкову ціну не знайдено.")
+        return header + res
 
     def _is_empty(result: str) -> bool:
         """True if a tool returned no useful facts (only emptiness markers)."""
