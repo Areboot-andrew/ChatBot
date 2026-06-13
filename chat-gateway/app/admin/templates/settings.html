@@ -124,37 +124,12 @@
             <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
-        <!-- Phrase recognition / routing -->
+        <!-- Catalog synonyms -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Розпізнавання фраз і маршрутизація (на що як реагувати)</h3>
-            <p class="text-sm text-gray-400 mb-3"><b>Опишіть, на які фрази що робити і де шукати</b> — це підстраховує модель і робить логіку передбачуваною. Слова через кому. Це підказки тригерів; саме рішення приймає модель за «Правилами рішень». Порожньо = розумний дефолт.</p>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Синоніми каталогу</h3>
+            <p class="text-sm text-gray-400 mb-3">Вирівнюють побутові слова клієнта до назв у вашому прайсі (щоб пошук знаходив). Рядок: <code>слово=синонім,синонім</code>. Логіка «на що як реагувати» — у «Правилах рішень агента» вище. Порожньо = розумний дефолт.</p>
             {% set m = settings.meta if settings and settings.meta else {} %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Слова-ЦІНА → шукати ціну (каталог/постачальники)</label>
-                    <input type="text" name="price_triggers" value="{{ m.get('price_triggers','') }}" placeholder="ціна, коштує, вартість, почому, скільки коштує" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                </div>
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Слова-ПОСЛУГА → перевірити каталог («чи робите»)</label>
-                    <input type="text" name="capability_triggers" value="{{ m.get('capability_triggers','') }}" placeholder="ремонтуєте, робите, заміняте, маєте, продаєте" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                </div>
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Слова-БІЗНЕС-ФАКТИ → get_business_info</label>
-                    <input type="text" name="business_info_triggers" value="{{ m.get('business_info_triggers','') }}" placeholder="години, графік, адреса, оплата, доставка, неділя, завтра" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                </div>
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Бренди/моделі (для ринкового пошуку деталей)</label>
-                    <input type="text" name="brand_words" value="{{ m.get('brand_words','') }}" placeholder="iphone, айфон, samsung, xiaomi (для квіткового — лишіть порожнім)" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                </div>
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Слова-деталі/товар (для ринкового пошуку)</label>
-                    <input type="text" name="part_words" value="{{ m.get('part_words','') }}" placeholder="дисплей, модуль, акумулятор / для квіткового: троянда, півонія" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                </div>
-                <div>
-                    <label class="block mb-1 text-sm text-gray-300">Синоніми каталогу (рядок: слово=синонім,синонім)</label>
-                    <textarea name="catalog_synonyms" rows="3" class="font-mono bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="екран=матриця,дисплей&#10;айфон=iphone&#10;батарея=акумулятор,акб">{{ m.get('catalog_synonyms','') }}</textarea>
-                </div>
-            </div>
+            <textarea name="catalog_synonyms" rows="4" class="font-mono bg-gray-950 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-3" placeholder="екран=матриця,дисплей&#10;айфон=iphone&#10;батарея=акумулятор,акб&#10;(для квіткового: букет=композиція)">{{ m.get('catalog_synonyms','') }}</textarea>
         </div>
 
         <!-- Answer Style -->
@@ -183,6 +158,10 @@
                     <p class="mt-1 text-xs text-gray-500">Більше кроків = розумніше, але повільніше на локальній моделі.</p>
                 </div>
             </div>
+            <label class="flex items-center gap-2 text-sm text-gray-300 mb-2">
+                <input type="checkbox" name="router_json_mode" value="on" {% if not settings or not settings.meta or settings.meta.get('router_json_mode', True) %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
+                Строгий JSON-режим роутера (рекомендовано для хмарних моделей — стабільні рішення)
+            </label>
             <label class="block mb-2 text-sm font-medium text-gray-300">Дозволені інструменти агента</label>
             <p class="text-xs text-gray-500 mb-2">Якщо нічого не позначено — увімкнені всі.</p>
             {% set cur_tools = settings.meta.get('enabled_tools') if settings and settings.meta else none %}
@@ -249,6 +228,11 @@
                     <label for="fallback_sites" class="block mb-2 text-sm font-medium text-gray-300">Довірені сайти для резервного пошуку (через кому)</label>
                     <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.get('fallback_sites', '') if settings and settings.meta else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний пошук.</p>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="tpl_escalate_instruction" class="block mb-2 text-sm font-medium text-gray-300">Інструкція при ескалації (дія escalate)</label>
+                    <textarea name="tpl_escalate_instruction" id="tpl_escalate_instruction" rows="2" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="[INSTRUCTION]: The client wants a human. Inform them you are transferring to a live operator.">{{ settings.meta.get('tpl_escalate_instruction', '') if settings and settings.meta else '' }}</textarea>
+                    <p class="mt-1 text-xs text-gray-500">Що бот робить/каже, коли спрацьовує дія «escalate» (передати оператору). Порожньо = дефолт.</p>
                 </div>
             </div>
         </div>

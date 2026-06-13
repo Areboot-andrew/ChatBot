@@ -715,12 +715,9 @@ async def update_settings(
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
     agent_decision_rules: str = Form(""),
-    price_triggers: str = Form(""),
-    capability_triggers: str = Form(""),
-    business_info_triggers: str = Form(""),
-    brand_words: str = Form(""),
-    part_words: str = Form(""),
     catalog_synonyms: str = Form(""),
+    router_json_mode: str = Form("on"),
+    tpl_escalate_instruction: str = Form(""),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -758,12 +755,13 @@ async def update_settings(
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
-            meta_data["price_triggers"] = price_triggers.strip()
-            meta_data["capability_triggers"] = capability_triggers.strip()
-            meta_data["business_info_triggers"] = business_info_triggers.strip()
-            meta_data["brand_words"] = brand_words.strip()
-            meta_data["part_words"] = part_words.strip()
             meta_data["catalog_synonyms"] = catalog_synonyms.strip()
+            meta_data["router_json_mode"] = (router_json_mode == "on")
+            if tpl_escalate_instruction.strip():
+                meta_data["tpl_escalate_instruction"] = tpl_escalate_instruction.strip()
+            # drop now-unused trigger heuristics (logic moved to the prompt)
+            for _k in ("price_triggers", "capability_triggers", "business_info_triggers", "brand_words", "part_words"):
+                meta_data.pop(_k, None)
             settings.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
@@ -783,8 +781,8 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
                      "agent_decision_rules", "answer_style", "parts_instruction",
                      "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
-                     "price_triggers", "capability_triggers", "business_info_triggers",
-                     "brand_words", "part_words", "catalog_synonyms", "business_info",
+                     "catalog_synonyms", "business_info", "router_json_mode",
+                     "tpl_escalate_instruction",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)
 
 
