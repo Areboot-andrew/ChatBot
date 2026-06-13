@@ -517,6 +517,66 @@ async def _register_telegram_webhook(channel_id: uuid.UUID, token: str):
     except Exception as e:
         logging.getLogger(__name__).error(f"setWebhook error for channel {channel_id}: {e}")
 # --- CONVERSATIONS (Діалоги: жива стрічка + архів) ---
+@router.get("/bans", response_class=HTMLResponse)
+async def bans_page(
+    request: Request,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.conversation import SessionBan
+    from sqlalchemy import desc
+
+    tenants = await get_all_tenants(db)
+    bans = []
+    if tenant_id:
+        from app.core.bans import import_legacy_redis_bans
+        await import_legacy_redis_bans(db, tenant_id)
+        result = await db.execute(
+            select(SessionBan, Channel.name)
+            .join(Channel, Channel.id == SessionBan.channel_id, isouter=True)
+            .where(SessionBan.tenant_id == tenant_id)
+            .order_by(SessionBan.active.desc(), desc(SessionBan.banned_at))
+            .limit(500)
+        )
+        bans = [{"ban": ban, "channel_name": channel_name or ""}
+                for ban, channel_name in result.all()]
+    return templates.TemplateResponse(request=request, name="bans.html", context={
+        "request": request,
+        "user": user,
+        "tenants": tenants,
+        "current_tenant_id": tenant_id,
+        "bans": bans,
+        "active_count": sum(1 for item in bans if item["ban"].active),
+    })
+
+
+@router.post("/bans/{ban_id}/unban")
+async def unban_session(
+    ban_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.conversation import SessionBan
+    from app.core.history import MemoryManager
+    from sqlalchemy import func
+
+    if not tenant_id:
+        return RedirectResponse(url="/admin/bans", status_code=303)
+    result = await db.execute(select(SessionBan).where(
+        SessionBan.id == ban_id,
+        SessionBan.tenant_id == tenant_id,
+    ))
+    ban = result.scalars().first()
+    if ban and ban.active:
+        await MemoryManager.remove_ban(ban.chat_key)
+        ban.active = False
+        ban.unbanned_at = func.now()
+        await db.commit()
+    return RedirectResponse(url="/admin/bans?ok=unbanned", status_code=303)
+
+
 @router.get("/conversations", response_class=HTMLResponse)
 async def conversations_page(
     request: Request,

@@ -62,3 +62,10 @@ class MemoryManager:
             await redis_client.set(key, json.dumps(memory, ensure_ascii=False), ex=cls.TTL)
         else:
             await redis_client.delete(key)
+
+    @classmethod
+    async def remove_ban(cls, chat_key: str):
+        memory = await cls.get_memory(chat_key)
+        memory.pop("_session_banned", None)
+        memory.pop("_conduct_warning", None)
+        await cls.save_memory(chat_key, memory)

@@ -93,11 +93,15 @@ async def process_message_pipeline(
             emit("SESSION", "Заблоковано", "Ця сесія забанена; відповідь приглушено.")
             return ""
         try:
+            was_banned = memory.get("_session_banned") == "1"
             answer, new_memory = await run_agent(
                 text, history, tenant_id, db, settings, trace=trace, memory=memory
             )
             if chat_key:
                 await MemoryManager.save_memory(chat_key, new_memory)
+                if not was_banned and new_memory.get("_session_banned") == "1":
+                    from app.core.bans import record_session_ban
+                    await record_session_ban(db, tenant_id, chat_key, text)
             return answer
         except Exception as e:
             logger.error(f"Agent engine failed, falling back to classic: {e}")
