@@ -56,7 +56,7 @@ Allowed actions:
 
 {decision_rules}
 
-Mechanics: do not repeat an action that already returned results this turn; if a lookup is under [ALREADY CHECKED THIS CHAT], reuse it. Maximum {max_iter} steps, then you must "answer". "memory_patch": durable facts about THIS chat (device model, chosen option, stage); empty object if nothing new.
+Mechanics: do not repeat the same action+query twice. Maximum {max_iter} steps, then you must "answer". "memory_patch": durable facts about THIS chat (device model, chosen option, stage); empty object if nothing new.
 Format examples ONLY (placeholders — always use the CLIENT'S real words/device):
 Client: <greeting> -> {"action":"answer","query":"","reason":"greeting","memory_patch":{}}
 Client: <do you service X?> -> {"action":"search_catalog","query":"<X>","reason":"check service","memory_patch":{}}
@@ -67,27 +67,28 @@ Answer ONLY about the device the CLIENT mentioned. Do not introduce a different 
 
 # EDITABLE decision rules (meta.agent_decision_rules) — HOW to act / where to get
 # data / what data we have. Default in English; tenant can fully override in panel.
-DEFAULT_DECISION_RULES = """Decision rules (how to act, where to get data):
-- Greetings, thanks, small talk, emotions → "answer" immediately. NEVER search for greetings.
-- A problem description ("не вмикається", "слабо тягне") is NOT a price question — accept it, ask the model; do not pull prices.
-- "do you repair/sell X?" → search_catalog (it lists our categories to confirm or deny).
-- Prices/availability/services of OUR business → search_catalog first. The internet is NOT our price source.
-- Price of a SPARE PART for a model not in our catalog → search_parts (external supplier sites = third-party market price, not ours).
-- Technical specs / repair data missing internally → web_research. Our address/hours/payment → get_business_info.
-- Search queries: use Ukrainian for local shops/prices, English for worldwide specs; reformulate if nothing found.
-- Never answer a substantive question from memory while [GATHERED FACTS] is empty — pick a tool. If a needed model/detail is missing → "answer" to ask the client."""
+DEFAULT_DECISION_RULES = """Decision rules — choose the next action from the CONVERSATION CONTEXT. Use a tool ONLY when you actually need that data. Do not pile up context.
+- FIRST understand the intent from the whole conversation. Only when you clearly understand WHAT the client wants do you search the relevant source. If the message is vague/ambiguous → action "answer" and ask a short clarifying question — do NOT search blindly.
+- Greeting / small talk / emotion → answer (no search).
+- The client describes a broken device or wants to bring it in, and did NOT ask a price → if unsure, search_catalog once to check we service this TYPE; then answer: confirm "так, ремонтуємо" (if yes) and ask WHAT exactly is wrong / the model. Do NOT quote any prices — they weren't asked.
+- First understand WHAT is broken (the symptom/part). Only when the concrete service is clear AND the client asks about price → search_catalog for THAT one service and give a single orientation range. NEVER dump the whole price list / all prices.
+- "do you repair X?" → search_catalog to confirm → answer yes/no, no prices.
+- If the device is UNKNOWN / not in our catalog → web_research to learn what it is; if it belongs to a category we repair (e.g. small home appliance / дрібна побутова) → offer to bring it in for diagnostics.
+- Price of a SPARE PART not in our catalog → search_parts / web_research for the market price.
+- STEP BY STEP: if one source returns nothing, try the NEXT relevant source. If nothing is found anywhere, answer honestly «не знайшов / треба глянути на місці» — NEVER invent prices or links.
+- get_business_info for our address/hours/payment/delivery. memory_patch: remember the device model / stage so you don't re-ask."""
 
 # Default final-answer style. Editable per tenant via meta.answer_style
 # (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
-DEFAULT_ANSWER_STYLE = """--- WRITE THE REPLY TO THE CLIENT ---
-Now just talk to the client in warm, natural, conversational Ukrainian, in YOUR own style (as described above): short, human, light humour/banter where it fits. NOT robotic, not templated, not bureaucratic. A real person is on the other side, not a form.
-Keep in mind (do not read these out):
-- Use prices/facts ONLY from what was gathered above. If absent — do not invent: say so honestly, ask for the model, or "гляну на місці".
-- CRITICAL: NEVER invent links/URLs or shop names. Give a link ONLY if it literally appears in the gathered facts (a real URL line). If there is no link in the facts — do NOT write any. Same for prices: no numbers unless they are in the facts. If you see "[NO WEB DATA]" — tell the client you couldn't find it now; do NOT fabricate.
-- Present a market part price as "глянув у постачальників, приблизно стільки" (+ a link if available), separate from our labour.
-- Do NOT dump prices / the price list unless the client explicitly asked about price. For "it's broken / do you fix it" — just "так, робимо, а що саме не так?". Quote prices ONLY when asked.
-- REPHRASE catalog/DB data in your own words for the context — never paste the price list verbatim.
-- Output ONLY the client message itself, in Ukrainian. No English, no service markers, no internal category names, no "X–Y" placeholders."""
+DEFAULT_ANSWER_STYLE = """--- WRITE THE CLIENT REPLY ---
+Reply in Ukrainian, address the client formally ("Ви"), in your persona's voice. A real person is on the other side.
+- SHORT: 1, maximum 2 sentences. One simple question at a time. Lead the conversation step by step.
+- Mentally fix the client's typos/slang and understand the intent; never comment on their spelling.
+- Do NOT list possible faults/options and do NOT add extras ("привозьте", "діагностика безкоштовна", addresses, prices) until that step is actually relevant.
+- "do you repair/have X?" → just "Так, ремонтуємо/є. Що саме?" — nothing more.
+- Prices/links ONLY from the gathered facts and ONLY when the client asked. Give ONE relevant price, never the whole list. Exact price after inspection.
+- If a part price/link was NOT found: "Зараз не можу знайти потрібну запчастину. Як привезете — інженер гляне точну модель запчастини і погодимо ціну ремонту." NEVER invent prices, shops or links.
+- Never expose internal tools, catalog/category names, JSON, English, or "[...]" markers."""
 
 
 _JUNK_PATTERNS = [
@@ -412,32 +413,10 @@ async def run_agent(
     if "search_catalog" in enabled_tools and "list_categories" not in enabled_tools:
         enabled_tools.append("list_categories")
 
-    # Tenant-editable phrase triggers / synonyms (panel). Defaults from code.
-    t_price = _parse_csv_set(meta.get("price_triggers"), _PRICE_WORDS)
-    t_cap = _parse_csv_set(meta.get("capability_triggers"), _CAPABILITY_WORDS)
-    t_binfo = _parse_csv_set(meta.get("business_info_triggers"), _BUSINESS_INFO_TRIGGERS)
-    t_brands = _parse_csv_set(meta.get("brand_words"), _BRANDS)
-    t_parts = _parse_csv_set(meta.get("part_words"), _PART_WORDS)
+    # Catalog synonyms (panel-editable) — used to match the client's everyday
+    # words to the price list. The MODEL decides routing now (via the prompt),
+    # so the old phrase-trigger heuristics are gone.
     syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), _CATALOG_SYNONYMS)
-
-    def wants_price(t):
-        return any(w in (t or "").lower() for w in t_price)
-
-    def asks_capability(t):
-        return any(w in (t or "").lower() for w in t_cap)
-
-    def looks_business_info(t):
-        return any(w in (t or "").lower() for w in t_binfo)
-
-    def looks_specific_part(t, hist=None):
-        blob = (t or "").lower()
-        if hist:
-            for h in hist[-4:]:
-                blob += " " + str(h.get("content", "")).lower()
-        has_brand = any(b in blob for b in t_brands)
-        has_part = any(p in blob for p in t_parts)
-        has_number = bool(re.search(r"\b\d{1,4}\b", blob))
-        return has_brand and (has_part or has_number)
 
     async def catalog(q):
         return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map)
@@ -503,7 +482,6 @@ async def run_agent(
     memory = dict(memory or {})
     gathered = []          # [(action, query, result)]
     actions_done = set()
-    forced_lookup_done = False
     # Strict JSON for the router (cloud models). Disable per-tenant if needed.
     use_json_mode = bool(meta.get("router_json_mode", True))
 
@@ -571,19 +549,14 @@ async def run_agent(
                    "прямого збігу немає", "категорії послуг (оберіть"]
         return any(m in low for m in markers)
 
-    # Persistent per-chat lookup memory (survives between messages): things the
-    # agent already searched this conversation, so it doesn't repeat them and can
-    # fall back to them. Service keys start with "_" and are hidden from display.
-    chat_facts = list(memory.get("_facts", []))  # [{tool, query, summary}]
-
+    # Chat memory = only the short durable facts the model itself saved
+    # (memory_patch: device model, stage). No raw lookup dumps carried over — that
+    # was the context bloat that caused hallucinations.
     def build_context_block() -> str:
         parts = []
         visible = {k: v for k, v in memory.items() if not k.startswith("_")}
         if visible:
             parts.append("[CHAT MEMORY]\n" + "\n".join([f"- {k}: {v}" for k, v in visible.items()]))
-        if chat_facts:
-            lines = [f"- {f['tool']}('{f['query']}') → {f['summary']}" for f in chat_facts]
-            parts.append("[ALREADY CHECKED THIS CHAT — do NOT repeat these lookups, reuse the result]\n" + "\n".join(lines))
         if gathered:
             facts = []
             for action, query, result in gathered:
@@ -658,128 +631,40 @@ async def run_agent(
              f"action={action}, query='{query}'\nreason: {decision.get('reason', '')}\nmemory_patch: {json.dumps(patch, ensure_ascii=False)}\nТокени: {usage.get('total_tokens', 0)}",
              f"{time.time() - t0:.2f}s")
 
+        # The MODEL decides (per the decision rules in the prompt). The engine only
+        # runs the tool and feeds the result back — no hardcoded forcing/branching.
         if action == "answer" or action not in enabled_tools:
-            # Safety net for small local models: if it wants to answer a
-            # substantive question without having gathered ANY facts, force a
-            # catalog + knowledge sweep first, then let it decide again with
-            # facts in hand. Prevents answering services/prices from memory.
-            # Business-facts questions (hours, address, payment...) need
-            # get_business_info, not the catalog/web sweep.
-            if (action == "answer" and not forced_lookup_done
-                    and looks_business_info(text) and "get_business_info" in enabled_tools):
-                forced_lookup_done = True
-                r = _tool_get_business_info(text, settings)
-                gathered.append(("get_business_info", text, r))
-                actions_done.add("get_business_info")
-                emit(f"AGENT GUARD #{iteration}", "get_business_info (forced)", str(r)[:800])
-                continue
-
-            # Specific model + part (e.g. «айфон 17 екран», «модуль на 15 про») →
-            # ALWAYS go to the market, the model won't do it on its own. The
-            # catalog has no exact price for a specific new model.
-            if (action == "answer" and not forced_lookup_done
-                    and looks_specific_part(text, history)
-                    and (("search_parts" in enabled_tools and parts_sites) or "web_research" in enabled_tools)):
-                forced_lookup_done = True
-                # quick catalog peek for our labour, then market price
-                if "search_catalog" in enabled_tools:
-                    rc = await catalog(text)
-                    gathered.append(("search_catalog", text, rc))
-                    actions_done.add("search_catalog")
-                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(rc)[:800])
-                if parts_sites and "search_parts" in enabled_tools:
-                    rp = await _do_search_parts(text)
-                    gathered.append(("search_parts", text, rp))
-                    actions_done.add("search_parts")
-                    emit(f"AGENT TOOL #{iteration}", "search_parts (forced)", str(rp)[:800])
-                elif "web_research" in enabled_tools:
-                    rw = await _do_web_research(text)
-                    gathered.append(("web_research", text, rw))
-                    actions_done.add("web_research")
-                    emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(rw)[:800])
-                continue
-
-            # Capability question ("чи ремонтуєте X?", no price) → a single light
-            # catalog check is enough to confirm we do it. NO web, NO knowledge,
-            # no waterfall. Don't repeat if the model already searched.
-            already_catalog = any(a == "search_catalog" for a, _, _ in gathered)
-            if (action == "answer" and not forced_lookup_done
-                    and asks_capability(text) and not wants_price(text)
-                    and "search_catalog" in enabled_tools):
-                forced_lookup_done = True
-                if not already_catalog:
-                    r = await catalog(text)
-                    # Capability question — we only need YES/NO that we do it, NOT
-                    # the prices. Inject a price-free verdict so the model can't
-                    # dump the price list when nobody asked.
-                    available = not _is_empty(r) or "категорії послуг" in r.lower()
-                    verdict = ("[AVAILABILITY: yes, we do this type of device/service. Answer briefly «так, робимо» "
-                               "and ask WHAT EXACTLY is wrong / the model. Do NOT quote any prices — the client didn't ask.]"
-                               if available else
-                               "[AVAILABILITY: no exact catalog match. Check the site/internet or honestly say you'll "
-                               "verify. No prices.]")
-                    gathered.append(("availability_check", text, verdict))
-                    actions_done.add("search_catalog")
-                    emit(f"AGENT TOOL #{iteration}", "availability_check (forced, capability)", verdict)
-                continue
-
-            # Price question → catalog (+ knowledge), and the market only if the
-            # catalog has no real price. Reuse the model's own search if it did one.
-            if (action == "answer" and not forced_lookup_done
-                    and wants_price(text)
-                    and ("search_catalog" in enabled_tools or "web_research" in enabled_tools)):
-                forced_lookup_done = True
-                emit(f"AGENT GUARD #{iteration}", "Примусовий пошук", "Запит ціни — каталог → (інтернет якщо нема)")
-                catalog_hit = any(not _is_empty(r) for a, _, r in gathered if a == "search_catalog")
-                if "search_catalog" in enabled_tools and not already_catalog:
-                    r = await catalog(text)
-                    gathered.append(("search_catalog", text, r))
-                    actions_done.add("search_catalog")
-                    catalog_hit = not _is_empty(r)
-                    emit(f"AGENT TOOL #{iteration}", "search_catalog (forced)", str(r)[:600])
-                if not catalog_hit:
-                    if parts_sites and "search_parts" in enabled_tools:
-                        r = await _do_search_parts(text)
-                        gathered.append(("search_parts", text, r))
-                        actions_done.add("search_parts")
-                        emit(f"AGENT TOOL #{iteration}", "search_parts (forced)", str(r)[:600])
-                    elif "web_research" in enabled_tools:
-                        r = await _do_web_research(text)
-                        gathered.append(("web_research", text, r))
-                        actions_done.add("web_research")
-                        emit(f"AGENT TOOL #{iteration}", "web_research (forced)", str(r)[:600])
-                continue
             break
 
-        # Allow repeating catalog/web/open_url with a DIFFERENT query (step-by-step
-        # drill-down). Block only an identical repeat to avoid loops.
-        repeatable = {"search_catalog", "search_knowledge", "web_research", "open_url"}
+        # Block only an IDENTICAL repeat (same action+query) to avoid loops; a
+        # different query is allowed (step-by-step search until something is found).
         action_key = f"{action}:{query.lower().strip()}"
-        if action in actions_done and action not in repeatable:
-            emit(f"AGENT TOOL #{iteration}", "Пропущено", f"'{action}' вже виконувався цього ходу")
-            break
         if action_key in actions_done:
             emit(f"AGENT TOOL #{iteration}", "Пропущено", f"'{action}' з тим самим запитом вже виконувався")
             break
-        actions_done.add(action)
         actions_done.add(action_key)
 
-        # Execute tool
+        # Execute tool. Each result is wrapped with a MINI-PROMPT (how to read it)
+        # so the model knows what the data means and how to use it.
         t0 = time.time()
         if action == "list_categories":
-            result = await _tool_list_categories(tenant_id, db)
+            result = "[OUR SERVICE AREAS — what we do. If the client's item fits one, we handle it.]\n" + await _tool_list_categories(tenant_id, db)
         elif action == "search_catalog":
-            result = await _tool_search_catalog(query or text, tenant_id, db)
+            raw = await catalog(query or text)
+            if _is_empty(raw):
+                result = "[OUR CATALOG: no exact match. It does NOT prove we don't do it — check the site/web or ask. Do not quote prices.]\n" + raw
+            else:
+                result = "[OUR PRICES (ours). Use ONE relevant price only if the client asked about price; otherwise just confirm we do it.]\n" + raw
         elif action == "search_knowledge":
-            result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
+            result = "[OUR KNOWLEDGE BASE (FAQ/conditions). Rephrase in your own words.]\n" + await _tool_search_knowledge(query or text, tenant_id, db, settings)
         elif action == "search_parts":
-            result = await _do_search_parts(query or text)
+            result = await _do_search_parts(query or text)  # already labelled inside
         elif action == "web_research":
-            result = await _do_web_research(query or text)
+            result = await _do_web_research(query or text)  # already labelled inside
         elif action == "open_url":
             result = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
         elif action == "get_business_info":
-            result = _tool_get_business_info(query, settings)
+            result = "[OUR BUSINESS FACTS (address/hours/payment). Give only what was asked.]\n" + _tool_get_business_info(query, settings)
         elif action == "escalate":
             escalated = True
             result = meta.get("tpl_escalate_instruction", "[INSTRUCTION]: The client wants a human. Inform them you are transferring the conversation to a live operator.")
@@ -811,12 +696,6 @@ async def run_agent(
     escalation_prompt = settings.escalation_prompt if settings and settings.escalation_prompt else ""
     if escalation_prompt:
         sys_prompt += "\n\n[IF THE ANSWER IS MISSING FROM THE FACTS]\nUse this guidance in your own words: " + escalation_prompt
-    # Deterministic price gate: if the client did NOT ask a price in THIS message,
-    # forbid quoting any numbers — just confirm and ask what's wrong.
-    if not wants_price(text):
-        sys_prompt += ("\n\n[IMPORTANT: the client did NOT ask about price in this message. Do NOT state any "
-                       "amounts, ranges or the price list, even if present in the facts. Just confirm humanly "
-                       "(«так, робимо») and ask what exactly is wrong / which model.]")
     # Tone of the final reply — editable per tenant (panel), default in code.
     answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
     sys_prompt += "\n\n" + answer_style
@@ -841,25 +720,8 @@ async def run_agent(
         base_url=base_url, api_key=api_key, raise_error=True
     )
     answer = _clean_answer(answer)
-
-    # Persist this turn's lookups into per-chat memory so the next message can
-    # reuse them and the agent won't repeat the same searches.
-    for action, query, result in gathered:
-        if action in ("escalate",) or not result:
-            continue
-        summary = " ".join(str(result).split())[:300]
-        chat_facts.append({"tool": action, "query": (query or text)[:80], "summary": summary})
-    if chat_facts:
-        # keep the most recent unique-ish lookups, cap size to bound tokens
-        seen = set()
-        deduped = []
-        for f in reversed(chat_facts):
-            key = f"{f['tool']}:{f['query'].lower()}"
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(f)
-        memory["_facts"] = list(reversed(deduped[:12]))
-
-    emit("AGENT ANSWER", "OK", f"Кроків циклу: {len(gathered)}, пам'ять чату: {len(memory.get('_facts', []))} знахідок", f"{time.time() - t0:.2f}s")
+    # Only memory_patch (short durable facts) persists between messages — no raw
+    # lookup dumps. Keeps the next turn's context clean.
+    memory.pop("_facts", None)
+    emit("AGENT ANSWER", "OK", f"Кроків циклу: {len(gathered)}", f"{time.time() - t0:.2f}s")
     return answer, memory
