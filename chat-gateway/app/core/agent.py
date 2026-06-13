@@ -77,7 +77,8 @@ DEFAULT_DECISION_RULES = """Decision rules — choose the next action from the C
 - If the device is UNKNOWN / not in our catalog → web_research to learn what it is; if it belongs to a category we repair (e.g. small home appliance / дрібна побутова) → offer to bring it in for diagnostics.
 - Price of a SPARE PART not in our catalog → search_parts / web_research for the market price.
 - STEP BY STEP: if one source returns nothing, try the NEXT relevant source. If nothing is found anywhere, answer honestly «не знайшов / треба глянути на місці» — NEVER invent prices or links.
-- get_business_info for our address/hours/payment/delivery. memory_patch: remember the device model / stage so you don't re-ask."""
+- get_business_info for our address/hours/payment/delivery.
+- After a search, keep ONLY what matters: save the key fact (e.g. found price, chosen part) into memory_patch in a few words. Do NOT carry over raw dumps."""
 
 # Default final-answer style. Editable per tenant via meta.answer_style
 # (Налаштування → «Стиль відповіді»). This is TONE, not engine mechanics.
@@ -559,6 +560,39 @@ async def run_agent(
             return header + (res or "ринкову ціну не знайдено.")
         return header + res
 
+    async def _condense(raw: str, label: str = "") -> str:
+        """Keep ONLY the facts relevant to the client's request — a cleaned,
+        compact extract — instead of the raw parsed page (context hygiene).
+        Preserves the leading [..] label/instruction untouched."""
+        if not raw or len(raw) < 600:
+            return raw  # already small — keep as is
+        prefix = ""
+        m = re.match(r"^(\[[^\]]*\]\s*)", raw, re.DOTALL)
+        body = raw
+        if m:
+            prefix = m.group(1)
+            body = raw[len(prefix):]
+        if len(body) < 400:
+            return raw
+        extract_sys = (
+            "Extract ONLY the facts relevant to the client's request from the data below. "
+            "Keep concrete prices (with currency), availability, and at most 1-2 real product URLs. "
+            "Be very concise: max 6 short lines, plain facts, no commentary. Keep any leading [..] label/instruction. "
+            "If nothing relevant is present, output exactly 'нічого релевантного'."
+        )
+        msgs = [
+            {"role": "system", "content": extract_sys},
+            {"role": "user", "content": f"Client request: {text}\nLabel: {label}\nData:\n{body[:5000]}"},
+        ]
+        try:
+            out = await chat(msgs, model=model_name, temperature=0.0, max_tokens=220,
+                             base_url=base_url, api_key=api_key, raise_error=True)
+            extracted = (out or "").strip()
+            return prefix + (extracted or body[:500])
+        except Exception as e:
+            logger.warning(f"condense failed: {e}")
+            return prefix + body[:600]
+
     def _is_empty(result: str) -> bool:
         """True if a tool returned no useful facts (only emptiness markers)."""
         if not result:
@@ -677,13 +711,15 @@ async def run_agent(
             else:
                 result = "[OUR PRICES (ours). Use ONE relevant price only if the client asked about price; otherwise just confirm we do it.]\n" + raw
         elif action == "search_knowledge":
-            result = "[OUR KNOWLEDGE BASE (FAQ/conditions). Rephrase in your own words.]\n" + await _tool_search_knowledge(query or text, tenant_id, db, settings)
+            raw = await _tool_search_knowledge(query or text, tenant_id, db, settings)
+            result = "[OUR KNOWLEDGE BASE (FAQ/conditions). Rephrase in your own words.]\n" + await _condense(raw, "knowledge")
         elif action == "search_parts":
-            result = await _do_search_parts(query or text)  # already labelled inside
+            result = await _condense(await _do_search_parts(query or text), "external part price")
         elif action == "web_research":
-            result = await _do_web_research(query or text)  # already labelled inside
+            result = await _condense(await _do_web_research(query or text), "web")
         elif action == "open_url":
-            result = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
+            raw = await asyncio.to_thread(fetch_and_parse_url, query) if query.startswith("http") else "open_url потребує повного URL у query."
+            result = await _condense(raw, "page")
         elif action == "get_business_info":
             result = "[OUR BUSINESS FACTS (address/hours/payment). Give only what was asked.]\n" + _tool_get_business_info(query, settings)
         elif action == "escalate":
