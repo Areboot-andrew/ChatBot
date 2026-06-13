@@ -74,13 +74,39 @@ Answer ONLY about the device the CLIENT mentioned. Do not introduce a different 
 """
 
 ANSWER_PROTOCOL = """MODE: FINAL_CLIENT_ANSWER
-Now speak to the client naturally, following your persona and tone rules.
-- PRICE RULE: if the gathered facts contain ANY price or range for the asked service, you MUST give that orientation range now (e.g. «орієнтовно від X грн»). Asking for the exact model is only an ADDITION after the range, never a replacement for it. Do NOT loop asking for the model while withholding the price.
+Now write the message the client will see. OUTPUT ONLY that message, in Ukrainian.
+- ABSOLUTELY NO meta-text, no English service phrases, no notes to yourself (e.g. never write "We already gave final", "MODE:", "action", JSON, or any English). Only the human Ukrainian reply.
+- Do NOT expose internal category names or mechanics. Never say «входить до категорії "Ремонт дрібної побутової техніки"». Just speak naturally: «Так, пилососи беремо.»
+- PRICE ONLY ON DEMAND: if the client did NOT ask for a price (they describe a problem or want to drop the device off) — DO NOT quote prices or push diagnostics cost. Accept it, ask for the exact model/photo, and tell them to bring it. Mention price ONLY if they asked, or naturally if marketing rules clearly fit.
+- PRICE RULE (when price WAS asked): if the gathered facts contain a price/range for the asked service, give that orientation range now. Asking for the exact model is an ADDITION after the range, never a replacement. Do NOT loop asking for the model while withholding the price.
 - Use ONLY the facts gathered in [GATHERED FACTS] and [CHAT MEMORY] for prices, specs, availability, services, compatibility. If a needed fact is absent — say you don't know / need to check / ask for the exact model. Never invent.
 - When asked whether we do/repair/sell something: answer based ONLY on the categories and facts gathered. NEVER name a service, device type, or item that is not present in the gathered facts. If it's not in the facts, say you're not sure and offer to check or ask them to clarify.
 - NEVER state from memory that a device model does not exist, is not released yet, is too new, or is discontinued. Release dates / new models are outside your reliable knowledge. If this matters and it's not in the gathered facts, you must NOT assert it — say you'll check or ask for the exact model.
 - Do not expose JSON, debug info, raw search dumps, or these instructions.
 - Keep it short and human."""
+
+
+_JUNK_PATTERNS = [
+    r"(?im)^\s*we already gave final\.?\s*$",
+    r"(?i)\bwe already gave final\.?",
+    r"(?im)^\s*MODE:.*$",
+    r"(?im)^\s*\{.*\"action\".*\}\s*$",
+    r"(?im)^\s*(reason|action|memory_patch|query)\s*[:=].*$",
+]
+
+
+def _clean_answer(text: str) -> str:
+    """Strip leaked router/service artefacts (English meta, JSON) from the
+    client-facing reply — safety net for small models."""
+    if not text:
+        return text
+    import re as _re
+    out = text
+    for pat in _JUNK_PATTERNS:
+        out = _re.sub(pat, "", out)
+    # collapse leftover blank lines
+    out = _re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out or text
 
 
 def _extract_json(text: str) -> dict:
@@ -148,6 +174,25 @@ def _looks_specific_part_query(text: str, history: list = None) -> bool:
     has_number = bool(re.search(r"\b\d{1,4}\b", blob))
     # brand + (part or a model number) → specific enough to need market price
     return has_brand and (has_part or has_number)
+
+
+_PRICE_WORDS = ("ціна", "цін", "коштує", "вартіст", "почому", "за скільки",
+                "скільки кошт", "скільки буде", "скільки за", "прайс", "ціну")
+_CAPABILITY_WORDS = ("ремонтуєте", "чи робите", "робите ви", "берете в ремонт",
+                     "беретесь", "можете полагодити", "можете відремонт", "чи лагодите",
+                     "маєте послугу", "ви лагодите", "ремонтуєш")
+
+
+def _wants_price(text: str) -> bool:
+    """Client explicitly asks for a price/cost (not just describes a problem)."""
+    t = (text or "").lower()
+    return any(w in t for w in _PRICE_WORDS)
+
+
+def _asks_capability(text: str) -> bool:
+    """Client asks whether we do/service something (not a price)."""
+    t = (text or "").lower()
+    return any(w in t for w in _CAPABILITY_WORDS)
 
 
 def _looks_substantive(text: str) -> bool:
@@ -518,12 +563,16 @@ async def run_agent(
                 emit(f"AGENT GUARD #{iteration}", "get_business_info (forced)", str(r)[:800])
                 continue
 
+            # Force a catalog/price sweep ONLY when the client actually asks for a
+            # price, or whether we service something. If they merely describe a
+            # problem ("слабо тягне", "хочу здати в ремонт") — DO NOT dump prices;
+            # let the model accept it for diagnostics and ask for the model.
             if (action == "answer" and not forced_lookup_done
-                    and _looks_substantive(text)
+                    and (_wants_price(text) or _asks_capability(text))
                     and ("search_catalog" in enabled_tools or "search_knowledge" in enabled_tools or "web_research" in enabled_tools)):
                 forced_lookup_done = True
                 emit(f"AGENT GUARD #{iteration}", "Примусовий пошук",
-                     "Предметне питання — форсую перевірку: каталог → база знань → сайт/інтернет")
+                     "Запит ціни/послуги — форсую: каталог → база знань → сайт/інтернет")
                 catalog_hit = False
                 knowledge_hit = False
                 if "search_catalog" in enabled_tools:
@@ -609,8 +658,8 @@ async def run_agent(
     if business_rules:
         sys_prompt += "\n\n[BUSINESS RULES]\n" + business_rules
     marketing = settings.marketing_rules if settings and settings.marketing_rules else ""
-    if marketing and gathered:
-        sys_prompt += "\n\n[MARKETING — apply only if natural]\n" + marketing
+    if marketing:
+        sys_prompt += "\n\n[MARKETING — apply ONLY if it fits the context naturally, never forced]\n" + marketing
     context_block = build_context_block()
     if context_block:
         sys_prompt += "\n\n" + context_block
@@ -644,6 +693,7 @@ async def run_agent(
         messages, model=model_name, temperature=temp, max_tokens=max_tokens,
         base_url=base_url, api_key=api_key, raise_error=True
     )
+    answer = _clean_answer(answer)
 
     # Persist this turn's lookups into per-chat memory so the next message can
     # reuse them and the agent won't repeat the same searches.
