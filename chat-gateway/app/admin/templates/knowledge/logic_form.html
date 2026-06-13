@@ -25,9 +25,15 @@
             <input type="text" name="intent_patterns" id="intent_patterns" value="{{ logic.intent_patterns|join(', ') if logic and logic.intent_patterns else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
         </div>
 
+        <div>
+            <label for="reasoning" class="block mb-2 text-sm font-medium text-gray-300">Інструкція міркування для моделі (узагальнення)</label>
+            <p class="text-xs text-gray-500 mb-2">Опишіть словами, як модель має думати над цим класом питань. Можна писати шаблон зі слотом у фігурних дужках, напр. <code>{прилад}</code> — модель сама підставить що сказав клієнт (міксер, блендер...). Приклад: «Питання типу "ви ремонтуєте {прилад}". Витягни назву приладу. Якщо не знаєш що це — знайди в інтернеті його категорію. Перевір каталог і сайт. Якщо це електроніка чи побутова техніка — ми ремонтуємо. Не відмовляй без перевірки.»</p>
+            <textarea name="reasoning" id="reasoning" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Питання типу «ви ремонтуєте {прилад}». Витягни {прилад}, зрозумій що це за пристрій (загугли якщо треба), перевір каталог і сайт, і тільки тоді відповідай.">{{ logic.meta.get('reasoning', '') if logic and logic.meta else '' }}</textarea>
+        </div>
+
         <div class="p-4 bg-gray-950 border border-gray-800 rounded-lg space-y-4">
             <h4 class="text-sm font-semibold text-gray-200">Ланцюг обробки (Як шукати інформацію)</h4>
-            
+
             <div>
                 <label for="handler" class="block mb-2 text-sm font-medium text-gray-300">Дія бота</label>
                 <select id="handler" name="handler" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">

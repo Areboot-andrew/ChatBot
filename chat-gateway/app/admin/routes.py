@@ -1246,6 +1246,7 @@ async def logic_create(
     target_category: str = Form(""),
     target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
+    reasoning: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -1253,7 +1254,7 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-        meta_data = {"target_category": target_category, "fallback_action": fallback_action, "target_url": target_url}
+        meta_data = {"target_category": target_category, "fallback_action": fallback_action, "target_url": target_url, "reasoning": reasoning.strip()}
         logic = KnowledgeType(tenant_id=tenant_id, label=label, code=code, intent_patterns=patterns, handler=handler, enabled=enabled, meta=meta_data)
         db.add(logic)
         await db.commit()
@@ -1286,6 +1287,7 @@ async def logic_edit(
     target_category: str = Form(""),
     target_url: str = Form(""),
     fallback_action: str = Form("escalate"),
+    reasoning: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -1304,6 +1306,7 @@ async def logic_edit(
             meta_data["target_category"] = target_category
             meta_data["fallback_action"] = fallback_action
             meta_data["target_url"] = target_url
+            meta_data["reasoning"] = reasoning.strip()
             logic.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified

@@ -232,14 +232,25 @@ async def run_agent(
         hint_lines = []
         for kt in res_kt.scalars().all():
             tool_hint = _HANDLER_TO_TOOL.get(kt.handler)
-            if not tool_hint:
+            reasoning = (kt.meta.get("reasoning") if kt.meta else "") or ""
+            # Keep an intent even without a known tool if it carries a reasoning
+            # template (generalization rule the model should follow).
+            if not tool_hint and not reasoning:
                 continue
             if kt.handler == "site_search" and kt.meta and kt.meta.get("target_url"):
                 tool_hint = f"open_url ({kt.meta['target_url']})"
             patterns = ""
             if kt.intent_patterns:
                 patterns = " Trigger phrases: " + ", ".join(kt.intent_patterns[:6]) + "."
-            hint_lines.append(f"- {kt.label or kt.code}: use {tool_hint}.{patterns}")
+            line = f"- {kt.label or kt.code}:"
+            if tool_hint:
+                line += f" use {tool_hint}."
+            line += patterns
+            if reasoning:
+                # Slot templates like "ви ремонтуєте {прилад}" tell the model to
+                # extract the slot and reason about it before searching.
+                line += f" How to reason: {reasoning}"
+            hint_lines.append(line)
         if hint_lines:
             router_protocol += "\n[TENANT ROUTING HINTS]\n" + "\n".join(hint_lines)
     except Exception as e:
