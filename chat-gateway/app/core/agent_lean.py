@@ -74,14 +74,20 @@ async def _load_routes(tenant_id, db):
 
 
 def _source_map(routes: dict) -> str:
-    """Compact router map from the tenant's own routes — a few lines, no essays."""
-    lines = ["Decide the NEXT step. Reply with ONE compact JSON line only:",
-             '{"route":"<route code or empty>","action":"<route code | answer>"}',
-             "", "Available routes (pick the one whose data answers the client; else answer):"]
+    """Strict router map from the tenant's own routes — a few lines, no essays."""
+    lines = [
+        "You are a ROUTER. You are NOT the assistant. You NEVER write a message to the client here.",
+        'Output EXACTLY one JSON line and nothing else:  {"route":"<route code or answer>"}',
+        "NEVER write an address, working hours, phone or price yourself. If the client needs such a",
+        "fact, pick the route that provides it — the client reply is written by a different stage.",
+        "",
+        "Routes (pick the one whose data answers the client's CURRENT message):",
+    ]
     for r in routes.values():
         trig = ", ".join(r["triggers"][:6])
-        lines.append(f"- {r['code']} — {r['label']}." + (f" Triggers: {trig}." if trig else ""))
-    lines.append("- answer — reply now: greeting, small talk, off-topic, or you already have the facts.")
+        lines.append(f'- "{r["code"]}" — {r["label"]}.' + (f" Triggers: {trig}." if trig else ""))
+    lines.append('- "answer" — ONLY for a greeting, small talk, off-topic, or when the needed fact is '
+                 "already in [FACTS YOU ALREADY HAVE]. Never pick answer for a fact you still need.")
     return "\n".join(lines)
 
 
@@ -147,11 +153,13 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # 1) DECIDE — ONLY the route map + chat + cleaned facts. No persona, no
         # behaviour/tone/conduct rules — routing doesn't need them, and dragging
         # them is exactly what bloated the context. Tone lives only in ANSWER.
-        sys = "[ROUTER MODE — not talking to the client, just pick the next step]\n" + source_map
+        sys = source_map
         if facts:
             sys += "\n\n[FACTS YOU ALREADY HAVE]\n" + "\n".join(facts)
+        # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
-        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.1, 120, retry=True)
+        dmsgs.append({"role": "system", "content": 'Now output only the JSON, e.g. {"route":"<code>"} or {"route":"answer"}.'})
+        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 60, retry=True)
         emit(f"DECIDE #{step}", "Сире рішення", str(raw))
         try:
             decision = _extract_json(raw)
@@ -179,9 +187,17 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
+    # The business's own contact card — tiny, always available so the model can
+    # never invent an address/hours/phone (rule #1). Real data, not a base dump.
+    biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
+    if biz:
+        biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
+        if biz_lines:
+            ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "
+                        "delivery. Use these exact values; never invent or alter. State only what was asked.]\n" + biz_lines)
     if facts:
         ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
-                    "Never invent an address, price, phone or schedule not listed here.]\n" + "\n".join(facts))
+                    "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
