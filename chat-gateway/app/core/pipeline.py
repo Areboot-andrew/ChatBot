@@ -85,8 +85,11 @@ async def process_message_pipeline(
 
     # --- AGENT ENGINE (Givi-style action loop) ---
     engine = (settings.meta.get("engine") if settings and settings.meta else None) or "agent"
-    if engine == "agent":
-        from app.core.agent import run_agent
+    if engine in ("agent", "lean"):
+        if engine == "lean":
+            from app.core.agent_lean import run_agent_lean as run_agent
+        else:
+            from app.core.agent import run_agent
         from app.core.history import MemoryManager
         memory = await MemoryManager.get_memory(chat_key) if chat_key else {}
         if memory.get("_session_banned") == "1":
