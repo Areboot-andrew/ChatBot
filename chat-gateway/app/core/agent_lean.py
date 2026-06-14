@@ -233,17 +233,23 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True)
-        emit(f"DECIDE #{step}", "Сире рішення", str(raw))
+        emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
         try:
             decision = _extract_json(raw)
         except Exception:
+            emit(f"DECIDE #{step}", "Не JSON → відповідаю",
+                 "Контролер віддав не-JSON (проза/порожньо). Поправте lean_controller_prompt, "
+                 "щоб віддавав лише JSON. Переходжу до стадії відповіді.")
             decision = {"action": "answer"}
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
         if pick in ("answer", "") or pick not in routes:
+            emit(f"DECIDE #{step}", "Рішення: відповідь", f"route/answer = '{pick or 'answer'}'")
             break
         if pick in done:
+            emit(f"DECIDE #{step}", "Стоп", f"роут '{pick}' уже використано цього ходу")
             break
         done.add(pick)
+        emit(f"DECIDE #{step}", "Обрано роут", pick)
         route = routes[pick]
 
         route_request = {
@@ -286,16 +292,18 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         answer_tokens = min(1200, max(120, int(settings.max_tokens or 700))) if settings else 700
     except (ValueError, TypeError):
         answer_tokens = 700
-    answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True)
+    raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True)
+    emit("ANSWER", "Сира відповідь моделі", str(raw_answer) or "[порожньо — модель нічого не повернула]")
     safe_fallback = (settings.fallback_text if settings and settings.fallback_text else "").strip() \
         or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
-    answer = _clean_answer(answer, fallback=safe_fallback)
+    answer = _clean_answer(raw_answer, fallback=safe_fallback)
     # Hard guard: never send an empty / None / placeholder reply to the client
     # (e.g. when the LLM server is overloaded and returns nothing).
     if not answer or str(answer).strip().lower() in ("none", "null", "undefined", "nil", "-"):
+        emit("ANSWER", "Фолбек", f"Модель віддала порожнє/None/«{str(raw_answer)[:40]}» → підставлено запасний текст.")
         answer = safe_fallback
 
-    emit("ANSWER", "OK", f"Перевірених фактів цього звернення: {len(facts)}")
+    emit("ANSWER", "OK", f"Відповідь: {len(answer)} симв. · фактів: {len(facts)}")
     return answer, memory
 
 
