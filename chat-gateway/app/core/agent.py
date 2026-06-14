@@ -722,7 +722,16 @@ async def run_agent(
     external_part_price_mode = (meta.get("external_part_price_mode") or "normal").strip()
     conduct_policy = (meta.get("conduct_policy") or "").strip() or DEFAULT_CONDUCT_POLICY
     parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
-    decision_rules += "\n\n" + intake_policy + "\n\n" + parts_instruction + "\n\n" + conduct_policy
+    # The ROUTER only needs to pick a source — keep it light so the small model
+    # reliably returns JSON. The full intake_policy / parts_instruction / conduct
+    # policy ride only the FINAL ANSWER prompt (and validation), not every router
+    # call. Conduct is kept here as a 3-line summary so banning still routes.
+    router_conduct = ("[CONDUCT]\nJudge only the current message. Frustration or profanity not aimed "
+                      "at you personally («блядь», «я тобі задаю питання», «довго») is NOT abuse — keep "
+                      "helping. Set memory_patch {\"_conduct_warning\":\"1\"} only on a direct personal "
+                      "insult or threat in THIS message; if a warning is already set and this message "
+                      "repeats a direct insult, set {\"_session_banned\":\"1\"} instead.")
+    decision_rules += "\n\n" + router_conduct
     router_protocol = (ROUTER_PROTOCOL
                        .replace("{tools_block}", tools_block)
                        .replace("{decision_rules}", decision_rules)
@@ -774,17 +783,14 @@ async def run_agent(
             patterns = ""
             if kt.intent_patterns:
                 patterns = " Trigger phrases: " + ", ".join(kt.intent_patterns[:6]) + "."
+            # Compact hint: what to use + when (triggers) + code. The verbose
+            # per-route reasoning / query_prompt essays are NOT put here — they
+            # bloat every router call and the small model only needs to PICK the
+            # route. Query format is covered by the generic ROUTER_PROTOCOL rules.
             line = f"- {kt.label or kt.code}:"
             if tool_hint:
                 line += f" use {tool_hint}."
             line += patterns
-            if reasoning:
-                # Slot templates like "ви ремонтуєте {прилад}" tell the model to
-                # extract the slot and reason about it before searching.
-                line += f" How to reason: {reasoning}"
-            query_prompt = route_configs[str(kt.code)]["query_prompt"]
-            if query_prompt:
-                line += f" How to formulate the source query: {query_prompt}"
             line += f" Route code: {kt.code}."
             hint_lines.append(line)
         if hint_lines:
