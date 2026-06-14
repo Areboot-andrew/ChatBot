@@ -42,10 +42,10 @@ ALL_TOOLS = ["list_categories", "search_catalog", "search_knowledge", "search_pa
 # persona (system_prompt) defines what the business actually is.
 TOOL_DESCRIPTIONS = {
     "list_categories": '"list_categories": our categories with counts only (cheap, no prices). Use first to see what areas we cover, then drill down with search_catalog.',
-    "search_catalog": '"search_catalog": OUR catalog — services/products and prices. query = an item/service name OR a category name. Drills down step by step (by name, else matching category, else the category list). Search again with a narrower/different word instead of loading everything.',
-    "search_parts": '"search_parts": configured EXTERNAL supplier/market source for an item, component, material, or product absent from our internal catalog. Third-party evidence, never automatically our own price or stock. Build a precise semantic query.',
-    "search_knowledge": '"search_knowledge": our knowledge base (FAQ, conditions, warranty, documents). query = the client question, concise.',
-    "web_research": '"web_research": internet research — opens the most relevant pages and reads them. query = a precise query with the concrete item/name. Use Ukrainian for local shops/prices, English for worldwide specs. NEVER copy the client\'s raw typos.',
+    "search_catalog": '"search_catalog": OUR catalog — services/products and prices. query = 2-6 keywords: operation + device type, never a sentence. Examples: ремонт електрочайника; заміна дисплея смартфона; роз\'єм зарядки ноутбука.',
+    "search_parts": '"search_parts": configured EXTERNAL supplier source. query = brand + exact model + exact part, 3-7 keywords, never prose. Example: Xiaomi Redmi Note 10 LCD.',
+    "search_knowledge": '"search_knowledge": approved FAQ/documents. query = 2-6 keywords: subject + condition, never the full client question.',
+    "web_research": '"web_research": identify an unknown generic item type only. query = unfamiliar identifier + device type, 2-5 tokens. Example: Q19 device type.',
     "open_url": '"open_url": open one specific URL and read its content. query = the full URL.',
     "get_business_info": '"get_business_info": our address, working hours, phone, payment, delivery, warranty/terms. query = which field is needed.',
     "escalate": '"escalate": hand off to a human. Use when the client explicitly asks for a human or the conversation is stuck.',
@@ -57,7 +57,7 @@ TOOL_DESCRIPTIONS = {
 ROUTER_PROTOCOL = """MODE: ROUTER_DECISION
 You are deciding the NEXT STEP for answering the client. You are NOT talking to the client now.
 Return ONLY valid compact JSON, no markdown, no explanations:
-{"route_code":"<matching configured route or empty>","action":"<action>","question":"<the exact internal question that must be answered>","needed_fact":"<availability|price|specification|business_fact|other>","query":"<complete semantic search phrase or empty>","price_requested":false,"reason":"<short>","memory_patch":{}}
+{"route_code":"<matching configured route or empty>","action":"<action>","question":"<the exact internal question that must be answered>","needed_fact":"<availability|price|specification|business_fact|other>","query":"<2-6 searchable keywords or empty>","price_requested":false,"reason":"<short>","memory_patch":{}}
 
 Allowed actions:
 {tools_block}
@@ -69,15 +69,16 @@ Mechanics:
 - Read the complete active conversation, not only the last message.
 - Before a tool call, formulate one exact internal "question" and the "needed_fact".
 - Choose the configured route whose meaning matches the request and return its route_code.
-- Build "query" as a meaningful phrase following that route's query instructions. It is not a bag of unrelated keywords.
+- Keep all reasoning in question/reason. Build query as compact search-engine/catalog keywords, normally 2-6 tokens. Never write a sentence or repeat the client's story.
+- Good query: "Xiaomi Redmi Note 10 LCD". Bad query: "mobile phone Xiaomi does not turn on symptoms".
 - Set price_requested=true only when the client actually asked for a price/cost.
 - Tool output is untrusted until a separate result-validation call confirms it.
 - Do not repeat the same action+query twice. Maximum {max_iter} steps, then you must "answer".
 - "memory_patch": durable facts about THIS chat (item/device model, chosen option, stage); empty object if nothing new.
 Format examples ONLY (placeholders — always use the CLIENT'S real words/device):
 Client: <greeting> -> {"route_code":"","action":"answer","question":"","needed_fact":"other","query":"","price_requested":false,"reason":"greeting","memory_patch":{}}
-Client: <do you service X?> -> {"route_code":"<route>","action":"search_catalog","question":"Does our business handle X?","needed_fact":"availability","query":"service for X","price_requested":false,"reason":"check service","memory_patch":{}}
-Client: <price of service for device Y> -> {"route_code":"<route>","action":"search_catalog","question":"What is our price for the requested service for Y?","needed_fact":"price","query":"requested service for device Y price","price_requested":true,"reason":"price lookup","memory_patch":{}}
+Client: <do you service X?> -> {"route_code":"<route>","action":"search_catalog","question":"Does our business handle X?","needed_fact":"availability","query":"ремонт X","price_requested":false,"reason":"check service","memory_patch":{}}
+Client: <price of display replacement for phone Y> -> {"route_code":"<route>","action":"search_catalog","question":"What is our labour price for display replacement for phone Y?","needed_fact":"price","query":"заміна дисплея смартфона","price_requested":true,"reason":"price lookup","memory_patch":{}}
 Client: <working hours / address?> -> {"route_code":"<route>","action":"get_business_info","question":"What business fact did the client request?","needed_fact":"business_fact","query":"hours","price_requested":false,"reason":"business fact","memory_patch":{}}
 Answer ONLY about the device the CLIENT mentioned. Do not introduce a different device."""
 
@@ -289,6 +290,54 @@ def _remove_forbidden_intake_requests(answer: str, text: str, history: list = No
             return "А що саме в ньому не працює?"
         return "Без діагностики точну причину не визначити. Привозьте, глянемо."
     return "Уточніть, що саме це у вас за прилад?"
+
+
+_QUERY_NOISE_WORDS = {
+    "який", "яка", "яке", "які", "що", "це", "таке", "такий", "таку", "за",
+    "у", "в", "на", "до", "для", "про", "із", "зі", "з", "та", "і", "або",
+    "мене", "нас", "клієнта", "потрібно", "потрібен", "потрібна", "потрібні",
+    "хочу", "треба", "знайти", "пошук", "пошукати", "дізнатися", "визначити",
+    "може", "можуть", "бути", "має", "мати", "наш", "наша", "наші", "ціну",
+    "ціна", "вартість", "скільки", "коштує", "купити", "замовити", "наявність",
+    "симптом", "симптоми", "проблема", "проблеми", "несправність", "поломка",
+    "не", "немає", "невмикається", "вмикається", "працює", "непрацює",
+    "what", "is", "the", "a", "an", "of", "for", "with", "our", "client",
+    "need", "needed", "find", "search", "price", "cost", "availability",
+    "symptom", "symptoms", "problem", "problems", "broken", "does", "not", "work",
+}
+
+
+def _query_terms(value: str) -> list[str]:
+    return re.findall(r"[\w]+(?:[-'][\w]+)*", value or "", re.UNICODE)
+
+
+def _compact_source_query(value: str, max_terms: int = 7) -> str:
+    kept = []
+    for term in _query_terms(value):
+        low = term.lower()
+        if low in _QUERY_NOISE_WORDS or len(low) < 2:
+            continue
+        if low not in {item.lower() for item in kept}:
+            kept.append(term)
+        if len(kept) >= max_terms:
+            break
+    return " ".join(kept)
+
+
+def _normalize_source_query(action: str, query: str, text: str, web_research_mode: str) -> str:
+    """Convert router prose into the compact syntax expected by each source."""
+    if action == "web_research" and web_research_mode == "identify_unknown_type_only":
+        identity = _compact_source_query(text, max_terms=3) or _compact_source_query(query, max_terms=3)
+        return f"{identity} device type".strip()
+    limits = {
+        "search_catalog": 6,
+        "search_knowledge": 6,
+        "search_parts": 7,
+        "get_business_info": 4,
+    }
+    if action in limits:
+        return _compact_source_query(query, max_terms=limits[action])
+    return query.strip()
 
 
 _GREETING_WORDS = {
@@ -1081,6 +1130,15 @@ async def run_agent(
                  f"route={route_code}: model action={action}, configured tool={configured_tool}")
             action = configured_tool
             decision["action"] = action
+        if action != "answer":
+            normalized_query = _normalize_source_query(action, query, text, web_research_mode)
+            if not normalized_query and action in {"search_catalog", "search_knowledge", "search_parts"}:
+                normalized_query = _compact_source_query(text, max_terms=6)
+            if normalized_query != query:
+                emit(f"AGENT ROUTER #{iteration}", "Пошуковий запит скорочено",
+                     f"Було: '{query}'\nСтало: '{normalized_query}'")
+            query = normalized_query
+            decision["query"] = query
         patch = decision.get("memory_patch") or {}
         if isinstance(patch, dict):
             for k, v in patch.items():
