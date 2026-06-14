@@ -142,6 +142,13 @@
             <p class="mt-1 text-xs text-gray-500">Надсилається один раз. На всі наступні повідомлення цієї сесії бот уже не відповідає.</p>
         </div>
 
+        <!-- Escalation / handoff guidance (route handoff -> escalate) -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Передача оператору (Ескалація)</h3>
+            <p class="text-sm text-gray-400 mb-3">Що бот каже/робить, коли спрацьовує роут <code>handoff</code> (клієнт просить людину). Порожньо = бот чесно скаже, що автоматичної передачі немає.</p>
+            <textarea name="escalation_prompt" id="escalation_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Напр.: Передаю розмову менеджеру, він звʼяжеться найближчим часом. Телефон для звʼязку: ...">{{ settings.escalation_prompt if settings and settings.escalation_prompt else '' }}</textarea>
+        </div>
+
         <!-- Agent Engine -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>
