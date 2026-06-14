@@ -117,43 +117,28 @@
             <textarea name="business_rules" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Ми не ремонтуємо залиті водою пристрої без повної передоплати.">{{ settings.business_rules if settings and settings.business_rules else '' }}</textarea>
         </div>
 
-        <!-- Agent Decision Rules -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Правила рішень агента (як діяти, куди по дані)</h3>
-            <p class="text-sm text-gray-400 mb-3">Англомовний керівний промпт: як бот має <b>розуміти намір, формувати внутрішнє питання й обирати роут</b>. Англійська економить контекст; мову відповіді клієнту задає головна персона. <b>Формат дій і цикл</b> лишаються в універсальному двигуні.</p>
-            <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
-        </div>
-
-        <!-- Intake policy -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Логіка первинного приймання</h3>
-            <p class="text-sm text-gray-400 mb-3">Керує послідовністю: спочатку тип приладу, потім несправність і лише одне корисне уточнення. Модель, фото чи посилання не мають бути стандартною відмовкою.</p>
-            <textarea name="intake_policy" rows="10" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="A bare device/model without a symptom -> ask what is not working...">{{ settings.meta.get('intake_policy', '') if settings and settings.meta else '' }}</textarea>
-            <p class="text-xs text-gray-500 mt-2">Коли можна веб-пошук, чи продаємо запчастини, як рахувати ціну деталі — це логіка <b>роутів</b> (Схема Логіки), а не окремі перемикачі. Опишіть її в промптах відповідних роутів.</p>
-        </div>
-
         <!-- Catalog synonyms -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Синоніми каталогу</h3>
-            <p class="text-sm text-gray-400 mb-3">Вирівнюють побутові слова клієнта до назв у вашому прайсі (щоб пошук знаходив). Рядок: <code>слово=синонім,синонім</code>. Логіка «на що як реагувати» — у «Правилах рішень агента» вище. Порожньо = розумний дефолт.</p>
+            <p class="text-sm text-gray-400 mb-3">Вирівнюють побутові слова клієнта до назв у вашому прайсі (щоб пошук знаходив). Рядок: <code>слово=синонім,синонім</code>. Порожньо = розумний дефолт.</p>
             {% set m = settings.meta if settings and settings.meta else {} %}
             <textarea name="catalog_synonyms" rows="4" class="font-mono bg-gray-950 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-3" placeholder="екран=матриця,дисплей&#10;айфон=iphone&#10;батарея=акумулятор,акб&#10;(для квіткового: букет=композиція)">{{ m.get('catalog_synonyms','') }}</textarea>
+            <p class="text-xs text-gray-500 mt-2">Тон, інтейк і правила рішень — у <b>головному промпті (Персона)</b>; пошук/відбір по кожному джерелу — у <b>Схема Логіки</b>. Окремі поля для цього прибрані.</p>
         </div>
 
-        <!-- Answer Style -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Стиль фінальної відповіді (тон)</h3>
-            <p class="text-sm text-gray-400 mb-3">Окремий англомовний контрольний промпт фінальної фази: використовувати лише підтверджені факти, не показувати службове та не змінювати зміст джерела. Конкретний тон і українська мова лишаються у головній персоні.</p>
-            <textarea name="answer_style" rows="6" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Пиши живою розмовною українською, коротко, з легким гумором. Не сип цінами якщо не питають...">{{ settings.meta.get('answer_style', '') if settings and settings.meta else '' }}</textarea>
-        </div>
-
-        <!-- Agent Engine -->
+        <!-- Conduct / Ban module -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Реакція на грубість і бан сесії</h3>
-            <p class="text-sm text-gray-400 mb-3">Англомовний промпт визначає, що є прямою образою, коли попереджати та коли банити. Після бану двигун технічно припиняє відповіді в цій сесії.</p>
-            <textarea name="conduct_policy" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Level 1: warn after direct personal abuse. Level 2: ban after repeated abuse...">{{ settings.meta.get('conduct_policy', '') if settings and settings.meta else '' }}</textarea>
-            <label for="ban_message" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Останнє повідомлення перед тишею</label>
-            <input name="ban_message" id="ban_message" value="{{ settings.meta.get('ban_message', 'Вітаю, вас забанено.') if settings and settings.meta else 'Вітаю, вас забанено.' }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
+            <p class="text-sm text-gray-400 mb-3">Модуль вмикається галочкою. Бот сам визначає пряму образу/погрозу на адресу майстра; після вказаної кількості попереджень — бан, і двигун припиняє відповіді в цій сесії (бан з'являється в «Бани сесій»).</p>
+            <div class="flex items-center mb-3">
+                {% set conduct_on = (m.get('conduct_enabled', '1') not in ('0','false','off','')) %}
+                <input type="checkbox" name="conduct_enabled" id="conduct_enabled" value="1" {% if conduct_on %}checked{% endif %} class="w-4 h-4 text-blue-600 bg-gray-800 border-gray-700 rounded">
+                <label for="conduct_enabled" class="ml-2 text-sm font-medium text-gray-300">Увімкнути реакцію на грубість і бан</label>
+            </div>
+            <label for="conduct_warnings" class="block mb-1 text-sm font-medium text-gray-300">Скільки попереджень до бану</label>
+            <input type="number" min="1" max="5" name="conduct_warnings" id="conduct_warnings" value="{{ m.get('conduct_warnings', '2') }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-32 p-2.5">
+            <label for="ban_message" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Останнє повідомлення перед тишею (текст бану)</label>
+            <input name="ban_message" id="ban_message" value="{{ m.get('ban_message', 'Вітаю, вас забанено.') }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
             <p class="mt-1 text-xs text-gray-500">Надсилається один раз. На всі наступні повідомлення цієї сесії бот уже не відповідає.</p>
         </div>
 
@@ -218,49 +203,19 @@
             <textarea name="price_search_urls" id="price_search_urls" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="https://brain.com.ua/search/?q={query}&#10;https://hotline.ua/sr/?q={query}">{{ settings.meta.get('price_search_urls', '') if settings and settings.meta else '' }}</textarea>
             <p class="mt-1 text-xs text-gray-500">Якщо сайт має пошук через URL — впишіть шаблон із <code>{query}</code>. Бот підставить нормалізований запит (модель/деталь), відкриє сторінку і спарсить ціни. Це швидше і точніше за гугл; гугл лишається запасним.</p>
 
-            <label for="parts_instruction" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Загальна логіка зовнішніх постачальників (редагується)</label>
-            <textarea name="parts_instruction" id="parts_instruction" rows="4" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Опишіть словами порядок і як подавати ціну...">{{ settings.meta.get('parts_instruction', '') if settings and settings.meta else '' }}</textarea>
-            <p class="mt-1 text-xs text-gray-500">Англійською опишіть спільне правило для зовнішнього джерела: порядок сайтів, що означають ціни/наявність та як відділяти їх від внутрішніх даних. Детальна перевірка задається у відповідному роуті «Схеми логіки».</p>
+            <p class="mt-1 text-xs text-gray-500">Як подавати зовнішню ціну (порядок сайтів, робота окремо від деталі) — опишіть у промпті роута зовнішніх цін у «Схема Логіки».</p>
         </div>
 
         <!-- Marketing Protocols -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Маркетинг та Крос-сейл (Upsell)</h3>
-            <p class="text-sm text-gray-400 mb-3">Інструкції для допродажів. Наприклад: "Якщо клієнт купує відеокарту, ненав'язливо запитай, чи вистачить йому потужності блоку живлення". Бот застосує їх природно.</p>
-            <textarea name="marketing_rules" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Пропонуй чистку ноутбука, якщо клієнт скаржиться на перегрів.">{{ settings.marketing_rules if settings and settings.marketing_rules else '' }}</textarea>
-        </div>
-
-        <!-- Escalation Policy -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Політика Ескалації (Що робити, коли немає відповіді)</h3>
-            <p class="text-sm text-gray-400 mb-3">Як бот повинен поводитись, коли в базі знань або прайсі немає інформації.</p>
-            <div class="space-y-4">
-                <div>
-                    <label for="escalation_policy" class="block mb-2 text-sm font-medium text-gray-300">Стратегія</label>
-                    <select name="escalation_policy" id="escalation_policy" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        <option value="handoff" {% if settings and settings.escalation_policy == 'handoff' %}selected{% endif %}>Передати оператору (Handoff) + Дати телефон</option>
-                        <option value="google" {% if settings and settings.escalation_policy == 'google' %}selected{% endif %}>Шукати в Google (інтернет) - для технічних параметрів</option>
-                        <option value="info" {% if settings and settings.escalation_policy == 'info' %}selected{% endif %}>Просто вибачитись і зупинитись</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="fallback_sites" class="block mb-2 text-sm font-medium text-gray-300">Довірені сайти для резервного пошуку (через кому)</label>
-                    <input type="text" name="fallback_sites" id="fallback_sites" value="{{ settings.meta.get('fallback_sites', '') if settings and settings.meta else '' }}" placeholder="Наприклад: asus.com, itc.ua" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <p class="mt-1 text-xs text-gray-500">Якщо бот не знайде відповіді у внутрішній базі, він шукатиме на цих сайтах перед тим, як лізти у загальний пошук.</p>
-                </div>
-                <div class="md:col-span-2">
-                    <label for="tpl_escalate_instruction" class="block mb-2 text-sm font-medium text-gray-300">Інструкція при ескалації (дія escalate)</label>
-                    <textarea name="tpl_escalate_instruction" id="tpl_escalate_instruction" rows="2" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="[INSTRUCTION]: The client wants a human. Inform them you are transferring to a live operator.">{{ settings.meta.get('tpl_escalate_instruction', '') if settings and settings.meta else '' }}</textarea>
-                    <p class="mt-1 text-xs text-gray-500">Що бот робить/каже, коли спрацьовує дія «escalate» (передати оператору). Порожньо = дефолт.</p>
-                </div>
+            <p class="text-sm text-gray-400 mb-3">Модуль вмикається галочкою. Коли увімкнено — бот доречно й ненав'язливо застосує ці підказки у відповіді; вимкнено — у промпт нічого не додається.</p>
+            <div class="flex items-center mb-3">
+                {% set mk_on = (m.get('marketing_enabled', '') in ('1','true','on','yes')) %}
+                <input type="checkbox" name="marketing_enabled" id="marketing_enabled" value="1" {% if mk_on %}checked{% endif %} class="w-4 h-4 text-blue-600 bg-gray-800 border-gray-700 rounded">
+                <label for="marketing_enabled" class="ml-2 text-sm font-medium text-gray-300">Увімкнути маркетинг / допродажі</label>
             </div>
-        </div>
-
-        <!-- Evaluation Rules -->
-        <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Правила оцінки контексту (Анти-галюцинації)</h3>
-            <p class="text-sm text-gray-400 mb-3">Фінальна політика доказів: модель може використовувати лише блоки <code>VERIFIED ROUTE RESULT</code>. Налаштування семантичної перевірки кожного конкретного джерела знаходяться у «База знань → Схема логіки».</p>
-            <textarea name="tpl_evaluation_rules" rows="6" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="--- [ABSOLUTE RULE: HALLUCINATION BAN] ...">{{ settings.meta.get('tpl_evaluation_rules', '') if settings and settings.meta else '' }}</textarea>
+            <textarea name="marketing_rules" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-3" placeholder="Наприклад: Пропонуй чистку ноутбука, якщо клієнт скаржиться на перегрів.">{{ settings.marketing_rules if settings and settings.marketing_rules else '' }}</textarea>
         </div>
 
         <!-- Fallback Settings -->

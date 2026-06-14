@@ -839,6 +839,9 @@ async def update_settings(
     external_part_price_mode: str = Form("normal"),
     conduct_policy: str = Form(""),
     ban_message: str = Form("Вітаю, вас забанено."),
+    conduct_enabled: str = Form("0"),
+    conduct_warnings: str = Form("2"),
+    marketing_enabled: str = Form(""),
     agent_decision_rules: str = Form(""),
     catalog_synonyms: str = Form(""),
     router_json_mode: str = Form("on"),
@@ -865,33 +868,31 @@ async def update_settings(
             meta_data = settings.meta if settings.meta else {}
             meta_data["llm_base_url"] = llm_base_url
             meta_data["llm_api_key"] = llm_api_key
-            meta_data["fallback_sites"] = fallback_sites
-            if tpl_evaluation_rules:
-                meta_data["tpl_evaluation_rules"] = tpl_evaluation_rules
 
-            # Agent engine config
+            # Engine + universal config the lean engine actually reads
             meta_data["engine"] = engine if engine in ("agent", "lean", "classic") else "agent"
             meta_data["agent_max_iterations"] = agent_max_iterations
-            # Empty selection means "all tools" (agent falls back to ALL_TOOLS).
             meta_data["enabled_tools"] = enabled_tools or []
             meta_data["serper_api_key"] = serper_api_key.strip()
             meta_data["parts_sites"] = parts_sites.strip()
             meta_data["price_search_urls"] = price_search_urls.strip()
-            meta_data["parts_instruction"] = parts_instruction.strip()
-            meta_data["answer_style"] = answer_style.strip()
-            meta_data["intake_policy"] = intake_policy.strip()
-            meta_data["web_research_mode"] = web_research_mode if web_research_mode in ("normal", "identify_unknown_type_only") else "normal"
-            meta_data["parts_sales_mode"] = parts_sales_mode if parts_sales_mode in ("normal", "service_only") else "normal"
-            meta_data["external_part_price_mode"] = external_part_price_mode if external_part_price_mode in ("normal", "repair_quote_only") else "normal"
-            meta_data["conduct_policy"] = conduct_policy.strip()
-            meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
-            meta_data["agent_decision_rules"] = agent_decision_rules.strip()
             meta_data["catalog_synonyms"] = catalog_synonyms.strip()
             meta_data["router_json_mode"] = (router_json_mode == "on")
-            if tpl_escalate_instruction.strip():
-                meta_data["tpl_escalate_instruction"] = tpl_escalate_instruction.strip()
-            # drop now-unused trigger heuristics (logic moved to the prompt)
-            for _k in ("price_triggers", "capability_triggers", "business_info_triggers", "brand_words", "part_words"):
+            meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
+
+            # Conduct + Marketing modules (toggles)
+            meta_data["conduct_enabled"] = "1" if str(conduct_enabled).lower() in ("1", "true", "on", "yes") else "0"
+            try:
+                meta_data["conduct_warnings"] = str(max(1, min(5, int(conduct_warnings))))
+            except (ValueError, TypeError):
+                meta_data["conduct_warnings"] = "2"
+            meta_data["marketing_enabled"] = "1" if str(marketing_enabled).lower() in ("1", "true", "on", "yes") else "0"
+
+            # drop legacy fields no engine reads anymore (moved into persona / routes)
+            for _k in ("price_triggers", "capability_triggers", "business_info_triggers", "brand_words", "part_words",
+                       "agent_decision_rules", "answer_style", "intake_policy", "conduct_policy", "parts_instruction",
+                       "tpl_evaluation_rules", "web_research_mode", "parts_sales_mode", "external_part_price_mode",
+                       "fallback_sites", "tpl_escalate_instruction"):
                 meta_data.pop(_k, None)
             settings.meta = meta_data
             

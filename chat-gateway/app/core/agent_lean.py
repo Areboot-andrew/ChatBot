@@ -158,23 +158,33 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
     done = set()
 
-    # --- CONDUCT GATE (own isolated call) — abuse handled before routing/answer ---
+    # --- CONDUCT MODULE (toggle) — counts warnings, bans after the limit ---
     ban_msg = (meta.get("ban_message") or "Вітаю, вас забанено.").strip()
     if memory.get("_session_banned") == "1":
         return ban_msg, memory
-    verdict = await _judge_conduct(text, memory, model, base_url, api_key)
-    emit("CONDUCT", verdict, "")
-    if verdict == "ban":
-        memory["_session_banned"] = "1"
-        return ban_msg, memory
-    if verdict == "warn":
+    conduct_on = str(meta.get("conduct_enabled", "1")).strip().lower() not in ("0", "false", "off", "no", "")
+    try:
+        warn_limit = max(1, int(meta.get("conduct_warnings", 2)))
+    except (ValueError, TypeError):
+        warn_limit = 2
+    if conduct_on and await _judge_conduct(text, model, base_url, api_key) == "warn":
+        try:
+            cnt = int(memory.get("_warn_count") or 0) + 1
+        except (ValueError, TypeError):
+            cnt = 1
+        memory["_warn_count"] = str(cnt)
         memory["_conduct_warning"] = "1"
-        warn_sys = (persona + "\n\n[The client just directly insulted you. Reply with ONE short firm "
-                    "Ukrainian sentence: ask them to keep it civil and warn that one more insult ends "
-                    "the chat. No extra info, no help offer.]")
+        if cnt > warn_limit:
+            memory["_session_banned"] = "1"
+            emit("CONDUCT", "БАН", f"перевищено {warn_limit} попереджень")
+            return ban_msg, memory
+        emit("CONDUCT", "Попередження", f"{cnt}/{warn_limit}")
+        warn_sys = (persona + f"\n\n[The client just insulted you (warning {cnt} of {warn_limit}). Reply "
+                    f"with ONE short firm Ukrainian sentence: ask them to keep it civil and warn that after "
+                    f"{warn_limit} warnings the chat will be closed. No extra info, no help offer.]")
         warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
                                 model, base_url, api_key, 0.3, 80, retry=False)
-        return (warn or "Давайте без образ. Ще один такий випад — і завершу чат.").strip(), memory
+        return (warn or "Давайте без образ. Ще такий випад — і завершу чат.").strip(), memory
 
     for step in range(1, max_iter + 1):
         # 1) DECIDE — ONLY the route map + chat + cleaned facts. No persona, no
@@ -216,6 +226,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
+    # Marketing module (toggle): merged into the reply prompt only when enabled.
+    marketing_on = str(meta.get("marketing_enabled", "")).strip().lower() in ("1", "true", "on", "yes")
+    marketing = settings.marketing_rules if marketing_on and settings and settings.marketing_rules else ""
+    if marketing:
+        ans_sys += "\n\n[MARKETING — apply ONLY if it fits the talk naturally, never forced]\n" + marketing
     # The business's own contact card — tiny, always available so the model can
     # never invent an address/hours/phone (rule #1). Real data, not a base dump.
     biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
@@ -265,25 +280,20 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     return answer, memory
 
 
-async def _judge_conduct(text, memory, model, base_url, api_key):
-    """Isolated conduct classifier — judges ONLY the current message."""
-    warned = memory.get("_conduct_warning") == "1"
+async def _judge_conduct(text, model, base_url, api_key):
+    """Isolated conduct classifier — judges ONLY the current message (the warning
+    count / ban decision is the engine's job, not this call)."""
     sys = (
-        "Classify ONLY this client message for a repair-shop chat. Answer with ONE word: normal / warn.\n"
-        "- normal: a question, normal talk, frustration, or swearing about a device/price/situation, "
-        "or profanity NOT aimed at a person.\n"
+        "Classify ONLY this client message. Answer with ONE word: normal / warn.\n"
+        "- normal: a question, normal talk, frustration, swearing about a device/price/situation, "
+        "profanity NOT aimed at a person, or off-topic that is not abusive.\n"
         "- warn: a DIRECT personal insult or threat aimed at the worker (e.g. «ти ідіот», «пішов нахер», "
         "«гавна кусок», «йди нахер»).\n"
-        "Judge only this message, not history. When unsure, answer normal."
+        "Judge only this message. When unsure, answer normal."
     )
     out = await _safe_chat([{"role": "system", "content": sys}, {"role": "user", "content": text}],
                            model, base_url, api_key, 0.0, 4, retry=False)
-    flagged = "warn" in (out or "").lower() or "ban" in (out or "").lower()
-    if flagged and warned:
-        return "ban"
-    if flagged:
-        return "warn"
-    return "normal"
+    return "warn" if "warn" in (out or "").lower() else "normal"
 
 
 async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens, retry=False):
