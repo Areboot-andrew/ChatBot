@@ -129,30 +129,7 @@
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Логіка первинного приймання</h3>
             <p class="text-sm text-gray-400 mb-3">Керує послідовністю: спочатку тип приладу, потім несправність і лише одне корисне уточнення. Модель, фото чи посилання не мають бути стандартною відмовкою.</p>
             <textarea name="intake_policy" rows="10" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="A bare device/model without a symptom -> ask what is not working...">{{ settings.meta.get('intake_policy', '') if settings and settings.meta else '' }}</textarea>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Коли дозволений веб-пошук</label>
-                    <select name="web_research_mode" class="bg-gray-950 border border-gray-700 text-gray-300 text-sm rounded-lg block w-full p-2.5">
-                        <option value="normal" {% if not settings or not settings.meta or settings.meta.get('web_research_mode', 'normal') == 'normal' %}selected{% endif %}>Звичайний режим</option>
-                        <option value="identify_unknown_type_only" {% if settings and settings.meta and settings.meta.get('web_research_mode') == 'identify_unknown_type_only' %}selected{% endif %}>Лише визначити невідомий тип приладу</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Продаж запчастин</label>
-                    <select name="parts_sales_mode" class="bg-gray-950 border border-gray-700 text-gray-300 text-sm rounded-lg block w-full p-2.5">
-                        <option value="normal" {% if not settings or not settings.meta or settings.meta.get('parts_sales_mode', 'normal') == 'normal' %}selected{% endif %}>Звичайний режим</option>
-                        <option value="service_only" {% if settings and settings.meta and settings.meta.get('parts_sales_mode') == 'service_only' %}selected{% endif %}>Не продаємо окремо, лише сервіс</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Ціна деталі для ремонту</label>
-                    <select name="external_part_price_mode" class="bg-gray-950 border border-gray-700 text-gray-300 text-sm rounded-lg block w-full p-2.5">
-                        <option value="normal" {% if not settings or not settings.meta or settings.meta.get('external_part_price_mode', 'normal') == 'normal' %}selected{% endif %}>За правилами роутів</option>
-                        <option value="repair_quote_only" {% if settings and settings.meta and settings.meta.get('external_part_price_mode') == 'repair_quote_only' %}selected{% endif %}>Лише кошторис конкретного ремонту</option>
-                    </select>
-                    <p class="text-xs text-gray-500 mt-2">Після нашої ціни роботи: тільки точна модель + конкретна деталь. Симптом сам по собі пошук не запускає.</p>
-                </div>
-            </div>
+            <p class="text-xs text-gray-500 mt-2">Коли можна веб-пошук, чи продаємо запчастини, як рахувати ціну деталі — це логіка <b>роутів</b> (Схема Логіки), а не окремі перемикачі. Опишіть її в промптах відповідних роутів.</p>
         </div>
 
         <!-- Catalog synonyms -->
