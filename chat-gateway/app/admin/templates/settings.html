@@ -124,6 +124,13 @@
             <textarea name="agent_decision_rules" rows="8" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Decision rules: greetings -> answer; do you repair X -> search_catalog; part price -> search_parts; ...">{{ settings.meta.get('agent_decision_rules', '') if settings and settings.meta else '' }}</textarea>
         </div>
 
+        <!-- Intake policy -->
+        <div>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Логіка первинного приймання</h3>
+            <p class="text-sm text-gray-400 mb-3">Керує послідовністю питань до пошуку: спочатку проблема клієнта, потім одне корисне уточнення, а модель/фото лише коли вони реально потрібні для запчастини, сумісності або ціни.</p>
+            <textarea name="intake_policy" rows="10" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="A bare device/model without a symptom -> ask what is not working...">{{ settings.meta.get('intake_policy', '') if settings and settings.meta else '' }}</textarea>
+        </div>
+
         <!-- Catalog synonyms -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Синоніми каталогу</h3>

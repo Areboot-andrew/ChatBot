@@ -202,7 +202,7 @@ async def create_tenant(
     await db.refresh(new_tenant)
     
     from app.core.prompt_defaults import (
-        DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES,
+        DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES, DEFAULT_INTAKE_POLICY,
         DEFAULT_PARTS_INSTRUCTION, ROUTE_PROMPTS,
     )
     from app.core.agent import _CATALOG_SYNONYMS
@@ -221,6 +221,7 @@ async def create_tenant(
             "enabled_tools": [],
             "agent_decision_rules": DEFAULT_DECISION_RULES,
             "answer_style": DEFAULT_ANSWER_STYLE,
+            "intake_policy": DEFAULT_INTAKE_POLICY,
             "conduct_policy": DEFAULT_CONDUCT_POLICY,
             "ban_message": "Вітаю, вас забанено.",
             "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
@@ -787,6 +788,7 @@ async def update_settings(
     price_search_urls: str = Form(""),
     parts_instruction: str = Form(""),
     answer_style: str = Form(""),
+    intake_policy: str = Form(""),
     conduct_policy: str = Form(""),
     ban_message: str = Form("Вітаю, вас забанено."),
     agent_decision_rules: str = Form(""),
@@ -829,6 +831,7 @@ async def update_settings(
             meta_data["price_search_urls"] = price_search_urls.strip()
             meta_data["parts_instruction"] = parts_instruction.strip()
             meta_data["answer_style"] = answer_style.strip()
+            meta_data["intake_policy"] = intake_policy.strip()
             meta_data["conduct_policy"] = conduct_policy.strip()
             meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
@@ -856,7 +859,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
-                     "agent_decision_rules", "answer_style", "conduct_policy", "ban_message", "parts_instruction",
+                     "agent_decision_rules", "answer_style", "intake_policy", "conduct_policy", "ban_message", "parts_instruction",
                      "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
                      "catalog_synonyms", "business_info", "router_json_mode",
                      "tpl_escalate_instruction",

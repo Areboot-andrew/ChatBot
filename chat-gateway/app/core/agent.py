@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 
-from sqlalchemy import select, or_
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.llm import chat
@@ -25,6 +25,7 @@ from app.core.prompt_defaults import (
     DEFAULT_ANSWER_STYLE,
     DEFAULT_CONDUCT_POLICY,
     DEFAULT_DECISION_RULES,
+    DEFAULT_INTAKE_POLICY,
     DEFAULT_PARTS_INSTRUCTION,
 )
 from app.core.rag import search_knowledge
@@ -175,6 +176,43 @@ def _client_requested_price(text: str, history: list = None) -> bool:
     if not client_turns or client_turns[-1] != text:
         client_turns.append(text or "")
     return any(_PRICE_INTENT_RE.search(turn) for turn in client_turns[-2:])
+
+
+_INTAKE_GOAL_RE = re.compile(
+    r"(?iu)(?:\?|ремонт|ремонтує|зробити|полагод|злам|не\s|немає|ціна|кошту|вартіст|"
+    r"заряд|розряд|звук|грає|підключ|bluetooth|впав|вода|залив|розбит|тріс|хрип|тихо|"
+    r"батар|екран|дисплей|гріє|гріється|шум|теч|протік|іскр|помил|кнопк|мікрофон|"
+    r"характерист|суміс|що\s+це|яка\s+модель|купити|замовити|потріб)")
+
+
+def _is_bare_item_intake(text: str, history: list = None) -> bool:
+    """A device/brand/model was named, but no client problem or goal exists yet."""
+    client_turns = [
+        str(item.get("content") or "")
+        for item in (history or [])
+        if item.get("role") == "user" and item.get("content")
+    ]
+    if not client_turns or client_turns[-1] != text:
+        client_turns.append(text or "")
+    recent = client_turns[-2:]
+    substantive = [turn for turn in recent if turn.lower().strip() not in _GREETING_WORDS]
+    return bool(substantive) and not any(_INTAKE_GOAL_RE.search(turn) for turn in substantive)
+
+
+def _is_assistant_claim_challenge(text: str, history: list = None) -> bool:
+    """Detect a short challenge to wording introduced by the assistant."""
+    current = (text or "").lower().strip()
+    if not ("??" in current or re.search(r"(?iu)\b(чому|звідки|впевнен|серйозно)\b", current)):
+        return False
+    assistants = [
+        str(item.get("content") or "").lower()
+        for item in (history or [])
+        if item.get("role") == "assistant" and item.get("content")
+    ]
+    if not assistants:
+        return False
+    words = [w for w in re.findall(r"[^\W\d_]+", current, re.UNICODE) if len(w) >= 4]
+    return bool(words) and any(word[:5] in assistants[-1] for word in words)
 
 
 _GREETING_WORDS = {
@@ -419,6 +457,8 @@ async def _tool_search_knowledge(query: str, tenant_id: uuid.UUID, db: AsyncSess
     if tokens:
         qa_conditions = [QaPair.question.ilike(f"%{tok}%") for tok in tokens]
         qa_conditions += [QaPair.answer.ilike(f"%{tok}%") for tok in tokens]
+        qa_conditions += [cast(QaPair.question_variants, String).ilike(f"%{tok}%") for tok in tokens]
+        qa_conditions += [QaPair.category.ilike(f"%{tok}%") for tok in tokens]
         res_qa = await db.execute(
             select(QaPair)
             .where(QaPair.tenant_id == tenant_id, QaPair.enabled == True, or_(*qa_conditions))
@@ -504,8 +544,9 @@ async def run_agent(
 
     tools_block = "\n".join([TOOL_DESCRIPTIONS[t] for t in enabled_tools if t in TOOL_DESCRIPTIONS])
     decision_rules = (meta.get("agent_decision_rules") or "").strip() or DEFAULT_DECISION_RULES
+    intake_policy = (meta.get("intake_policy") or "").strip() or DEFAULT_INTAKE_POLICY
     conduct_policy = (meta.get("conduct_policy") or "").strip() or DEFAULT_CONDUCT_POLICY
-    decision_rules += "\n\n" + conduct_policy
+    decision_rules += "\n\n" + intake_policy + "\n\n" + conduct_policy
     router_protocol = (ROUTER_PROTOCOL
                        .replace("{tools_block}", tools_block)
                        .replace("{decision_rules}", decision_rules)
@@ -871,6 +912,20 @@ async def run_agent(
             decision["needed_fact"] = needed_fact
             query = ""
             decision["query"] = query
+        if action == "web_research" and needed_fact == "specification" and _is_bare_item_intake(text, history):
+            emit(f"AGENT ROUTER #{iteration}", "Пошук моделі відхилено",
+                 "Клієнт лише назвав пристрій; спочатку треба запитати, що не працює.")
+            action = "answer"
+            decision["action"] = action
+            query = ""
+            decision["query"] = query
+        if action != "answer" and _is_assistant_claim_challenge(text, history):
+            emit(f"AGENT ROUTER #{iteration}", "Уточнення власної фрази",
+                 "Клієнт оскаржує термін із попередньої відповіді; треба виправитись без нового пошуку.")
+            action = "answer"
+            decision["action"] = action
+            query = ""
+            decision["query"] = query
         configured_tool = route_configs.get(route_code, {}).get("tool_name", "")
         if configured_tool and action != "answer" and action != configured_tool:
             emit(f"AGENT ROUTER #{iteration}", "Дію виправлено контрактом роута",
@@ -984,6 +1039,7 @@ async def run_agent(
     # Tone of the final reply — editable per tenant (panel), default in code.
     answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
     sys_prompt += "\n\n" + answer_style
+    sys_prompt += "\n\n[CONVERSATION INTAKE POLICY]\n" + intake_policy
     sys_prompt += "\n\n[CLIENT CONDUCT POLICY]\n" + conduct_policy
     if memory.get("_conduct_warning") == "1":
         sys_prompt += ("\n\n[SESSION CONDUCT STATE]\n"

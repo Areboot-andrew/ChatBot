@@ -182,7 +182,7 @@ async def seed_default_prompts(db):
     from app.models.tenant import BotSetting
     from app.core.agent import _CATALOG_SYNONYMS
     from app.core.prompt_defaults import (
-        DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_PARTS_INSTRUCTION,
+        DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_INTAKE_POLICY, DEFAULT_PARTS_INSTRUCTION,
         DEFAULT_EVALUATION_RULES,
     )
 
@@ -190,6 +190,7 @@ async def seed_default_prompts(db):
     defaults = {
         "agent_decision_rules": DEFAULT_DECISION_RULES,
         "answer_style": DEFAULT_ANSWER_STYLE,
+        "intake_policy": DEFAULT_INTAKE_POLICY,
         "conduct_policy": DEFAULT_CONDUCT_POLICY,
         "ban_message": "Вітаю, вас забанено.",
         "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
