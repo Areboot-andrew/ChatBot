@@ -194,10 +194,14 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
         if biz_lines:
             ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "
-                        "delivery. Use these exact values; never invent or alter. State only what was asked.]\n" + biz_lines)
+                        "delivery; use these exact values, never invent. Give ONLY the single fact the "
+                        "client actually asked for: if they asked where to bring it, give just the address. "
+                        "Do NOT volunteer delivery, payment, hours or phone unless they asked for them.]\n" + biz_lines)
     if facts:
         ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
                     "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
+    ans_sys += ("\n\n[REPLY RULE] Answer only what the client actually asked. Keep it 1-2 short sentences. "
+                "Do not pile on extra info, options, prices or contacts they did not ask about.")
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
