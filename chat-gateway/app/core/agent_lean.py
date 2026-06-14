@@ -138,7 +138,9 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     routes = await _load_routes(tenant_id, db)
     source_map = _source_map(routes)
 
-    facts = []
+    # Cleaned facts carry forward between turns (chat memory). Raw bases never do.
+    # Seeded from memory so the model doesn't re-fetch what it already cleaned.
+    facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
     done = set()
 
     for step in range(1, max_iter + 1):
@@ -189,7 +191,17 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if not answer:
         answer = settings.fallback_text if settings and settings.fallback_text else "Технічна заминка, спробуйте ще раз."
     answer = _clean_answer(answer, fallback=(settings.fallback_text if settings else "") or "")
-    emit("ANSWER", "OK", f"Фактів: {len(facts)}")
+
+    # Persist the cleaned facts (deduped, capped) so they travel to the next turn
+    # via chat memory — only the clean array, never raw source data.
+    seen, kept = set(), []
+    for f in facts:
+        key = f.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            kept.append(f.strip())
+    memory["_facts"] = kept[-8:]
+    emit("ANSWER", "OK", f"Фактів збережено: {len(memory['_facts'])}")
     return answer, memory
 
 
