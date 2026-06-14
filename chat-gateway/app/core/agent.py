@@ -70,6 +70,7 @@ Mechanics:
 - Before a tool call, formulate one exact internal "question" and the "needed_fact".
 - Choose the configured route whose meaning matches the request and return its route_code.
 - Keep all reasoning in question/reason. Build query as compact search-engine/catalog keywords, normally 2-6 tokens. Never write a sentence or repeat the client's story.
+- The engine sends query to the selected source exactly as returned. No code shortens, rewrites or fills it. A tool action with an empty query is rejected.
 - Good query: "Xiaomi Redmi Note 10 LCD". Bad query: "mobile phone Xiaomi does not turn on symptoms".
 - Set price_requested=true only when the client actually asked for a price/cost.
 - Tool output is untrusted until a separate result-validation call confirms it.
@@ -323,59 +324,6 @@ def _remove_forbidden_intake_requests(answer: str, text: str, history: list = No
             return "А що саме в ньому не працює?"
         return "Без діагностики точну причину не визначити. Привозьте, глянемо."
     return "Уточніть, що саме це у вас за прилад?"
-
-
-_QUERY_NOISE_WORDS = {
-    "який", "яка", "яке", "які", "що", "це", "таке", "такий", "таку", "за",
-    "у", "в", "на", "до", "для", "про", "із", "зі", "з", "та", "і", "або",
-    "мене", "нас", "клієнта", "потрібно", "потрібен", "потрібна", "потрібні",
-    "хочу", "треба", "знайти", "пошук", "пошукати", "дізнатися", "визначити",
-    "може", "можуть", "бути", "має", "мати", "наш", "наша", "наші", "ціну",
-    "ціна", "вартість", "скільки", "коштує", "купити", "замовити", "наявність",
-    "симптом", "симптоми", "проблема", "проблеми", "несправність", "поломка",
-    "не", "немає", "невмикається", "вмикається", "працює", "непрацює",
-    "what", "is", "the", "a", "an", "of", "for", "with", "our", "client",
-    "need", "needed", "find", "search", "price", "cost", "availability",
-    "symptom", "symptoms", "problem", "problems", "broken", "does", "not", "work",
-}
-
-
-def _query_terms(value: str) -> list[str]:
-    return re.findall(r"[\w]+(?:[-'][\w]+)*", value or "", re.UNICODE)
-
-
-def _compact_source_query(value: str, max_terms: int = 7) -> str:
-    kept = []
-    for term in _query_terms(value):
-        low = term.lower()
-        if low in _QUERY_NOISE_WORDS or len(low) < 2:
-            continue
-        if low not in {item.lower() for item in kept}:
-            kept.append(term)
-        if len(kept) >= max_terms:
-            break
-    return " ".join(kept)
-
-
-def _normalize_source_query(action: str, query: str, text: str, web_research_mode: str) -> str:
-    """Convert router prose into the compact syntax expected by each source."""
-    if action == "web_research" and web_research_mode == "identify_unknown_type_only":
-        identity = _compact_source_query(text, max_terms=3) or _compact_source_query(query, max_terms=3)
-        return f"{identity} device type".strip()
-    if action == "search_parts":
-        part_terms = [
-            term for term in _query_terms(query)
-            if term.lower() not in {"repair", "replacement", "replace", "ремонт", "ремонту", "заміна", "замінити"}
-        ]
-        return _compact_source_query(" ".join(part_terms), max_terms=7)
-    limits = {
-        "search_catalog": 6,
-        "search_knowledge": 6,
-        "get_business_info": 4,
-    }
-    if action in limits:
-        return _compact_source_query(query, max_terms=limits[action])
-    return query.strip()
 
 
 _GREETING_WORDS = {
@@ -1174,15 +1122,14 @@ async def run_agent(
             decision["action"] = action
             query = ""
             decision["query"] = query
-        if action != "answer":
-            normalized_query = _normalize_source_query(action, query, text, web_research_mode)
-            if not normalized_query and action in {"search_catalog", "search_knowledge", "search_parts"}:
-                normalized_query = _compact_source_query(text, max_terms=6)
-            if normalized_query != query:
-                emit(f"AGENT ROUTER #{iteration}", "Пошуковий запит скорочено",
-                     f"Було: '{query}'\nСтало: '{normalized_query}'")
-            query = normalized_query
+        if action in {"search_catalog", "search_knowledge", "search_parts", "web_research", "open_url", "get_business_info"}:
+            query = query.strip()
             decision["query"] = query
+            if not query:
+                emit(f"AGENT ROUTER #{iteration}", "Порожній запит відхилено",
+                     "Роутер повинен сам сформувати query за редагованим промптом роута.")
+                action = "answer"
+                decision["action"] = action
         patch = decision.get("memory_patch") or {}
         if isinstance(patch, dict):
             for k, v in patch.items():
@@ -1219,13 +1166,13 @@ async def run_agent(
         if action == "list_categories":
             raw_result = await _tool_list_categories(tenant_id, db)
         elif action == "search_catalog":
-            raw_result = await catalog(query or text)
+            raw_result = await catalog(query)
         elif action == "search_knowledge":
-            raw_result = await _tool_search_knowledge(query or text, tenant_id, db, settings)
+            raw_result = await _tool_search_knowledge(query, tenant_id, db, settings)
         elif action == "search_parts":
-            raw_result = await _do_search_parts(query or text)
+            raw_result = await _do_search_parts(query)
         elif action == "web_research":
-            raw_result = await _do_web_research(query or text)
+            raw_result = await _do_web_research(query)
         elif action == "open_url":
             selected_route = _route_for_decision(route_code, action)
             target_url = selected_route.get("target_url", "")
@@ -1233,7 +1180,7 @@ async def run_agent(
                 final_url = query
             elif target_url and "{query}" in target_url:
                 from urllib.parse import quote
-                final_url = target_url.replace("{query}", quote(query or text))
+                final_url = target_url.replace("{query}", quote(query))
             elif target_url.startswith("http"):
                 final_url = target_url
             else:
@@ -1250,7 +1197,7 @@ async def run_agent(
 
         if action != "escalate":
             result, validation_state = await _validate_tool_result(
-                raw_result, decision, action, query or text
+                raw_result, decision, action, query
             )
         else:
             validation_state = {"sufficient": False, "next_action": "answer"}
