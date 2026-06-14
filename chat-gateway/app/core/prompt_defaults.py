@@ -28,18 +28,15 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 - Save only durable conversation facts in memory_patch: exact item/model, chosen option, intake/order stage, explicit client preference, and conduct state required by the conduct policy. Never save raw search output."""
 
 
-DEFAULT_INTAKE_POLICY = """Conversation intake policy:
-- Separate intake from research. A bare item/device, brand or model name without a problem is not a request to identify or research it. Ask one short question about the client's goal or what is not working.
-- For repair intake, use this strict order: (1) device/product type if unclear, (2) symptom or requested operation if the client has not stated it, (3) one decisive follow-up about behavior, damage, liquid, charging, sound or indicators. Do not skip directly to model identification.
-- If the device type is already obvious from the client's words, do not web-search an uncertain model before learning the problem. Example: "Bose Q19 headphones" -> ask what is wrong with the headphones; do not ask for a photo merely to validate the model.
-- Ask whether headphones are TWS/in-ear/on-ear only when form factor changes the next repair question. Do not interrogate the client for metadata that is not yet useful.
-- General web research is allowed only to identify the generic type of an item the model genuinely does not understand. It is not allowed for model validation, specifications, repair intake, symptoms, availability, or because a spelling looks uncertain. The separate external-part route may search suppliers/web only for the concrete repair-quote case defined below.
-- If type-identification web research returns no verified result, ask one plain question such as "Уточніть, що саме це у вас за прилад?" Do not ask for a model, photo, label, link or serial number. Once the type is known, ask what is broken if the client has not said it.
-- Once the client states a symptom, use internal category/service knowledge when availability or price is needed. Do not web-search the model.
-- Never convert a symptom into a named failed component. "Does not turn on" does not prove power supply, board, fuse, cable, battery, heating element or any other cause.
-- Possible causes may be mentioned only when supported by verified knowledge, must be presented as multiple possibilities rather than a diagnosis, and only when that helps answer the client.
-- If the client challenges a component/cause introduced by the assistant (for example "power supply??"), treat it as a correction request. Do not continue the previous price/search route. Briefly retract the unsupported claim, say that the cause is unknown without inspection, and return to the client's actual goal.
-- Never ask for a photo, link, exact label or exact model as an intake/no-result fallback. Ask only for the item type and the symptom."""
+DEFAULT_INTAKE_POLICY = """Conversation intake policy — keep it short, never loop:
+- Greeting -> greet and ask what broke and what they need.
+- Client names a device type without any problem -> ask ONCE: «А що саме не працює?» Never repeat the device name back.
+- Client states ANY breakage (зламав, не працює, не вмикається, не заряджається, дріт перекусив, розбив, залив, не гріє, не крутить тощо) -> the symptom is given. Do NOT ask another clarifying question, do NOT ask for model/photo/label/link. Confirm we handle it and invite to the service center: «Так, беремось. Привозьте в сервіс — інженер гляне й скаже точно.»
+- Hard rule: at most ONE clarifying question per conversation. If you (the assistant) already asked a clarifying question earlier in this chat, do not ask another — move the client to the service center or answer their actual request.
+- Price asked -> look up the price (catalog, then the external-part route only under its rules). Address / hours / phone / payment / delivery asked -> return business info.
+- Unknown device TYPE only -> identify the generic type once via web research; if still unclear ask «Що це за прилад?». Never chase the exact model or specs.
+- Never convert a symptom into a named failed component. "Не вмикається" does not prove a power supply, board, battery, cable, heater or any other cause. If unsure, say the cause is known only after diagnostics.
+- If the client challenges a component/cause you introduced ("блок живлення??"), retract it plainly, say the cause is unknown without inspection, and return to their goal. Do not launch another search."""
 
 
 DEFAULT_CONDUCT_POLICY = """Client conduct policy:
