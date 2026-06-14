@@ -58,9 +58,15 @@ _ROUTE_PROMPT_KEYS = [
 
 
 def _load_persona() -> str:
-    import app
-    path = Path(app.__file__).resolve().parent / "givi_system_prompt.md"
-    return path.read_text(encoding="utf-8")
+    # Do not rely on app.__file__ (app may be a namespace package -> None).
+    candidates = [
+        Path("/app/app/givi_system_prompt.md"),                       # container layout
+        Path(__file__).resolve().parents[2] / "app" / "givi_system_prompt.md",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    raise FileNotFoundError("givi_system_prompt.md not found in: " + ", ".join(str(c) for c in candidates))
 
 
 def _defaults() -> dict:
