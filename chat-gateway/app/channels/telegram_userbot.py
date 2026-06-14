@@ -92,8 +92,9 @@ class UserbotManager:
             # Human-like pacing: think a bit, then "type" while working.
             await asyncio.sleep(random.uniform(2, 5))
             async with client.action(event.chat_id, 'typing'):
-                from app.core.transcript import make_trace_collector
-                collect, trace_steps = make_trace_collector()
+                from app.core.transcript import make_live_trace, publish_live_message
+                publish_live_message(tenant_id, chat_id, "telegram_userbot", "user", text)
+                collect, trace_steps = make_live_trace(tenant_id, chat_id, "telegram_userbot")
                 async with async_session_maker() as db:
                     response = await process_message_pipeline(
                         text, history, tenant_id, db, chat_key=chat_key, trace=collect)
@@ -110,6 +111,7 @@ class UserbotManager:
             async with async_session_maker() as logdb:
                 await log_message(logdb, tenant_id, channel_id, chat_id, "user", text)
                 if response:
+                    publish_live_message(tenant_id, chat_id, "telegram_userbot", "assistant", response)
                     await log_message(logdb, tenant_id, channel_id, chat_id, "assistant", response, meta={"trace": trace_steps})
 
             if response:

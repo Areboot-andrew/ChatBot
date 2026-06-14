@@ -122,14 +122,18 @@ async def webchat_message(channel_id: uuid.UUID, request: Request):
         history = await HistoryManager.get_history(hist_channel, session_id)
         history = history + [{"role": "user", "content": text}]
 
-        from app.core.transcript import make_trace_collector, log_message
-        collect, steps = make_trace_collector()
+        from app.core.transcript import make_live_trace, publish_live_message, log_message
+        # Stream every step to the admin live feed in real time (not after the
+        # turn). The collected steps are still persisted for the archive.
+        publish_live_message(channel.tenant_id, session_id, "webchat", "user", text)
+        collect, steps = make_live_trace(channel.tenant_id, session_id, "webchat")
         response_text = await process_message_pipeline(
             text, history, channel.tenant_id, db,
             chat_key=f"{hist_channel}:{session_id}", trace=collect,
         )
         await log_message(db, channel.tenant_id, channel.id, session_id, "user", text)
         if response_text:
+            publish_live_message(channel.tenant_id, session_id, "webchat", "assistant", response_text)
             await log_message(db, channel.tenant_id, channel.id, session_id, "assistant", response_text, meta={"trace": steps})
 
     await HistoryManager.add_message(hist_channel, session_id, "user", text)

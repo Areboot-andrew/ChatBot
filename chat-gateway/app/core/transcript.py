@@ -13,19 +13,63 @@ from app.models.conversation import Conversation, Message
 logger = logging.getLogger(__name__)
 
 
-def make_trace_collector(limit_chars: int = 1500):
+def make_trace_collector(limit_chars: int = 0):
     """Returns (callback, steps). Pass callback as `trace` to the pipeline; the
-    collected steps can be stored in Message.meta to show 'what the bot did'."""
+    collected steps can be stored in Message.meta to show 'what the bot did'.
+
+    limit_chars=0 (default) keeps full untruncated details so diagnostics can see
+    exactly what the routes and the model received. Pass a positive value only if
+    a specific storage budget requires truncation."""
     steps = []
 
     def collect(step, status, details, duration="-"):
+        text = str(details)
+        if limit_chars and len(text) > limit_chars:
+            text = text[:limit_chars]
         steps.append({
             "step": step,
             "status": status,
-            "details": str(details)[:limit_chars],
+            "details": text,
             "time": str(duration),
         })
     return collect, steps
+
+
+def make_live_trace(tenant_id, chat_id, channel_type, limit_chars: int = 0):
+    """Like make_trace_collector, but ALSO streams each step to the admin live
+    feed the instant it fires. Returns (callback, steps): `steps` is still stored
+    in Message.meta for the archive; the live publish is what makes the 'Жива
+    стрічка' show the routes/model in real time instead of after the turn ends.
+
+    `details` is never truncated for the live stream — diagnostics must see the
+    full prompt the model received and its full raw answer."""
+    from app.core.live_feed import publish
+    collect, steps = make_trace_collector(limit_chars)
+
+    def cb(step, status, details, duration="-"):
+        collect(step, status, details, duration)
+        publish(tenant_id, {
+            "kind": "step",
+            "chat_id": str(chat_id),
+            "channel_type": channel_type,
+            "step": step,
+            "status": status,
+            "details": str(details),
+            "time": str(duration),
+        })
+    return cb, steps
+
+
+def publish_live_message(tenant_id, chat_id, channel_type, role, content):
+    """Push a client/bot message line to the live feed in real time."""
+    from app.core.live_feed import publish
+    publish(tenant_id, {
+        "kind": "message",
+        "chat_id": str(chat_id),
+        "channel_type": channel_type,
+        "role": role,
+        "content": content or "",
+    })
 
 
 async def log_message(

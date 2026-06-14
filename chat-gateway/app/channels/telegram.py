@@ -53,8 +53,9 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 typing_task = asyncio.create_task(_keep_typing())
 
                 # Process through core pipeline (chat_key enables agent memory)
-                from app.core.transcript import make_trace_collector
-                collect, trace_steps = make_trace_collector()
+                from app.core.transcript import make_live_trace, publish_live_message
+                publish_live_message(tenant_id, str(chat_id), "telegram", "user", text)
+                collect, trace_steps = make_live_trace(tenant_id, str(chat_id), "telegram")
                 try:
                     response_text = await process_message_pipeline(
                         text, history, tenant_id, db,
@@ -71,6 +72,7 @@ async def handle_telegram_update(channel_id: uuid.UUID, update_data: dict):
                 from app.core.transcript import log_message
                 await log_message(db, tenant_id, channel_id, str(chat_id), "user", text)
                 if response_text:
+                    publish_live_message(tenant_id, str(chat_id), "telegram", "assistant", response_text)
                     await log_message(db, tenant_id, channel_id, str(chat_id), "assistant", response_text, meta={"trace": trace_steps})
                 
                 if response_text:

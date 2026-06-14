@@ -138,21 +138,22 @@ def _clean_answer(text: str, fallback: str = "") -> str:
     return out or fallback
 
 
-def _emergency_client_fallback(text: str, history: list = None, memory: dict = None) -> str:
-    """Last-resort reply when a provider returns an empty/sentinel completion."""
+def _emergency_client_fallback(text: str, history: list = None, memory: dict = None):
+    """Last-resort reply when a provider returns an empty/sentinel completion.
+    Returns (reply, branch) so the live feed can show which rule fired."""
     if (memory or {}).get("_conduct_warning") == "1":
-        return "Давайте без особистих образ. Ще один такий випад — і чат буде заблоковано."
+        return "Давайте без особистих образ. Ще один такий випад — і чат буде заблоковано.", "conduct_warning"
     current = (text or "").lower().strip()
     words = re.findall(r"[^\W\d_]+", current, re.UNICODE)
     if words and all(word in _GREETING_WORDS for word in words):
-        return "Привіт. Що з технікою сталося?"
+        return "Привіт. Що з технікою сталося?", "greeting_only"
     if _wants_part_only(text):
-        return "Запчастини окремо не продаємо — у нас сервісний центр."
+        return "Запчастини окремо не продаємо — у нас сервісний центр.", "part_only"
     if _has_known_device_type(text, history) and _is_bare_item_intake(text, history):
-        return "А що саме в ньому не працює?"
+        return "А що саме в ньому не працює?", "bare_item_intake"
     if not _has_known_device_type(text, history):
-        return "Уточніть, що саме це у вас за прилад?"
-    return "Зараз не можу коректно сформувати відповідь. Привозьте техніку, розберемось після огляду."
+        return "Уточніть, що саме це у вас за прилад?", "unknown_device_type"
+    return "Зараз не можу коректно сформувати відповідь. Привозьте техніку, розберемось після огляду.", "generic"
 
 
 def _extract_json(text: str) -> dict:
@@ -1033,6 +1034,11 @@ async def run_agent(
         if not recent or recent[-1].get("content") != text or recent[-1].get("role") != "user":
             messages.append({"role": "user", "content": text})
 
+        # Full model input for live diagnostics — exactly what the router model
+        # receives (system prompt + every message), untruncated and in real time.
+        emit(f"AGENT ROUTER #{iteration}", "Вхід у модель",
+             "\n\n".join(f"[{m['role'].upper()}]\n{m['content']}" for m in messages))
+
         t0 = time.time()
         # Ask the provider for strict JSON (cloud models support response_format).
         # If the provider rejects json_mode, retry once without it.
@@ -1061,12 +1067,16 @@ async def run_agent(
                     break
             else:
                 raise
+        # Raw model output as-is, before any parsing — the ground truth for
+        # diagnosing why the router decided what it did.
+        emit(f"AGENT ROUTER #{iteration}", "Сира відповідь моделі",
+             str(raw), f"{time.time() - t0:.2f}s")
         try:
             decision = _extract_json(raw)
         except (ValueError, json.JSONDecodeError) as e:
             # A malformed decision cannot safely select a source. Finish without
             # inventing a tool result; final-answer policy may only clarify.
-            emit(f"AGENT ROUTER #{iteration}", "JSON помилка → безпечна відповідь", f"{e}\nRAW: {raw[:200]}", f"{time.time() - t0:.2f}s")
+            emit(f"AGENT ROUTER #{iteration}", "JSON помилка → безпечна відповідь", f"{e}\nRAW: {raw}", f"{time.time() - t0:.2f}s")
             decision = {"action": "answer", "query": "", "reason": "json_parse_failed", "memory_patch": {}}
 
         action = str(decision.get("action", "answer")).lower().strip()
@@ -1220,7 +1230,7 @@ async def run_agent(
             validation_state = {"sufficient": False, "next_action": "answer"}
 
         gathered.append((action, query, result))
-        emit(f"AGENT TOOL #{iteration}", action, str(result)[:800], f"{time.time() - t0:.2f}s")
+        emit(f"AGENT TOOL #{iteration}", action, str(result), f"{time.time() - t0:.2f}s")
 
         if escalated or validation_state.get("sufficient"):
             break
@@ -1280,16 +1290,26 @@ async def run_agent(
     if not history or history[-1].get("content") != text or history[-1].get("role") != "user":
         messages.append({"role": "user", "content": text})
 
+    # Full model input for live diagnostics — the complete final-answer prompt
+    # (persona + business/marketing/eval rules + context + policies) and history.
+    emit("AGENT ANSWER", "Вхід у модель",
+         "\n\n".join(f"[{m['role'].upper()}]\n{m['content']}" for m in messages))
+
     t0 = time.time()
     answer = await chat(
         messages, model=model_name, temperature=temp, max_tokens=max_tokens,
         base_url=base_url, api_key=api_key, raise_error=True
     )
+    # Raw completion before cleanup/sentinel handling — ground truth for the reply.
+    emit("AGENT ANSWER", "Сира відповідь моделі", str(answer), f"{time.time() - t0:.2f}s")
     fallback_text = settings.fallback_text if settings and settings.fallback_text else ""
+    raw_answer = answer
     answer = _clean_answer(answer, fallback=fallback_text)
     if not answer:
-        emit("AGENT ANSWER", "Порожню відповідь замінено", "LLM повернула порожнє значення або службовий sentinel.")
-        answer = _emergency_client_fallback(text, history, memory)
+        answer, branch = _emergency_client_fallback(text, history, memory)
+        emit("AGENT ANSWER", "Порожню відповідь замінено",
+             f"LLM повернула порожнє значення або службовий sentinel.\n"
+             f"Сире значення: {raw_answer!r}\nГілка fallback: {branch}\nПідставлено: {answer}")
     if web_research_mode == "identify_unknown_type_only":
         answer = _remove_forbidden_intake_requests(answer, text, history)
     # Only memory_patch (short durable facts) persists between messages — no raw

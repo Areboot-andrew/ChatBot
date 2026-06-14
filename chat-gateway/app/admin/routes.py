@@ -696,6 +696,48 @@ async def conversations_feed(
     return {"messages": msgs, "now": now}
 
 
+@router.get("/api/conversations/stream")
+async def conversations_stream(
+    request: Request,
+    after: int = 0,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+):
+    """Real-time SSE feed of pipeline steps and messages for the current tenant.
+    Each `emit()` in the agent is pushed here the instant it fires — the admin
+    sees what the routes and the model received live, step by step, not after the
+    turn is persisted."""
+    import asyncio
+    import json
+    from fastapi.responses import StreamingResponse
+    from app.core.live_feed import subscribe, unsubscribe, recent
+
+    async def gen():
+        if not tenant_id:
+            yield "event: end\ndata: {}\n\n"
+            return
+        q = subscribe(tenant_id)
+        try:
+            # Backfill anything that happened just before this connection opened.
+            for ev in recent(tenant_id, after_seq=after):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"  # keep the connection alive
+        finally:
+            unsubscribe(tenant_id, q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    })
+
+
 # --- HELP / DIAGNOSTICS ---
 @router.get("/help", response_class=HTMLResponse)
 async def help_page(

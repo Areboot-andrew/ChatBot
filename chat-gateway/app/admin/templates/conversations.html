@@ -33,10 +33,51 @@
 var lastTs = '';
 var liveTimer = null;
 var liveSeq = 0;
+var liveES = null;
 
 function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
 function chIcon(t){ return ({telegram:'✈️', telegram_userbot:'👤', webchat:'🌐'})[t] || '💬'; }
 function fmt(at){ if(!at) return ''; try{ return new Date(at).toLocaleString('uk-UA'); }catch(e){ return at; } }
+function nowt(){ try{ return new Date().toLocaleTimeString('uk-UA'); }catch(e){ return ''; } }
+
+function liveAppend(html){
+  var stream = document.getElementById('live-stream');
+  var ph = stream.querySelector('.text-gray-600');
+  if(ph) ph.remove();
+  var el = document.createElement('div');
+  el.innerHTML = html;
+  stream.appendChild(el.firstElementChild || el);
+  if(document.getElementById('autoscroll').checked) stream.scrollTop = stream.scrollHeight;
+}
+
+function renderEvent(ev){
+  if(ev.kind === 'message'){
+    var who = ev.role==='user' ? '<span class="text-green-400">клієнт</span>' : '<span class="text-blue-400">бот</span>';
+    liveAppend('<div class="border-b border-gray-800/60 pb-2 pt-2"><span class="text-gray-600">'+nowt()+'</span> '+chIcon(ev.channel_type)+' <span class="text-gray-500">#'+esc(ev.chat_id)+'</span> '+who+': <span class="text-gray-200">'+esc(ev.content)+'</span></div>');
+  } else if(ev.kind === 'step'){
+    var color = (''+ev.status).toLowerCase().indexOf('помилк')>=0 ? 'text-red-400' : 'text-amber-300';
+    liveAppend('<div class="ml-6 mt-1 border-l border-gray-800 pl-3">'+
+      '<div><span class="'+color+'">▸ '+esc(ev.step)+'</span> <span class="text-gray-500">['+esc(ev.status)+'] '+esc(ev.time)+'</span></div>'+
+      '<div class="text-[11px] text-gray-400 bg-black/40 border border-gray-800 rounded p-2 mt-1 whitespace-pre-wrap break-all">'+esc(ev.details)+'</div></div>');
+  }
+}
+
+function startLiveStream(){
+  if(liveES){ liveES.close(); }
+  liveES = new EventSource('/admin/api/conversations/stream?after=' + liveSeq);
+  liveES.onmessage = function(e){
+    try{ var ev = JSON.parse(e.data); }catch(_){ return; }
+    if(ev.seq){ liveSeq = ev.seq; }
+    renderEvent(ev);
+  };
+  liveES.onerror = function(){
+    // Browser auto-reconnects EventSource; nothing to do. Reconnect resumes
+    // from liveSeq via the `after` param on the next open is not automatic, so
+    // recreate the source to carry the cursor forward.
+    if(liveES){ liveES.close(); liveES = null; }
+    setTimeout(startLiveStream, 2000);
+  };
+}
 
 function showTab(t){
   document.getElementById('tab-live').classList.toggle('hidden', t!=='live');
@@ -44,37 +85,6 @@ function showTab(t){
   document.getElementById('tab-live-btn').className = 'px-4 py-2 rounded-lg text-sm font-medium ' + (t==='live'?'bg-blue-600 text-white':'bg-gray-800 text-gray-300');
   document.getElementById('tab-archive-btn').className = 'px-4 py-2 rounded-lg text-sm font-medium ' + (t==='archive'?'bg-blue-600 text-white':'bg-gray-800 text-gray-300');
   if(t==='archive') loadConversations();
-}
-
-async function pollLive(){
-  try{
-    var res = await fetch('/admin/api/conversations/feed?since=' + encodeURIComponent(lastTs));
-    var d = await res.json();
-    if(d.now) lastTs = d.now;
-    if(d.messages && d.messages.length){
-      var stream = document.getElementById('live-stream');
-      if(stream.querySelector('.text-gray-600')) stream.innerHTML='';
-      d.messages.forEach(function(m){
-        var who = m.role==='user' ? '<span class="text-green-400">клієнт</span>' : '<span class="text-blue-400">бот</span>';
-        var el = document.createElement('div');
-        el.className = 'border-b border-gray-800/60 pb-2';
-        var head = '<span class="text-gray-600">'+fmt(m.at)+'</span> '+chIcon(m.channel_type)+' <span class="text-gray-500">#'+esc(m.chat_id)+'</span> '+who+': <span class="text-gray-200">'+esc(m.content)+'</span>';
-        var trace = '';
-        if(m.role!=='user' && m.trace && m.trace.length){
-          var tid = 'lt-' + (liveSeq++);
-          var steps = m.trace.map(function(s){
-            var color = (''+s.status).toLowerCase().indexOf('помилк')>=0 ? 'text-red-400' : 'text-amber-300';
-            return '<div class="mt-1"><span class="'+color+'">▸ '+esc(s.step)+'</span> <span class="text-gray-500">['+esc(s.status)+'] '+esc(s.time)+'</span>\n<span class="text-gray-400">'+esc(s.details)+'</span></div>';
-          }).join('');
-          trace = '<button onclick="document.getElementById(\''+tid+'\').classList.toggle(\'hidden\')" class="text-[11px] text-blue-400 ml-6 mt-1 block">🔍 робота агента ('+m.trace.length+' кроків)</button>'+
-            '<div id="'+tid+'" class="hidden ml-6 mt-1 bg-black/40 border border-gray-800 rounded p-2 text-[11px] whitespace-pre-wrap">'+steps+'</div>';
-        }
-        el.innerHTML = head + trace;
-        stream.appendChild(el);
-      });
-      if(document.getElementById('autoscroll').checked) stream.scrollTop = stream.scrollHeight;
-    }
-  }catch(e){}
 }
 
 async function loadConversations(){
@@ -119,8 +129,8 @@ function toggleTrace(i){
   if(el) el.classList.toggle('hidden');
 }
 
-// start live polling every 3s
-pollLive();
-liveTimer = setInterval(pollLive, 3000);
+// Real-time per-step stream (SSE) — shows what routes/model received as it
+// happens, not after the turn finishes.
+startLiveStream();
 </script>
 {% endblock %}
