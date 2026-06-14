@@ -189,7 +189,8 @@
                     <label for="engine" class="block mb-2 text-sm font-medium text-gray-300">Режим роботи</label>
                     <select name="engine" id="engine" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
                         {% set cur_engine = settings.meta.get('engine', 'agent') if settings and settings.meta else 'agent' %}
-                        <option value="agent" {% if cur_engine == 'agent' %}selected{% endif %}>Агент (рекомендовано) — багатокроковий пошук відповіді</option>
+                        <option value="agent" {% if cur_engine == 'agent' %}selected{% endif %}>Агент — багатокроковий пошук відповіді</option>
+                        <option value="lean" {% if cur_engine == 'lean' %}selected{% endif %}>Lean — ізольовані виклики (легкий контекст, рознесена пам'ять)</option>
                         <option value="classic" {% if cur_engine == 'classic' %}selected{% endif %}>Класичний — один прохід (інтент → дані → відповідь)</option>
                     </select>
                 </div>
