@@ -1271,6 +1271,16 @@ async def run_agent(
         eval_rules = meta.get("tpl_evaluation_rules")
         if eval_rules:
             sys_prompt += "\n\n" + eval_rules
+    # Always make the configured business contacts available to the final reply so
+    # the model answers address/hours/phone from real data instead of inventing
+    # them — even if the router did not call get_business_info this turn.
+    business_info = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
+    if business_info:
+        biz_lines = "\n".join(f"- {k}: {v}" for k, v in business_info.items() if str(v).strip())
+        if biz_lines:
+            sys_prompt += ("\n\n[BUSINESS CONTACT FACTS — the ONLY source for address, hours, phone, "
+                           "payment, delivery, warranty. Use these exact values; never invent or alter "
+                           "them. State only the fact the client asked for.]\n" + biz_lines)
     # Tenant-editable escalation guidance (panel: "Настанова ескалації") — what to
     # say when the needed fact was not found anywhere.
     escalation_prompt = settings.escalation_prompt if settings and settings.escalation_prompt else ""
