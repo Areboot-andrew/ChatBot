@@ -124,8 +124,8 @@ _JUNK_PATTERNS = [
 def _clean_answer(text: str, fallback: str = "") -> str:
     """Strip leaked router/service artefacts (English meta, JSON) from the
     client-facing reply — safety net for small models."""
-    if not text:
-        return text
+    if not text or str(text).strip().lower() in {"none", "null", "undefined", "nil"}:
+        return fallback
     import re as _re
     out = text
     self_note = _re.search(r"(?i)\bwe already (?:answered|gave final)\.?", out)
@@ -136,6 +136,23 @@ def _clean_answer(text: str, fallback: str = "") -> str:
     # collapse leftover blank lines
     out = _re.sub(r"\n{3,}", "\n\n", out).strip()
     return out or fallback
+
+
+def _emergency_client_fallback(text: str, history: list = None, memory: dict = None) -> str:
+    """Last-resort reply when a provider returns an empty/sentinel completion."""
+    if (memory or {}).get("_conduct_warning") == "1":
+        return "Давайте без особистих образ. Ще один такий випад — і чат буде заблоковано."
+    current = (text or "").lower().strip()
+    words = re.findall(r"[^\W\d_]+", current, re.UNICODE)
+    if words and all(word in _GREETING_WORDS for word in words):
+        return "Привіт. Що з технікою сталося?"
+    if _wants_part_only(text):
+        return "Запчастини окремо не продаємо — у нас сервісний центр."
+    if _has_known_device_type(text, history) and _is_bare_item_intake(text, history):
+        return "А що саме в ньому не працює?"
+    if not _has_known_device_type(text, history):
+        return "Уточніть, що саме це у вас за прилад?"
+    return "Зараз не можу коректно сформувати відповідь. Привозьте техніку, розберемось після огляду."
 
 
 def _extract_json(text: str) -> dict:
@@ -1270,6 +1287,9 @@ async def run_agent(
     )
     fallback_text = settings.fallback_text if settings and settings.fallback_text else ""
     answer = _clean_answer(answer, fallback=fallback_text)
+    if not answer:
+        emit("AGENT ANSWER", "Порожню відповідь замінено", "LLM повернула порожнє значення або службовий sentinel.")
+        answer = _emergency_client_fallback(text, history, memory)
     if web_research_mode == "identify_unknown_type_only":
         answer = _remove_forbidden_intake_requests(answer, text, history)
     # Only memory_patch (short durable facts) persists between messages — no raw
