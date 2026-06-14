@@ -85,7 +85,16 @@ def _source_map(routes: dict) -> str:
     ]
     for r in routes.values():
         trig = ", ".join(r["triggers"][:6])
-        lines.append(f'- "{r["code"]}" — {r["label"]}.' + (f" Triggers: {trig}." if trig else ""))
+        # one compact line of what this source provides — from the route's own
+        # source_description (editable in Схема Логіки), so routing is prompt-driven.
+        desc = (r.get("source_description") or "").strip()
+        desc = desc.split(".")[0][:160] if desc else ""
+        line = f'- "{r["code"]}" — {r["label"]}.'
+        if desc:
+            line += f" Provides: {desc}."
+        if trig:
+            line += f" Triggers: {trig}."
+        lines.append(line)
     lines.append('- "answer" — ONLY for a greeting, small talk, off-topic, or when the needed fact is '
                  "already in [FACTS YOU ALREADY HAVE]. Never pick answer for a fact you still need.")
     return "\n".join(lines)
