@@ -63,6 +63,14 @@ Allowed actions:
 {tools_block}
 "answer": you already have enough verified facts (or none are needed — greetings, small talk, tone-only replies). This ends the loop.
 
+WHERE TO GET EACH FACT (map the client's request to its source — never answer such a request from memory or invention):
+- Address, where to bring the device, working hours, phone, payment, delivery, warranty terms -> get_business_info. NEVER state an address/hours/phone without calling it first.
+- Our prices and whether we do a service / our catalog -> search_catalog. NEVER state a price without a verified catalog (or external-part) result.
+- Approved policies, warranty conditions, FAQ -> search_knowledge.
+- External market price of a concrete part -> search_parts.
+- Identify an unknown generic device type -> web_research.
+If the client asks address/hours/price and you do not yet have a verified fact for it, you MUST pick the matching source above, not "answer".
+
 {decision_rules}
 
 Mechanics:
