@@ -679,29 +679,6 @@ def _parse_synonyms_map(s, default):
     return out or default
 
 
-def _route_triggers_hit(patterns, match_text: str) -> bool:
-    """True if any of a route's trigger phrases appears in the current message.
-    Drives the routing-hint filter: only matched routes get their full how-to
-    (reasoning + query_prompt) injected; everything else stays a compact line.
-    A phrase matches when all of its meaningful tokens (>3 chars) are present,
-    so 'чи ремонтуєте' hits on 'ремонтуєте' but not on unrelated text."""
-    if not patterns:
-        return False
-    t = (match_text or "").lower()
-    for p in patterns:
-        p = (p or "").strip().lower()
-        if not p:
-            continue
-        toks = [w for w in re.split(r"[^\w]+", p, flags=re.UNICODE) if len(w) > 3]
-        if not toks:
-            if p and p in t:
-                return True
-            continue
-        if all(tok in t for tok in toks):
-            return True
-    return False
-
-
 async def run_agent(
     text: str,
     history: list,
@@ -768,14 +745,6 @@ async def run_agent(
             .where(KnowledgeType.tenant_id == tenant_id, KnowledgeType.enabled == True)
             .order_by(KnowledgeType.priority)
         )
-        # Context-filter routes by their trigger phrases: the model still sees
-        # every route (so it can override), but only routes whose triggers fired
-        # carry their verbose how-to. Unrelated routes shrink to one line — no
-        # more towing the whole route set on every message.
-        recent_for_match = " ".join(
-            str(h.get("content", "")) for h in (history or [])[-3:]
-        )
-        match_text = (text + " " + recent_for_match).lower()
         hint_lines = []
         for kt in res_kt.scalars().all():
             route_meta = dict(kt.meta or {})
@@ -809,22 +778,14 @@ async def run_agent(
             if tool_hint:
                 line += f" use {tool_hint}."
             line += patterns
-            src_desc = route_configs[str(kt.code)]["source_description"]
-            if src_desc:
-                # Always tell the model WHERE this route's data lives — cheap and
-                # it's what lets the model pick the route from the compact list.
-                line += f" Data source: {src_desc}."
+            if reasoning:
+                # Slot templates like "ви ремонтуєте {прилад}" tell the model to
+                # extract the slot and reason about it before searching.
+                line += f" How to reason: {reasoning}"
+            query_prompt = route_configs[str(kt.code)]["query_prompt"]
+            if query_prompt:
+                line += f" How to formulate the source query: {query_prompt}"
             line += f" Route code: {kt.code}."
-            # Verbose how-to only when this route's triggers match the current
-            # turn. Otherwise the route stays a one-liner above.
-            if _route_triggers_hit(kt.intent_patterns, match_text):
-                if reasoning:
-                    # Slot templates like "ви ремонтуєте {прилад}" tell the model
-                    # to extract the slot and reason about it before searching.
-                    line += f" How to reason: {reasoning}"
-                query_prompt = route_configs[str(kt.code)]["query_prompt"]
-                if query_prompt:
-                    line += f" How to formulate the source query: {query_prompt}"
             hint_lines.append(line)
         if hint_lines:
             router_protocol += "\n[TENANT ROUTING HINTS]\n" + "\n".join(hint_lines)
