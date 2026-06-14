@@ -38,19 +38,6 @@ from app.core.agent import (
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_MARKERS = (
-    "нічого не знайдено", "каталог порожній", "no search results", "could not extract",
-    "не знайдено у базі", "не налаштована", "прямого збігу немає", "no web data",
-)
-
-
-def _is_empty(result: str) -> bool:
-    if not result or not result.strip():
-        return True
-    low = result.lower()
-    return any(m in low for m in _EMPTY_MARKERS)
-
-
 def _recent(history: list, text: str, n: int = 8) -> list:
     msgs = []
     for h in (history or [])[-n:]:
@@ -237,9 +224,10 @@ async def _build_query(route, text, history, model, base_url, api_key, emit, ste
 
 
 async def _clean_source(route, need, raw, model, base_url, api_key, emit, step):
-    """Isolated stateless cleaner using ONLY this route's clean prompts."""
-    if _is_empty(raw):
-        emit(f"CLEAN #{step}", "Порожньо", "Джерело без корисних даних")
+    """Isolated stateless cleaner using ONLY this route's clean prompts. The LLM
+    judges usefulness and filters naturally — no hardcoded marker scripts."""
+    if not str(raw or "").strip():
+        emit(f"CLEAN #{step}", "Порожньо", "Джерело нічого не повернуло")
         return ""
     rules = route.get("result_validation_prompt") or route.get("source_description") or ""
     user = (
