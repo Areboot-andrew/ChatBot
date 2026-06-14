@@ -462,9 +462,24 @@ async def _tool_search_knowledge(query: str, tenant_id: uuid.UUID, db: AsyncSess
         res_qa = await db.execute(
             select(QaPair)
             .where(QaPair.tenant_id == tenant_id, QaPair.enabled == True, or_(*qa_conditions))
-            .limit(6)
+            .limit(48)
         )
-        for qa in res_qa.scalars().all():
+        qa_rows = res_qa.scalars().all()
+
+        def qa_score(qa):
+            question = (qa.question or "").lower()
+            variants = " ".join(str(v) for v in (qa.question_variants or [])).lower()
+            answer = (qa.answer or "").lower()
+            category = (qa.category or "").lower()
+            return sum(
+                12 * (tok in question) +
+                10 * (tok in variants) +
+                3 * (tok in answer) +
+                2 * (tok in category)
+                for tok in tokens
+            )
+
+        for qa in sorted(qa_rows, key=qa_score, reverse=True)[:6]:
             parts.append(f"Q: {qa.question}\nA: {qa.answer}")
     try:
         rag_docs = await search_knowledge(query, str(tenant_id), top_k=top_k, threshold=threshold)

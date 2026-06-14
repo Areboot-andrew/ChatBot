@@ -3,7 +3,7 @@ import re
 import time
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import String, cast, or_, select
 from app.models.tenant import BotSetting
 from app.models.knowledge import QaPair
 from app.models.services import ServicePrice
@@ -186,6 +186,8 @@ async def process_message_pipeline(
         if tokens:
             qa_conditions = [QaPair.question.ilike(f"%{tok}%") for tok in tokens]
             qa_conditions += [QaPair.answer.ilike(f"%{tok}%") for tok in tokens]
+            qa_conditions += [cast(QaPair.question_variants, String).ilike(f"%{tok}%") for tok in tokens]
+            qa_conditions += [QaPair.category.ilike(f"%{tok}%") for tok in tokens]
             res_qa = await db.execute(
                 select(QaPair)
                 .where(QaPair.tenant_id == tenant_id, QaPair.enabled == True, or_(*qa_conditions))
