@@ -198,6 +198,8 @@ async def seed_default_prompts(db):
         "agent_decision_rules": DEFAULT_DECISION_RULES,
         "answer_style": DEFAULT_ANSWER_STYLE,
         "intake_policy": DEFAULT_INTAKE_POLICY,
+        "web_research_mode": "normal",
+        "parts_sales_mode": "normal",
         "conduct_policy": DEFAULT_CONDUCT_POLICY,
         "ban_message": "Вітаю, вас забанено.",
         "parts_instruction": DEFAULT_PARTS_INSTRUCTION,

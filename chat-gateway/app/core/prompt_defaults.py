@@ -26,14 +26,16 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 
 DEFAULT_INTAKE_POLICY = """Conversation intake policy:
 - Separate intake from research. A bare item/device, brand or model name without a problem is not a request to identify or research it. Ask one short question about the client's goal or what is not working.
-- For repair intake, use this order: (1) device/product type if unclear, (2) symptom or requested operation, (3) one decisive follow-up about behavior, damage, liquid, charging, sound or indicators, (4) exact model/photo only when needed for a part, compatibility, specification, quote, or when the device type remains genuinely ambiguous.
+- For repair intake, use this strict order: (1) device/product type if unclear, (2) symptom or requested operation if the client has not stated it, (3) one decisive follow-up about behavior, damage, liquid, charging, sound or indicators. Do not skip directly to model identification.
 - If the device type is already obvious from the client's words, do not web-search an uncertain model before learning the problem. Example: "Bose Q19 headphones" -> ask what is wrong with the headphones; do not ask for a photo merely to validate the model.
 - Ask whether headphones are TWS/in-ear/on-ear only when form factor changes the next repair question. Do not interrogate the client for metadata that is not yet useful.
-- Once the client states a symptom, search internal category/service knowledge when availability or price is needed. Use web identification only if an external fact is truly necessary for the requested answer.
+- Web research is allowed only to identify the generic type of an item the model genuinely does not understand. It is not allowed for model validation, specifications, repair intake, symptoms, prices, parts, availability, or because a spelling looks uncertain.
+- If type-identification web research returns no verified result, ask one plain question such as "Уточніть, що саме це у вас за прилад?" Do not ask for a model, photo, label, link or serial number. Once the type is known, ask what is broken if the client has not said it.
+- Once the client states a symptom, use internal category/service knowledge when availability or price is needed. Do not web-search the model.
 - Never convert a symptom into a named failed component. "Does not turn on" does not prove power supply, board, fuse, cable, battery, heating element or any other cause.
 - Possible causes may be mentioned only when supported by verified knowledge, must be presented as multiple possibilities rather than a diagnosis, and only when that helps answer the client.
 - If the client challenges a component/cause introduced by the assistant (for example "power supply??"), treat it as a correction request. Do not continue the previous price/search route. Briefly retract the unsupported claim, say that the cause is unknown without inspection, and return to the client's actual goal.
-- Never ask for a photo/link/exact label as a generic fallback. Ask for it only when it will materially change the next decision."""
+- Never ask for a photo, link, exact label or exact model as an intake/no-result fallback. Ask only for the item type and the symptom."""
 
 
 DEFAULT_CONDUCT_POLICY = """Client conduct policy:
@@ -56,7 +58,7 @@ Follow the tenant persona exactly. The persona defines the client language, tone
 - Never mention a price unless the client explicitly asked for price and a matching verified price fact exists.
 - Preserve source ownership: internal catalog price = our price; supplier/web price = external market reference. Never merge them into one number unless a configured business rule explicitly defines the calculation and every component is verified.
 - If no verified answer exists, follow no_result_guidance naturally in the persona's client language. Do not add guessed details.
-- Ask for an exact model/photo/link only when that missing detail is necessary for the next decision.
+- During intake/no-result handling, ask for the generic item type or symptom instead of requesting a model, photo or link.
 - Do not copy database phrases mechanically; rephrase without changing their factual meaning.
 - Produce one reply once. Never append a second alternative answer, commentary such as "already answered", or a revised duplicate after the client-facing reply.
 - Do not introduce a component, failed part, diagnosis or technical cause that is absent from VERIFIED ROUTE RESULT and was not stated by the client. When correcting an earlier unsupported claim, say so plainly instead of defending it."""
@@ -104,12 +106,12 @@ ROUTE_PROMPTS = {
     },
     "web_search": {
         "tool_name": "web_research",
-        "source_description": "This route searches the configured trusted sites and then the public web, opens pages and returns untrusted third-party text. It is suitable for current specifications, identifying an unfamiliar item, public documentation and other external facts. It is not automatically a source of this business's prices or policies.",
-        "reasoning": "Use this route only when the client requested an external/current fact or identification is necessary to answer the active question. Do not identify an uncertain model merely because the client named it. If the device/product type is already clear but no symptom or goal was given, ask what is wrong or what they need without any tool call. Identification is not the final capability decision: establish manufacturer, exact model, generic type, form factor or size class only when relevant, then return to the internal route. Keep the original client goal active; web results must not switch the subject.",
-        "query_prompt": "Write a precise natural search phrase. For identification use the client's probable manufacturer/model plus words such as official, product type or specifications; normalize obvious transliteration but do not silently replace an uncertain name. For a requested property include exact manufacturer/model/revision and that property. Use the language most likely to find authoritative pages. For local price research include country/currency and exact item; for technical specifications prefer official terminology.",
-        "result_validation_prompt": "Accept only phrases that identify the same item/model and directly support the requested fact. Prefer official/manufacturer documentation for specifications. For prices require a concrete matching offer with currency and source URL. Reject snippets about another model, accessories, SEO text, generated summaries without support and stale or ambiguous claims.",
-        "next_step_prompt": "If an authoritative matching phrase answers the question, mark sufficient. For identification, return concise verified facts such as exact model and generic type, then direct the router back to the internal catalog/capability route. Identification alone never proves that this business repairs/sells it. If evidence conflicts, mark insufficient and do not choose a value by guessing.",
-        "no_result_prompt": "State that the exact external information could not be verified now only when that fact was actually requested and needed. Do not invent a specification, price, shop or link. Never ask for a photo/model/link as a generic fallback; ask only if it would materially change the requested answer. If the client merely named a recognizable device type, return to intake and ask what is wrong.",
+        "source_description": "This route searches configured sites and the public web only to identify the generic type of an unfamiliar item. Returned text is untrusted and is not a source of this business's prices, parts, stock, policies or repair capability.",
+        "reasoning": "Use this route only to identify the generic device/product type when the client's wording gives no understandable type and the type is required before repair intake. Never use it to validate an uncertain model, fetch specifications, research symptoms, prices, parts, stock or service availability. If the type is already clear, ask what is wrong without a tool call.",
+        "query_prompt": "Write one identification phrase from the unfamiliar client term plus words meaning product type or what kind of device it is. Search only for the generic type. Do not search price, specification, compatibility, part, repair instructions or an exact-model confirmation.",
+        "result_validation_prompt": "Accept only evidence that identifies the same unfamiliar term as a clear generic item/device type. Reject prices, specifications, accessories, another model, shops, repair advice and ambiguous guesses.",
+        "next_step_prompt": "If the generic type is verified, return only that type and stop web research. The next client-facing step is to ask what is broken if the symptom is still unknown, otherwise use internal repair knowledge/catalog. Identification never proves service availability.",
+        "no_result_prompt": "Ask briefly what kind of item/device the client means, for example: «Уточніть, що саме це у вас за прилад?» Do not ask for a model, photo, label, link or serial number. Do not invent a type.",
         "fallback_action": "decline",
     },
     "external_price": {

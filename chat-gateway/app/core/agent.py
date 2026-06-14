@@ -215,6 +215,57 @@ def _is_assistant_claim_challenge(text: str, history: list = None) -> bool:
     return bool(words) and any(word[:5] in assistants[-1] for word in words)
 
 
+_KNOWN_DEVICE_TYPE_RE = re.compile(
+    r"(?iu)\b(?:телефон|смартфон|айфон|планшет|ноутбук|макбук|комп['’]?ютер|пк|"
+    r"телевізор|монітор|проектор|навушник|гарнітур|колонк|саундбар|акустик|"
+    r"кавомашин|кавоварк|кавомолк|чайник|термопот|мікрохвильов|блендер|міксер|"
+    r"комбайн|м['’]?ясоруб|мультиварк|скороварк|аерогрил|фритюр|грил|тостер|"
+    r"вафельниц|хлібопіч|праск|парогенератор|відпарювач|пилосос|фен|стайлер|"
+    r"плойк|тример|бритв|епілятор|зубн\w* щітк|вентилятор|обігрівач|зволожувач|"
+    r"очищувач|ваг|вакууматор|павербанк|powerbank|зарядн\w* станц|ecoflow|"
+    r"роутер|модем|принтер|сканер|фотоапарат|камер|реєстратор|джойстик|геймпад)"
+)
+
+
+def _has_known_device_type(text: str, history: list = None) -> bool:
+    client_text = " ".join(
+        str(item.get("content") or "")
+        for item in (history or [])[-4:]
+        if item.get("role") == "user"
+    )
+    return bool(_KNOWN_DEVICE_TYPE_RE.search(f"{client_text} {text or ''}"))
+
+
+_PART_PURCHASE_RE = re.compile(
+    r"(?iu)(?:купити|продасте|продаєте|продати|замовити|є\s+в\s+наявності|"
+    r"можна\s+у\s+вас\s+взяти|почому|скільки\s+коштує|ціна|вартість|\bє\b)"
+)
+_PART_ONLY_RE = re.compile(
+    r"(?iu)(?:запчаст|детал|дисплей|екран|матриц|акумулятор|батаре|акб|роз['’]?єм|"
+    r"гнізд|шлейф|камер|динамік|мікрофон|корпус|кришк|плат|мотор|двигун|помп|тен)"
+)
+_INSTALL_OR_REPAIR_RE = re.compile(r"(?iu)(?:ремонт|полагод|зробити|замінити|заміна|встановити|поставити|поміняти)")
+
+
+def _wants_part_only(text: str) -> bool:
+    current = text or ""
+    return bool(
+        _PART_PURCHASE_RE.search(current) and
+        _PART_ONLY_RE.search(current) and
+        not _INSTALL_OR_REPAIR_RE.search(current)
+    )
+
+
+def _is_type_identification_decision(decision: dict) -> bool:
+    blob = " ".join(str(decision.get(key) or "") for key in ("question", "reason", "needed_fact"))
+    return bool(re.search(
+        r"(?iu)(?:generic\s+(?:device|product)\s+type|device\s+type|product\s+type|"
+        r"identify\s+(?:the\s+)?(?:device|item|type)|what\s+(?:kind|type)\s+of|"
+        r"що\s+це|який\s+це\s+(?:тип|прилад|пристрій)|тип\s+(?:приладу|пристрою|товару))",
+        blob,
+    ))
+
+
 _GREETING_WORDS = {
     "привіт", "привітик", "прив", "вітаю", "добрий", "доброго", "здрастуйте", "здоров",
     "хай", "дякую", "дякс", "спасибі", "ок", "окей", "окк", "бувай", "па", "пока",
@@ -588,6 +639,8 @@ async def run_agent(
     tools_block = "\n".join([TOOL_DESCRIPTIONS[t] for t in enabled_tools if t in TOOL_DESCRIPTIONS])
     decision_rules = (meta.get("agent_decision_rules") or "").strip() or DEFAULT_DECISION_RULES
     intake_policy = (meta.get("intake_policy") or "").strip() or DEFAULT_INTAKE_POLICY
+    web_research_mode = (meta.get("web_research_mode") or "normal").strip()
+    parts_sales_mode = (meta.get("parts_sales_mode") or "normal").strip()
     conduct_policy = (meta.get("conduct_policy") or "").strip() or DEFAULT_CONDUCT_POLICY
     decision_rules += "\n\n" + intake_policy + "\n\n" + conduct_policy
     router_protocol = (ROUTER_PROTOCOL
@@ -946,6 +999,15 @@ async def run_agent(
         needed_fact = str(decision.get("needed_fact", "") or "")
         model_price_requested = _as_bool(decision.get("price_requested", False))
         decision["price_requested"] = explicit_price_requested
+        if parts_sales_mode == "service_only" and _wants_part_only(text):
+            emit(f"AGENT ROUTER #{iteration}", "Продаж запчастини відхилено",
+                 "texno.plus є сервісом і не продає запчастини окремо.")
+            action = "answer"
+            decision["action"] = action
+            needed_fact = "business_policy"
+            decision["needed_fact"] = needed_fact
+            query = ""
+            decision["query"] = query
         if not explicit_price_requested and (model_price_requested or needed_fact == "price"):
             emit(f"AGENT ROUTER #{iteration}", "Ціновий намір відхилено",
                  "Клієнт не питав ціну; намір не можна брати зі слів асистента.")
@@ -955,9 +1017,21 @@ async def run_agent(
             decision["needed_fact"] = needed_fact
             query = ""
             decision["query"] = query
-        if action == "web_research" and needed_fact == "specification" and _is_bare_item_intake(text, history):
-            emit(f"AGENT ROUTER #{iteration}", "Пошук моделі відхилено",
-                 "Клієнт лише назвав пристрій; спочатку треба запитати, що не працює.")
+        if action == "web_research" and web_research_mode == "identify_unknown_type_only":
+            web_allowed = (
+                _is_type_identification_decision(decision) and
+                not _has_known_device_type(text, history)
+            )
+            if not web_allowed:
+                emit(f"AGENT ROUTER #{iteration}", "Зайвий веб-пошук відхилено",
+                     "Веб дозволений лише для визначення невідомого типу приладу.")
+                action = "answer"
+                decision["action"] = action
+                query = ""
+                decision["query"] = query
+        if action == "search_parts" and parts_sales_mode == "service_only":
+            emit(f"AGENT ROUTER #{iteration}", "Зовнішній пошук запчастини відхилено",
+                 "Для цього tenant-а запчастини окремо не продаються, зовнішній пошук вимкнений.")
             action = "answer"
             decision["action"] = action
             query = ""
@@ -1083,6 +1157,11 @@ async def run_agent(
     answer_style = (meta.get("answer_style") or "").strip() or DEFAULT_ANSWER_STYLE
     sys_prompt += "\n\n" + answer_style
     sys_prompt += "\n\n[CONVERSATION INTAKE POLICY]\n" + intake_policy
+    if parts_sales_mode == "service_only" and _wants_part_only(text):
+        sys_prompt += ("\n\n[TENANT PART SALES POLICY — mandatory]\n"
+                       "The client wants to buy a part separately. Reply briefly in Ukrainian: "
+                       "we do not sell parts separately; texno.plus is a repair service. "
+                       "Do not search suppliers, prices or stock and do not ask for a model/photo.")
     sys_prompt += "\n\n[CLIENT CONDUCT POLICY]\n" + conduct_policy
     if memory.get("_conduct_warning") == "1":
         sys_prompt += ("\n\n[SESSION CONDUCT STATE]\n"
