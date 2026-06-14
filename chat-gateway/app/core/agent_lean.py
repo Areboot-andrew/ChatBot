@@ -230,10 +230,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
         if route_results:
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
-        # Force a JSON decision (the model must never stay silent or reply here).
-        sys += ('\n\n[OUTPUT] Return ONLY one JSON object matching the schema above, nothing else. '
-                'If no route is needed — greeting, small talk, off-topic, or the facts are already '
-                'present — return {"route":"answer"}.')
+        # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True)
         emit(f"DECIDE #{step}", "Сире рішення", str(raw))
