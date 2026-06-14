@@ -286,13 +286,35 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         answer_tokens = min(1200, max(120, int(settings.max_tokens or 700))) if settings else 700
     except (ValueError, TypeError):
         answer_tokens = 700
-    answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=False)
-    if not answer:
-        answer = settings.fallback_text if settings and settings.fallback_text else "Технічна заминка, спробуйте ще раз."
-    answer = _clean_answer(answer, fallback=(settings.fallback_text if settings else "") or "")
+    answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True)
+    safe_fallback = (settings.fallback_text if settings and settings.fallback_text else "").strip() \
+        or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+    answer = _clean_answer(answer, fallback=safe_fallback)
+    # Hard guard: never send an empty / None / placeholder reply to the client
+    # (e.g. when the LLM server is overloaded and returns nothing).
+    if not answer or str(answer).strip().lower() in ("none", "null", "undefined", "nil", "-"):
+        answer = safe_fallback
 
     emit("ANSWER", "OK", f"Перевірених фактів цього звернення: {len(facts)}")
     return answer, memory
+
+
+def _sanitize_query(q: str) -> str:
+    """Guard against degenerate model output (e.g. a token repeated thousands of
+    times): keep up to 8 unique keyword tokens, cap length."""
+    q = (q or "").strip()
+    if not q:
+        return ""
+    seen, out = set(), []
+    for tok in q.replace("\n", " ").split():
+        key = tok.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tok)
+        if len(out) >= 8:
+            break
+    return " ".join(out)[:120]
 
 
 async def _judge_conduct(text, prompt, model, base_url, api_key):
@@ -340,6 +362,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         query = str(_extract_json(query_raw).get("query") or "").strip()
     except Exception:
         query = ""
+    query = _sanitize_query(query)
     emit(f"QUERY #{step}", route["code"], query or "[empty query]")
 
     raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
