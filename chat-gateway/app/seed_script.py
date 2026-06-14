@@ -80,6 +80,7 @@ async def seed():
         # 3. Import Services from services.json
         with open("/app/app/services.json", "r", encoding="utf-8") as f:
             data = json.load(f)
+        from app.core.texno_price_catalog import TEXNO_SERVICE_PRICES
             
         categories = data.get("categories", [])
         for cat in categories:
@@ -97,6 +98,9 @@ async def seed():
             await session.flush() # to get cat_obj.id
             
             services = cat.get("services", [])
+            expanded = TEXNO_SERVICE_PRICES.get(cat.get("id"))
+            if expanded:
+                services = [{"name": name, "price": price} for name, price in expanded]
             for s in services:
                 price_obj = ServicePrice(
                     tenant_id=tenant_id,

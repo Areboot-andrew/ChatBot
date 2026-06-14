@@ -306,7 +306,7 @@ def _query_tokens(*texts: str) -> list:
         if not t:
             continue
         for w in re.findall(r"[\w\d]+", t.lower(), re.UNICODE):
-            if len(w) >= 3 and w not in tokens:
+            if (len(w) >= 3 or (w.isdigit() and len(w) >= 2)) and w not in tokens:
                 tokens.append(w)
     return tokens
 
@@ -338,6 +338,8 @@ _CATALOG_SYNONYMS = {
     "зарядки": ["роз'єм", "живлення"], "кнопка": ["шлейф"], "кнопки": ["шлейф"],
     # brand transliteration: client writes Cyrillic, price list often Latin
     "айфон": ["iphone"], "айфону": ["iphone"], "айфона": ["iphone"],
+    "телефон": ["смартфон", "мобільний"], "телефона": ["смартфон", "мобільний"],
+    "телефону": ["смартфон", "мобільний"],
     "самсунг": ["samsung"], "ксіомі": ["xiaomi"], "сяомі": ["xiaomi"],
     "хуавей": ["huawei"], "ноут": ["ноутбук", "laptop"], "макбук": ["macbook"],
     "модуль": ["дисплейний модуль", "матриц", "дисплей"],
@@ -349,10 +351,18 @@ _CATALOG_SYNONYMS = {
     "колонка": ["акустика", "speaker"], "колонки": ["акустика", "speakers"],
     "павербанк": ["powerbank", "зовнішній акумулятор"],
     "зарядна": ["зарядна станція", "power station"],
+    "ecoflow": ["зарядна станція", "інвертор"], "екофлоу": ["зарядна станція", "інвертор"],
     "пилосос": ["порохотяг"], "кавоварка": ["кавомашина", "кавовий апарат"],
     "гніздо": ["роз'єм", "порт"], "порт": ["роз'єм", "гніздо"],
     "тайпсі": ["type-c", "usb-c"], "typec": ["type-c", "usb-c"],
     "мікроюсб": ["micro-usb"], "залив": ["чистка після залиття", "корозія"],
+    "вода": ["рідина", "залиття"], "води": ["рідина", "залиття"],
+    "воду": ["рідина", "залиття"], "водою": ["рідина", "залиття"],
+    "рідина": ["залиття", "волога"], "намок": ["рідина", "залиття", "волога"],
+    "заряджається": ["заряджання", "зарядки", "роз'єм"],
+    "заряджаються": ["заряджання", "зарядки", "роз'єм"],
+    "протікає": ["протікання", "витік"], "тече": ["протікання", "витік"],
+    "підсвітка": ["підсвітки", "led-підсвітки"],
     "гріється": ["перегрів", "чистка", "термоінтерфейс"],
     "хрипить": ["динамік", "акустика"], "звук": ["динамік", "мікрофон", "аудіо"],
 }
@@ -374,6 +384,19 @@ _CATALOG_STOPWORDS = {
     "ремонт", "ремонту", "заміна", "заміну", "діагностика", "діагностики",
     "послуга", "послуги", "послуг", "техніки", "техніка", "пристрій", "пристрою",
     "відремонтувати", "полагодити", "поломка", "несправність", "майстер",
+}
+
+# These terms select a category but should not outrank the client's concrete
+# symptom/operation. For example, "кавомашина протікає" must rank leak repair
+# above the generic "діагностика кавомашини" row.
+_CATALOG_DEVICE_WORDS = {
+    "телефон", "телефона", "смартфон", "смартфона", "планшет", "планшета",
+    "ноутбук", "ноутбука", "комп'ютер", "компютер", "пк", "макбук",
+    "телевізор", "телевізора", "монітор", "монітора", "проектор", "проектора",
+    "навушники", "навушників", "гарнітура", "гарнітури", "колонка", "колонки",
+    "акустика", "акустики", "кавомашина", "кавомашини", "кавоварка", "кавоварки",
+    "чайник", "чайника", "пилосос", "пилососа", "мікрохвильовка", "мікрохвильовки",
+    "павербанк", "павербанка", "станція", "станції", "ecoflow", "блендер",
 }
 
 
@@ -414,7 +437,7 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             ServiceCategory.enabled == True,
             or_(*(name_conds + cat_conds)),
         )
-        .limit(60)
+        .limit(300)
     )
     candidates = res.all()
     if candidates:
@@ -428,12 +451,17 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             phrase = f"{category_text} {name}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
             name_hits = sum(1 for _, form in original_forms if form in name)
+            specific_name_hits = sum(
+                1 for token, form in original_forms
+                if token not in _CATALOG_DEVICE_WORDS and form in name
+            )
             category_hits = sum(1 for _, form in original_forms if form in category_text)
             synonym_hits = sum(1 for form in expanded_forms if form in phrase)
             # Original phrase coverage dominates; category + row coverage is
             # stronger than several synonym-only coincidences.
-            value = original_hits * 10 + name_hits * 5 + category_hits * 4 + synonym_hits
-            return value, name_hits, category_hits
+            value = (original_hits * 10 + name_hits * 5 + specific_name_hits * 12 +
+                     category_hits * 4 + synonym_hits)
+            return value, specific_name_hits, name_hits, category_hits
 
         ranked = sorted(candidates, key=score, reverse=True)[:12]
         return "\n".join(

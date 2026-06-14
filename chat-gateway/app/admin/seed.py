@@ -42,6 +42,13 @@ async def seed_admin():
             try:
                 with open("/app/knowledge_template.yaml", "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f)
+                from app.core.texno_price_catalog import TEXNO_SERVICE_PRICES
+                for cat_data in data.get("categories", []):
+                    expanded = TEXNO_SERVICE_PRICES.get(cat_data.get("slug"))
+                    if expanded:
+                        cat_data["services"] = [
+                            {"name": name, "price": price} for name, price in expanded
+                        ]
                     
                 for cat_data in data.get("categories", []):
                     cat = ServiceCategory(tenant_id=tenant.id, slug=cat_data["slug"])
