@@ -1067,6 +1067,20 @@ async def run_agent(
                     break
             else:
                 raise
+        # Small local models sometimes return an empty completion (especially in
+        # json_mode). Retry once in plain mode before giving up — an empty router
+        # otherwise dead-ends the whole turn (no routing, no conduct/ban decision).
+        if not str(raw or "").strip():
+            emit(f"AGENT ROUTER #{iteration}", "Порожня відповідь → повтор", "Роутер віддав пусто; повтор без json_mode.")
+            use_json_mode = False
+            try:
+                raw, usage = await asyncio.wait_for(chat(
+                    messages, model=model_name, temperature=0.1, max_tokens=400,
+                    base_url=base_url, api_key=api_key, return_usage=True, raise_error=True
+                ), timeout=35)
+            except (asyncio.TimeoutError, Exception):
+                raw = raw or ""
+
         # Raw model output as-is, before any parsing — the ground truth for
         # diagnosing why the router decided what it did.
         emit(f"AGENT ROUTER #{iteration}", "Сира відповідь моделі",
@@ -1222,20 +1236,21 @@ async def run_agent(
         else:
             raw_result = f"Unknown action '{action}'."
 
+        # No separate validation LLM call. The retrieved source text goes straight
+        # into gathered facts; the model reads it on the next router iteration (or
+        # at the final answer) and decides itself whether to answer or search more.
+        # Anti-invention is enforced by the answer-stage rules, not a second call.
         if action != "escalate":
-            result, validation_state = await _validate_tool_result(
-                raw_result, decision, action, query
-            )
-        else:
-            validation_state = {"sufficient": False, "next_action": "answer"}
+            result = str(raw_result).strip()
 
         gathered.append((action, query, result))
         emit(f"AGENT TOOL #{iteration}", action, str(result), f"{time.time() - t0:.2f}s")
 
-        if escalated or validation_state.get("sufficient"):
+        if escalated:
             break
-        if validation_state.get("next_action") in {"answer", "decline", "stop"}:
-            break
+        # Loop continues: the next iteration's router sees these facts and either
+        # answers or picks another source (capped by max_iter and the duplicate
+        # action guard above).
 
     if memory.get("_session_banned") == "1":
         ban_message = (meta.get("ban_message") or "Вітаю, вас забанено.").strip()
