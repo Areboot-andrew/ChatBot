@@ -200,8 +200,18 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if facts:
         ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
                     "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
-    ans_sys += ("\n\n[REPLY RULE] Answer only what the client actually asked. Keep it 1-2 short sentences. "
-                "Do not pile on extra info, options, prices or contacts they did not ask about.")
+    ans_sys += (
+        "\n\n[REPLY RULE] Talk like a real repair master — short, natural, human. Answer only what the "
+        "client actually asked, in 1-2 sentences.\n"
+        "- Price asked: give a natural range from the facts (напр. «від 900 до 3600 грн залежно від "
+        "несправності»), say the exact price is after the free diagnostics. NEVER list the whole price "
+        "table — pick only the rows that fit, summarise as one range.\n"
+        "- Work and part are separate: state our work price and the part separately, never merged.\n"
+        "- 'Do you repair X' / a named device: confirm we do it and invite to the free diagnostics; do "
+        "not give a price unless they asked.\n"
+        "- FAQ/policy: answer in one plain sentence from the facts; don't quote raw database wording.\n"
+        "- Never invent a number, address or term not in the facts, and don't pile on info nobody asked for."
+    )
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
