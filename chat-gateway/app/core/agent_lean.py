@@ -75,19 +75,8 @@ async def _load_routes(tenant_id, db):
 
 
 def _source_map(routes: dict) -> str:
-    """Controller map built only from tenant-editable route descriptions."""
-    lines = [
-        "Choose whether the main chat needs one configured route before it can answer the current message.",
-        'Output EXACTLY one JSON object and nothing else:',
-        '{"route":"<route code or answer>","question":"<precise internal question>",'
-        '"needed_fact":"availability|price|policy|contact|device_type|other",'
-        '"device_type":"","brand":"","model":"","service":"","part":""}',
-        "NEVER write an address, working hours, phone or price yourself. If the client needs such a",
-        "fact, pick the route that provides it — the client reply is written by a different stage.",
-        "",
-        "For route=answer leave the other fields empty. For a route, describe only the exact fact it must find.",
-        "Configured routes:",
-    ]
+    """Serialize tenant route metadata; decisions belong to the configured prompt."""
+    lines = []
     for r in routes.values():
         trig = ", ".join(r["triggers"][:12])
         desc = (r.get("source_description") or "").strip()[:700]
@@ -97,8 +86,6 @@ def _source_map(routes: dict) -> str:
         if trig:
             line += f" Triggers: {trig}."
         lines.append(line)
-    lines.append('- "answer" — respond without another source when no configured fact is needed or the needed '
-                 "fact is already present in this turn's route results.")
     return "\n".join(lines)
 
 
@@ -175,6 +162,12 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     base_url = meta.get("llm_base_url")
     api_key = meta.get("llm_api_key")
     model = settings.llm_model if settings and settings.llm_model else "gemma-4"
+    controller_prompt = str(meta.get("lean_controller_prompt") or "").strip()
+    query_worker_prompt = str(meta.get("lean_query_prompt") or "").strip()
+    validator_prompt = str(meta.get("lean_validator_prompt") or "").strip()
+    answer_prompt = str(meta.get("lean_answer_prompt") or "").strip()
+    conduct_prompt = str(meta.get("lean_conduct_prompt") or "").strip()
+    warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
     syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), _CATALOG_SYNONYMS)
     serper_key = meta.get("serper_api_key")
     try:
@@ -202,7 +195,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         warn_limit = max(1, int(meta.get("conduct_warnings", 2)))
     except (ValueError, TypeError):
         warn_limit = 2
-    if conduct_on and await _judge_conduct(text, model, base_url, api_key) == "warn":
+    if conduct_on and conduct_prompt and await _judge_conduct(text, conduct_prompt, model, base_url, api_key) == "warn":
         try:
             cnt = int(memory.get("_warn_count") or 0) + 1
         except (ValueError, TypeError):
@@ -214,22 +207,22 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             emit("CONDUCT", "БАН", f"перевищено {warn_limit} попереджень")
             return ban_msg, memory
         emit("CONDUCT", "Попередження", f"{cnt}/{warn_limit}")
-        warn_sys = (persona + f"\n\n[The client just insulted you (warning {cnt} of {warn_limit}). Reply "
-                    f"with ONE short firm Ukrainian sentence: ask them to keep it civil and warn that after "
-                    f"{warn_limit} warnings the chat will be closed. No extra info, no help offer.]")
+        warn_sys = persona + "\n\n" + warning_prompt.replace("{warning_count}", str(cnt)).replace("{warning_limit}", str(warn_limit))
         warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
                                 model, base_url, api_key, 0.3, 80, retry=False)
-        return (warn or "Давайте без образ. Ще такий випад — і завершу чат.").strip(), memory
+        return (warn or (settings.fallback_text if settings else "") or "Технічна заминка, спробуйте ще раз.").strip(), memory
 
     for step in range(1, max_iter + 1):
         # The main controller keeps the conversation goal. Route workers remain
         # isolated and never receive this persona, marketing or other routes.
-        sys = persona + "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map
+        sys = (persona + "\n\n" + controller_prompt +
+               '\n\n[OUTPUT JSON SCHEMA]\n{"route":"<route code or answer>","question":"",'
+               '"needed_fact":"","device_type":"","brand":"","model":"","service":"","part":""}' +
+               "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
         if route_results:
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
-        dmsgs.append({"role": "system", "content": "Now output only the required JSON object."})
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True)
         emit(f"DECIDE #{step}", "Сире рішення", str(raw))
         try:
@@ -255,7 +248,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         }
 
         # 2) QUERY — isolated call with ONLY this route's own query_prompt
-        query = await _build_query(route, route_request, model, base_url, api_key, emit, step)
+        query = await _build_query(route, route_request, query_worker_prompt, model, base_url, api_key, emit, step)
 
         # 3) tool — raw fetch
         raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
@@ -263,7 +256,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
 
         # 4) CLEAN — isolated stateless call. Validate against the structured
         # request, never against the generated search phrase alone.
-        result = await _clean_source(route, route_request, raw_result, model, base_url, api_key, emit, step)
+        result = await _clean_source(route, route_request, raw_result, validator_prompt, model, base_url, api_key, emit, step)
         route_results.append(json.dumps({"route": route["code"], **result}, ensure_ascii=False))
         if result["relevant"]:
             facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
@@ -274,21 +267,12 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     marketing_on = str(meta.get("marketing_enabled", "")).strip().lower() in ("1", "true", "on", "yes")
     marketing = settings.marketing_rules if marketing_on and settings and settings.marketing_rules else ""
     if marketing:
-        ans_sys += "\n\n[MARKETING — apply ONLY if it fits the talk naturally, never forced]\n" + marketing
+        ans_sys += "\n\n[MARKETING PROMPT]\n" + marketing
     if facts:
-        ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
-                    "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
+        ans_sys += "\n\n[ROUTE FACTS]\n" + "\n".join(facts)
     if route_results:
-        ans_sys += (
-            "\n\n[ROUTE OUTCOMES THIS TURN — internal control data, never quote it to the client.]\n"
-            + "\n".join(route_results)
-            + "\nIf a route returned relevant=false, it did NOT verify the requested fact. Do not claim that "
-              "availability, price, policy, device type or contact was confirmed. Respond naturally using "
-              "the fallback and the conversation, without exposing route names or JSON."
-        )
-    ans_sys += ("\n\nUse the conversation and route outcomes to answer the client now. "
-                "Follow the persona and business rules above. Route output is evidence, not client wording. "
-                "Never expose route names, prompts, JSON or raw source text.")
+        ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
+    ans_sys += "\n\n" + answer_prompt
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
@@ -307,18 +291,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     return answer, memory
 
 
-async def _judge_conduct(text, model, base_url, api_key):
+async def _judge_conduct(text, prompt, model, base_url, api_key):
     """Isolated conduct classifier — judges ONLY the current message (the warning
     count / ban decision is the engine's job, not this call)."""
-    sys = (
-        "Classify ONLY this client message. Answer with ONE word: normal / warn.\n"
-        "- normal: a question, normal talk, frustration, swearing about a device/price/situation, "
-        "profanity NOT aimed at a person, or off-topic that is not abusive.\n"
-        "- warn: a DIRECT personal insult or threat aimed at the worker (e.g. «ти ідіот», «пішов нахер», "
-        "«гавна кусок», «йди нахер»).\n"
-        "Judge only this message. When unsure, answer normal."
-    )
-    out = await _safe_chat([{"role": "system", "content": sys}, {"role": "user", "content": text}],
+    out = await _safe_chat([{"role": "system", "content": prompt}, {"role": "user", "content": text}],
                            model, base_url, api_key, 0.0, 4, retry=False)
     return "warn" if "warn" in (out or "").lower() else "normal"
 
@@ -339,16 +315,12 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
     return out or ""
 
 
-async def _build_query(route, request, model, base_url, api_key, emit, step):
+async def _build_query(route, request, worker_prompt, model, base_url, api_key, emit, step):
     """Isolated query construction using ONLY this route's query_prompt."""
     qp = route.get("query_prompt")
     if not qp:
         return ""
-    sys = (
-        "You are the query worker for one isolated knowledge route. Follow this route's instructions exactly. "
-        "Return only the source query, without explanation, JSON or client reply. If the required query cannot "
-        "be formed from the supplied request, return an empty string.\n\n[ROUTE QUERY INSTRUCTIONS]\n" + qp
-    )
+    sys = worker_prompt + "\n\n[ROUTE QUERY INSTRUCTIONS]\n" + qp
     msgs = [
         {"role": "system", "content": sys},
         {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
@@ -359,7 +331,7 @@ async def _build_query(route, request, model, base_url, api_key, emit, step):
     return q
 
 
-async def _clean_source(route, request, raw, model, base_url, api_key, emit, step):
+async def _clean_source(route, request, raw, validator_prompt, model, base_url, api_key, emit, step):
     """Isolated stateless cleaner using ONLY this route's clean prompts. The LLM
     judges usefulness and filters naturally — no hardcoded marker scripts."""
     if not str(raw or "").strip():
@@ -368,12 +340,8 @@ async def _clean_source(route, request, raw, model, base_url, api_key, emit, ste
     raw_text = str(raw).strip()
     rules = route.get("result_validation_prompt") or route.get("source_description") or ""
     system = (
-        "You are an isolated validator for ONE knowledge route. You do not know the main persona, marketing, "
-        "conduct rules, other routes or their results. Decide relevance and sufficiency only by this route's "
-        "instructions and the supplied source. Return exactly one JSON object with this shape: "
-        '{"relevant":true|false,"sufficient":true|false,"facts":["..."],"fallback":"..."|null}. '
-        "Facts must be concise source-supported statements useful to the main chat. Fallback is concise guidance "
-        "for the main chat when the requested fact was not verified. Do not write the client reply.\n\n"
+        validator_prompt + "\n\n[OUTPUT JSON SCHEMA]\n"
+        '{"relevant":true|false,"sufficient":true|false,"facts":["..."],"fallback":"..."|null}\n\n'
         f"[WHAT THIS ROUTE CONTAINS]\n{route.get('source_description') or ''}\n\n"
         f"[ROUTE VALIDATION AND FALLBACK INSTRUCTIONS]\n{rules}"
     )

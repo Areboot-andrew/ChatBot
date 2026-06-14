@@ -162,6 +162,24 @@
                     <p class="mt-1 text-xs text-gray-500">До 3 звернень до джерел. Після достатньої підтвердженої відповіді цикл зупиняється одразу.</p>
                 </div>
             </div>
+            <div class="mt-6 space-y-5 border-t border-gray-800 pt-5">
+                <h4 class="text-base font-semibold text-gray-200">Промпти етапів Lean</h4>
+                <p class="text-xs text-gray-500">Ці поля повністю керують поведінкою LLM на кожному етапі. Код лише передає контекст, викликає джерело та перевіряє структуру JSON.</p>
+                {% for name, label, help in [
+                    ('lean_controller_prompt', 'Controller: вибір route і внутрішнє питання', 'Бачить persona, чат, карту routes і результати цього ходу.'),
+                    ('lean_query_prompt', 'Query worker: формування запиту до джерела', 'Бачить лише структуроване питання і query_prompt вибраного route.'),
+                    ('lean_validator_prompt', 'Route validator: перевірка сирого результату', 'Бачить лише запит, сирі дані та особисті настанови route.'),
+                    ('lean_answer_prompt', 'Final answer: відповідь клієнту', 'Бачить persona, чат і очищені результати routes.'),
+                    ('lean_conduct_prompt', 'Conduct classifier: normal / warn', 'Бачить лише поточне повідомлення клієнта.'),
+                    ('lean_warning_prompt', 'Warning reply: текст попередження', 'Бачить persona та поточний чат. Можна використати {warning_count} і {warning_limit}.'),
+                ] %}
+                <div>
+                    <label for="{{ name }}" class="block mb-1 text-sm font-medium text-gray-300">{{ label }}</label>
+                    <p class="text-xs text-gray-500 mb-2">{{ help }}</p>
+                    <textarea name="{{ name }}" id="{{ name }}" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3">{{ m.get(name, '') }}</textarea>
+                </div>
+                {% endfor %}
+            </div>
             <label class="flex items-center gap-2 text-sm text-gray-300 mb-2">
                 <input type="checkbox" name="router_json_mode" value="on" {% if not settings or not settings.meta or settings.meta.get('router_json_mode', True) %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
                 Строгий JSON-режим старого Agent (Lean завжди використовує структуровані результати)

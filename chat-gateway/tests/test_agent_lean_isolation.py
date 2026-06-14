@@ -24,10 +24,13 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
             "part": "LCD",
         }
         with patch.object(agent_lean, "_safe_chat", fake_chat):
-            query = await agent_lean._build_query(route, request, "m", None, None, lambda *a: None, 1)
+            query = await agent_lean._build_query(
+                route, request, "CONFIGURED QUERY WORKER", "m", None, None, lambda *a: None, 1
+            )
 
         self.assertEqual(query, "Xiaomi Redmi Note 10 LCD")
         self.assertEqual(len(captured), 2)
+        self.assertIn("CONFIGURED QUERY WORKER", captured[0]["content"])
         self.assertIn(route["query_prompt"], captured[0]["content"])
         self.assertEqual(json.loads(captured[1]["content"]), request)
         self.assertNotIn("marketing", " ".join(m["content"].lower() for m in captured))
@@ -52,12 +55,13 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
         request = {"question": "Price", "needed_fact": "price", "device_type": "smartphone"}
         with patch.object(agent_lean, "_safe_chat", fake_chat):
             result = await agent_lean._clean_source(
-                route, request, "Заміна роз'єму смартфона — 800-1200 грн", "m", None, None,
+                route, request, "Заміна роз'єму смартфона — 800-1200 грн", "CONFIGURED VALIDATOR", "m", None, None,
                 lambda *a: None, 1,
             )
 
         self.assertTrue(result["sufficient"])
         system = captured[0]["content"]
+        self.assertIn("CONFIGURED VALIDATOR", system)
         self.assertIn(route["source_description"], system)
         self.assertIn(route["result_validation_prompt"], system)
         self.assertNotIn("Інженер Андрон", system)
@@ -76,7 +80,8 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(agent_lean, "_safe_chat", fake_chat):
             result = await agent_lean._clean_source(
                 route, {"question": "бетономішалки", "needed_fact": "availability"},
-                "Категорії: дрібна побутова техніка", "m", None, None, lambda *a: None, 1,
+                "Категорії: дрібна побутова техніка", "CONFIGURED VALIDATOR", "m", None, None,
+                lambda *a: None, 1,
             )
 
         self.assertFalse(result["relevant"])
