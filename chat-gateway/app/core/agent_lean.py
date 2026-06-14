@@ -155,8 +155,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     done = set()
 
     for step in range(1, max_iter + 1):
-        # 1) DECIDE — persona + compact map + chat + cleaned facts (small)
-        sys = persona + "\n\n[ROUTER MODE — not talking to the client]\n" + source_map
+        # 1) DECIDE — ONLY the route map + chat + cleaned facts. No persona, no
+        # behaviour/tone/conduct rules — routing doesn't need them, and dragging
+        # them is exactly what bloated the context. Tone lives only in ANSWER.
+        sys = "[ROUTER MODE — not talking to the client, just pick the next step]\n" + source_map
         if facts:
             sys += "\n\n[FACTS YOU ALREADY HAVE]\n" + "\n".join(facts)
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
