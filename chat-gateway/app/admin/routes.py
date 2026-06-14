@@ -870,7 +870,7 @@ async def update_settings(
                 meta_data["tpl_evaluation_rules"] = tpl_evaluation_rules
 
             # Agent engine config
-            meta_data["engine"] = engine if engine in ("agent", "classic") else "agent"
+            meta_data["engine"] = engine if engine in ("agent", "lean", "classic") else "agent"
             meta_data["agent_max_iterations"] = agent_max_iterations
             # Empty selection means "all tools" (agent falls back to ALL_TOOLS).
             meta_data["enabled_tools"] = enabled_tools or []
