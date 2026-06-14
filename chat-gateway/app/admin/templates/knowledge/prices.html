@@ -159,14 +159,14 @@
 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-gray-900"></div>
-                    <p class="font-medium text-purple-300">3. Аналіз наміру (Intent Router)</p>
-                    <p class="text-xs text-gray-400 mt-1">Коли клієнт питає <i>"Скільки коштує заміна екрану?"</i>, бот розуміє намір (CHECK_PRICE) і йде шукати в SQL.</p>
+                    <p class="font-medium text-purple-300">3. Роут «каталог»</p>
+                    <p class="text-xs text-gray-400 mt-1">Коли клієнт питає <i>«Скільки коштує заміна екрану?»</i>, Controller обирає роут каталогу, той формує запит і шукає у цій таблиці цін.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
                     <p class="font-medium text-green-300">4. Точна Відповідь</p>
-                    <p class="text-xs text-gray-400 mt-1">Бот знаходить конкретну послугу, підтягує точну ціну (наприклад 1500 грн) і формулює живу відповідь клієнту без галюцинацій.</p>
+                    <p class="text-xs text-gray-400 mt-1">Роут перевіряє й чистить знайдене, а стадія Answer формулює живу відповідь клієнту лише з підтверджених цін — без галюцинацій.</p>
                 </div>
             </div>
             
