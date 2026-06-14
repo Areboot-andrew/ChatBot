@@ -7,9 +7,9 @@ it needs. Everything (routes, their prompts, the knowledge bases, the persona,
 search) already exists in the DB — this module only fixes the LOGIC and splits
 the memory:
 
-  1. DECIDE  — persona + a COMPACT map built from the tenant's own routes
-               (label + trigger phrases + code) + chat + already-cleaned facts.
-               One job: pick a route or answer. Small -> reliable JSON.
+  1. DECIDE  — a COMPACT map built from the tenant's own routes + chat + route
+               outcomes from this turn. One job: create a structured internal
+               question and pick a route or answer. Small -> reliable JSON.
   2. QUERY   — isolated call using ONLY that route's own query_prompt: turn the
                client's need into the source query. (Each route searches with
                its own prompt, its own little memory.)
@@ -20,6 +20,7 @@ the memory:
 
 Only cleaned facts move forward; raw bases never enter the main context.
 """
+import json
 import logging
 
 from sqlalchemy import select
@@ -77,7 +78,10 @@ def _source_map(routes: dict) -> str:
     """Strict router map from the tenant's own routes — a few lines, no essays."""
     lines = [
         "You are a ROUTER. You are NOT the assistant. You NEVER write a message to the client here.",
-        'Output EXACTLY one JSON line and nothing else:  {"route":"<route code or answer>"}',
+        'Output EXACTLY one JSON object and nothing else:',
+        '{"route":"<route code or answer>","question":"<precise internal question>",'
+        '"needed_fact":"availability|price|policy|contact|device_type|other",'
+        '"device_type":"","brand":"","model":"","service":"","part":""}',
         "NEVER write an address, working hours, phone or price yourself. If the client needs such a",
         "fact, pick the route that provides it — the client reply is written by a different stage.",
         "",
@@ -96,7 +100,7 @@ def _source_map(routes: dict) -> str:
             line += f" Triggers: {trig}."
         lines.append(line)
     lines.append('- "answer" — ONLY for a greeting, small talk, off-topic, or when the needed fact is '
-                 "already in [FACTS YOU ALREADY HAVE]. Never pick answer for a fact you still need.")
+                 "already in [ROUTE RESULTS THIS TURN]. Never pick answer for a fact you still need.")
     return "\n".join(lines)
 
 
@@ -105,7 +109,9 @@ _TOOL_BY_HANDLER = {"qa_handler": "search_catalog", "web_search_handler": "web_r
 
 async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key):
     tool = route.get("tool_name") or _TOOL_BY_HANDLER.get(route.get("handler"), "")
-    q = query or text
+    q = (query or "").strip()
+    if not q and tool != "get_business_info":
+        return "", tool
     if tool == "search_catalog":
         return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map), tool
     if tool == "list_categories":
@@ -153,9 +159,12 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     routes = await _load_routes(tenant_id, db)
     source_map = _source_map(routes)
 
-    # Cleaned facts carry forward between turns (chat memory). Raw bases never do.
-    # Seeded from memory so the model doesn't re-fetch what it already cleaned.
-    facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
+    # Route results exist only inside this turn. Conversation continuity comes
+    # from chat history; facts from an old device/topic must not leak into a new
+    # request. Session memory is reserved for conduct/ban state.
+    memory.pop("_facts", None)
+    facts = []
+    route_results = []
     done = set()
 
     # --- CONDUCT MODULE (toggle) — counts warnings, bans after the limit ---
@@ -191,11 +200,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # behaviour/tone/conduct rules — routing doesn't need them, and dragging
         # them is exactly what bloated the context. Tone lives only in ANSWER.
         sys = source_map
-        if facts:
-            sys += "\n\n[FACTS YOU ALREADY HAVE]\n" + "\n".join(facts)
+        if route_results:
+            sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
-        dmsgs.append({"role": "system", "content": 'Now output only the JSON, e.g. {"route":"<code>"} or {"route":"answer"}.'})
+        dmsgs.append({"role": "system", "content": "Now output only the required JSON object."})
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 60, retry=True)
         emit(f"DECIDE #{step}", "Сире рішення", str(raw))
         try:
@@ -210,19 +219,29 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         done.add(pick)
         route = routes[pick]
 
+        route_request = {
+            "question": str(decision.get("question") or text).strip(),
+            "needed_fact": str(decision.get("needed_fact") or "other").strip(),
+            "device_type": str(decision.get("device_type") or "").strip(),
+            "brand": str(decision.get("brand") or "").strip(),
+            "model": str(decision.get("model") or "").strip(),
+            "service": str(decision.get("service") or "").strip(),
+            "part": str(decision.get("part") or "").strip(),
+        }
+
         # 2) QUERY — isolated call with ONLY this route's own query_prompt
-        query = await _build_query(route, text, history, model, base_url, api_key, emit, step)
+        query = await _build_query(route, route_request, model, base_url, api_key, emit, step)
 
         # 3) tool — raw fetch
         raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
         emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
 
-        # 4) CLEAN — isolated stateless call. The need is the CLIENT's real message,
-        # NOT the generated query (which may be prose/hallucinated) — otherwise the
-        # cleaner echoes invented numbers from the query into facts.
-        cleaned = await _clean_source(route, text, raw_result, model, base_url, api_key, emit, step)
-        if cleaned:
-            facts.append(f"[{route['label']}] {cleaned}")
+        # 4) CLEAN — isolated stateless call. Validate against the structured
+        # request, never against the generated search phrase alone.
+        result = await _clean_source(route, route_request, raw_result, model, base_url, api_key, emit, step)
+        route_results.append(json.dumps({"route": route["code"], **result}, ensure_ascii=False))
+        if result["relevant"]:
+            facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
@@ -244,6 +263,14 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if facts:
         ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
                     "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
+    if route_results:
+        ans_sys += (
+            "\n\n[ROUTE OUTCOMES THIS TURN — internal control data, never quote it to the client.]\n"
+            + "\n".join(route_results)
+            + "\nIf a route returned relevant=false, it did NOT verify the requested fact. Do not claim that "
+              "availability, price, policy, device type or contact was confirmed. Respond naturally using "
+              "the fallback and the conversation, without exposing route names or JSON."
+        )
     ans_sys += (
         "\n\n[REPLY RULE] Talk like a real repair master — short, natural, human. Answer only what the "
         "client actually asked, in 1-2 sentences.\n"
@@ -251,8 +278,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         "несправності»), say the exact price is after the free diagnostics. NEVER list the whole price "
         "table — pick only the rows that fit, summarise as one range.\n"
         "- Work and part are separate: state our work price and the part separately, never merged.\n"
-        "- 'Do you repair X' / a named device: confirm we do it and invite to the free diagnostics; do "
-        "not give a price unless they asked.\n"
+        "- 'Do you repair X': confirm only when VERIFIED FACTS explicitly support availability. If the "
+        "availability route returned relevant=false, say it is not confirmed; never infer it from a broad "
+        "category or general knowledge. A bare device/model without an availability question means ask what "
+        "is wrong, not automatically confirm repair. Mention diagnostics conditions only when verified.\n"
         "- FAQ/policy: answer in one plain sentence from the facts; don't quote raw database wording.\n"
         "- Always reply in Ukrainian only. Never output English or any internal note to the client.\n"
         "- Never invent a number, address or term not in the facts, and don't pile on info nobody asked for."
@@ -267,16 +296,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         answer = settings.fallback_text if settings and settings.fallback_text else "Технічна заминка, спробуйте ще раз."
     answer = _clean_answer(answer, fallback=(settings.fallback_text if settings else "") or "")
 
-    # Persist the cleaned facts (deduped, capped) so they travel to the next turn
-    # via chat memory — only the clean array, never raw source data.
-    seen, kept = set(), []
-    for f in facts:
-        key = f.strip().lower()
-        if key and key not in seen:
-            seen.add(key)
-            kept.append(f.strip())
-    memory["_facts"] = kept[-8:]
-    emit("ANSWER", "OK", f"Фактів збережено: {len(memory['_facts'])}")
+    emit("ANSWER", "OK", f"Перевірених фактів цього звернення: {len(facts)}")
     return answer, memory
 
 
@@ -312,39 +332,67 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
     return out or ""
 
 
-async def _build_query(route, text, history, model, base_url, api_key, emit, step):
+async def _build_query(route, request, model, base_url, api_key, emit, step):
     """Isolated query construction using ONLY this route's query_prompt."""
     qp = route.get("query_prompt")
     if not qp:
-        return text
+        return ""
     sys = ("Output ONLY 2-5 search keywords for one source — no sentence, no question, no answer, "
            "no numbers/prices/hours of your own, no quotes, no JSON. Just the keywords.\n"
            "Guidance: " + qp)
-    msgs = [{"role": "system", "content": sys}] + _recent(history, text, n=4)
+    msgs = [
+        {"role": "system", "content": sys},
+        {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
+    ]
     q = await _safe_chat(msgs, model, base_url, api_key, 0.0, 24, retry=True)
     q = (q or "").strip().strip('"').splitlines()[0] if q else ""
-    emit(f"QUERY #{step}", route["code"], q or text)
-    return q or text
+    emit(f"QUERY #{step}", route["code"], q or "[empty query]")
+    return q
 
 
-async def _clean_source(route, need, raw, model, base_url, api_key, emit, step):
+async def _clean_source(route, request, raw, model, base_url, api_key, emit, step):
     """Isolated stateless cleaner using ONLY this route's clean prompts. The LLM
     judges usefulness and filters naturally — no hardcoded marker scripts."""
     if not str(raw or "").strip():
         emit(f"CLEAN #{step}", "Порожньо", "Джерело нічого не повернуло")
-        return ""
+        return {"relevant": False, "sufficient": False, "facts": [], "fallback": "no_result"}
+    raw_text = str(raw).strip()
+    explicit_no_result = (
+        "немає рядка або категорії, що збігається із запитом",
+        "нічого не знайдено у базі знань",
+        "бізнес-інформація не налаштована",
+    )
+    if any(marker in raw_text.lower() for marker in explicit_no_result):
+        result = {"relevant": False, "sufficient": False, "facts": [], "fallback": "no_result"}
+        emit(f"CLEAN #{step}", "Немає збігу", json.dumps(result, ensure_ascii=False))
+        return result
     rules = route.get("result_validation_prompt") or route.get("source_description") or ""
     user = (
-        f"Питання клієнта: {need}\n"
+        f"Структурований запит головної моделі: {json.dumps(request, ensure_ascii=False)}\n"
         f"Джерело: {route.get('label')}\n"
         + (f"Правила відбору: {rules}\n" if rules else "")
-        + f"Сирі дані:\n{str(raw)[:3500]}\n\n"
-        "Витягни ТІЛЬКИ факти про той самий прилад/тему, що в питанні клієнта. Відкинь рядки про інші "
-        "категорії приладів, навіть якщо є спільне слово (динамік телефона/колонки/ТВ ≠ навушники). "
-        "Бери лише числа з сирих даних — нічого не вигадуй. Короткі рядки українською, без коментарів. "
-        "Якщо релевантного нема — поверни рівно: -"
+        + f"Сирі дані:\n{raw_text[:3500]}\n\n"
+        "Return ONLY JSON: {\"relevant\":boolean,\"sufficient\":boolean,\"facts\":[string],"
+        "\"fallback\":string|null}. A fact is allowed only when the source explicitly supports the same "
+        "device/item type and requested fact. Never place an item into a broad category by your own world "
+        "knowledge. A list of unrelated categories is not evidence. Reject another category even when it "
+        "shares a component word (phone/TV/column speaker != headphones). Use only numbers present in the "
+        "raw data. If there is no explicit matching evidence, relevant=false, facts=[], fallback=\"no_result\"."
     )
     out = await _safe_chat([{"role": "user", "content": user}], model, base_url, api_key, 0.0, 350, retry=False)
     out = (out or "").strip()
-    emit(f"CLEAN #{step}", "Очищено", out or "-")
-    return "" if out in ("-", "") else out
+    try:
+        parsed = _extract_json(out)
+        facts = parsed.get("facts") if isinstance(parsed.get("facts"), list) else []
+        facts = [str(f).strip() for f in facts if str(f).strip()]
+        relevant = parsed.get("relevant") is True and bool(facts)
+        result = {
+            "relevant": relevant,
+            "sufficient": relevant and parsed.get("sufficient") is True,
+            "facts": facts if relevant else [],
+            "fallback": None if relevant else str(parsed.get("fallback") or "no_result"),
+        }
+    except Exception:
+        result = {"relevant": False, "sufficient": False, "facts": [], "fallback": "validation_failed"}
+    emit(f"CLEAN #{step}", "Очищено", json.dumps(result, ensure_ascii=False))
+    return result

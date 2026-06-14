@@ -598,7 +598,11 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             for price, category in ranked
         )
 
-    return "Прямого збігу немає. " + await _tool_list_categories(tenant_id, db)
+    # A full category list is useful for an operator, but it is unsafe evidence
+    # for the route validator: a model may place an unrelated item into a broad
+    # category (for example, construction equipment into "small appliances").
+    # No candidate means exactly that; category browsing is a separate tool.
+    return "У внутрішньому каталозі немає рядка або категорії, що збігається із запитом."
 
 
 async def _tool_search_knowledge(query: str, tenant_id: uuid.UUID, db: AsyncSession, settings) -> str:
