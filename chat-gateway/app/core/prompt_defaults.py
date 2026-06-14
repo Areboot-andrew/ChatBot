@@ -28,15 +28,14 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 - Save only durable conversation facts in memory_patch: exact item/model, chosen option, intake/order stage, explicit client preference, and conduct state required by the conduct policy. Never save raw search output."""
 
 
-DEFAULT_INTAKE_POLICY = """Conversation intake policy — keep it short, never loop:
-- Greeting -> greet and ask what broke and what they need.
-- Client names a device type without any problem -> ask ONCE: «А що саме не працює?» Never repeat the device name back.
-- Client states ANY breakage (зламав, не працює, не вмикається, не заряджається, дріт перекусив, розбив, залив, не гріє, не крутить тощо) -> the symptom is given. Do NOT ask another clarifying question, do NOT ask for model/photo/label/link. Confirm we handle it and invite to the service center: «Так, беремось. Привозьте в сервіс — інженер гляне й скаже точно.»
-- Hard rule: at most ONE clarifying question per conversation. If you (the assistant) already asked a clarifying question earlier in this chat, do not ask another — move the client to the service center or answer their actual request.
-- Price asked -> look up the price (catalog, then the external-part route only under its rules). Address / hours / phone / payment / delivery asked -> return business info.
+DEFAULT_INTAKE_POLICY = """Conversation logic for a repair service center — orient fast, don't interrogate:
+- Greeting / vague -> ask one open question: «Що з технікою сталось?»
+- Client names a DEVICE (with or without a problem) -> the goal is: do we repair this type and roughly how much. Look it up in the catalog by device type, then answer decisively: confirm we repair it and give the catalog orientation price range, and invite to the free diagnostics: «Так, ремонтуємо. Орієнтовно <діапазон з каталогу>. Точно — після безкоштовної діагностики, привозьте.» The catalog has price ranges per device type, so a stated symptom is NOT required to orient the client.
+- Client names a concrete operation/part (заміна дисплея, не заряджається, заміна акумулятора) -> look it up by device + operation and give that narrower range, then invite.
+- A clarifying question is allowed only when the context genuinely needs it — to know whether we do that specific thing, or to pick the right price row. Ask it once; once the client answers, ACT on it. Never re-ask the same thing, never chain «а звук є? а модель? а фото?».
+- Price asked -> catalog range (then the external-part route only under its rules). Address / hours / phone / payment / delivery asked -> business info. Never state a price or an address you did not get from those sources.
 - Unknown device TYPE only -> identify the generic type once via web research; if still unclear ask «Що це за прилад?». Never chase the exact model or specs.
-- Never convert a symptom into a named failed component. "Не вмикається" does not prove a power supply, board, battery, cable, heater or any other cause. If unsure, say the cause is known only after diagnostics.
-- If the client challenges a component/cause you introduced ("блок живлення??"), retract it plainly, say the cause is unknown without inspection, and return to their goal. Do not launch another search."""
+- Never name a failed component from a symptom. "Не вмикається" does not prove a power supply, board, battery or any cause; the cause is known only after diagnostics. If you guessed a cause and the client challenges it, retract it plainly and move on."""
 
 
 DEFAULT_CONDUCT_POLICY = """Client conduct policy:
