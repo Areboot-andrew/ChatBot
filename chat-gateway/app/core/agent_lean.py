@@ -232,7 +232,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
-        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True)
+        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
+                               emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
         try:
             decision = _extract_json(raw)
@@ -292,10 +293,13 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         answer_tokens = min(1200, max(120, int(settings.max_tokens or 700))) if settings else 700
     except (ValueError, TypeError):
         answer_tokens = 700
-    raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True)
+    raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True,
+                                  emit=emit, label="ANSWER")
     emit("ANSWER", "Сира відповідь моделі", str(raw_answer) or "[порожньо — модель нічого не повернула]")
-    safe_fallback = (settings.fallback_text if settings and settings.fallback_text else "").strip() \
-        or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+    ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
+    if ft.lower() in ("none", "null", "undefined", "nil", "-"):
+        ft = ""  # DB value got corrupted to the literal "None" — ignore it
+    safe_fallback = ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
     answer = _clean_answer(raw_answer, fallback=safe_fallback)
     # Hard guard: never send an empty / None / placeholder reply to the client
     # (e.g. when the LLM server is overloaded and returns nothing).
@@ -333,19 +337,26 @@ async def _judge_conduct(text, prompt, model, base_url, api_key):
     return "warn" if "warn" in (out or "").lower() else "normal"
 
 
-async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens, retry=False):
+async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens, retry=False,
+                     emit=None, label="LLM"):
+    err = None
     try:
         out = await chat(messages, model=model, temperature=temperature, max_tokens=max_tokens,
                          base_url=base_url, api_key=api_key, raise_error=True)
     except Exception as e:
-        logger.warning(f"lean chat failed: {e}")
-        return ""
+        err, out = e, ""
     if retry and not str(out or "").strip():
         try:
             out = await chat(messages, model=model, temperature=temperature, max_tokens=max_tokens,
                              base_url=base_url, api_key=api_key, raise_error=True)
-        except Exception:
-            out = ""
+        except Exception as e:
+            err, out = e, ""
+    if err:
+        logger.warning(f"lean chat failed (model={model}): {err}")
+        # Surface the real reason (wrong model, bad key, rate limit) into the trace
+        # instead of a silent empty completion.
+        if emit:
+            emit(label, "Помилка виклику LLM", f"model={model}\n{type(err).__name__}: {err}")
     return out or ""
 
 
