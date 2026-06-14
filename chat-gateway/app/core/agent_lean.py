@@ -149,6 +149,24 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
     done = set()
 
+    # --- CONDUCT GATE (own isolated call) — abuse handled before routing/answer ---
+    ban_msg = (meta.get("ban_message") or "Вітаю, вас забанено.").strip()
+    if memory.get("_session_banned") == "1":
+        return ban_msg, memory
+    verdict = await _judge_conduct(text, memory, model, base_url, api_key)
+    emit("CONDUCT", verdict, "")
+    if verdict == "ban":
+        memory["_session_banned"] = "1"
+        return ban_msg, memory
+    if verdict == "warn":
+        memory["_conduct_warning"] = "1"
+        warn_sys = (persona + "\n\n[The client just directly insulted you. Reply with ONE short firm "
+                    "Ukrainian sentence: ask them to keep it civil and warn that one more insult ends "
+                    "the chat. No extra info, no help offer.]")
+        warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
+                                model, base_url, api_key, 0.3, 80, retry=False)
+        return (warn or "Давайте без образ. Ще один такий випад — і завершу чат.").strip(), memory
+
     for step in range(1, max_iter + 1):
         # 1) DECIDE — ONLY the route map + chat + cleaned facts. No persona, no
         # behaviour/tone/conduct rules — routing doesn't need them, and dragging
@@ -180,8 +198,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
         emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
 
-        # 4) CLEAN — isolated stateless call with this route's own clean prompt
-        cleaned = await _clean_source(route, query or text, raw_result, model, base_url, api_key, emit, step)
+        # 4) CLEAN — isolated stateless call. The need is the CLIENT's real message,
+        # NOT the generated query (which may be prose/hallucinated) — otherwise the
+        # cleaner echoes invented numbers from the query into facts.
+        cleaned = await _clean_source(route, text, raw_result, model, base_url, api_key, emit, step)
         if cleaned:
             facts.append(f"[{route['label']}] {cleaned}")
 
@@ -210,6 +230,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         "- 'Do you repair X' / a named device: confirm we do it and invite to the free diagnostics; do "
         "not give a price unless they asked.\n"
         "- FAQ/policy: answer in one plain sentence from the facts; don't quote raw database wording.\n"
+        "- Always reply in Ukrainian only. Never output English or any internal note to the client.\n"
         "- Never invent a number, address or term not in the facts, and don't pile on info nobody asked for."
     )
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
@@ -235,6 +256,27 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     return answer, memory
 
 
+async def _judge_conduct(text, memory, model, base_url, api_key):
+    """Isolated conduct classifier — judges ONLY the current message."""
+    warned = memory.get("_conduct_warning") == "1"
+    sys = (
+        "Classify ONLY this client message for a repair-shop chat. Answer with ONE word: normal / warn.\n"
+        "- normal: a question, normal talk, frustration, or swearing about a device/price/situation, "
+        "or profanity NOT aimed at a person.\n"
+        "- warn: a DIRECT personal insult or threat aimed at the worker (e.g. «ти ідіот», «пішов нахер», "
+        "«гавна кусок», «йди нахер»).\n"
+        "Judge only this message, not history. When unsure, answer normal."
+    )
+    out = await _safe_chat([{"role": "system", "content": sys}, {"role": "user", "content": text}],
+                           model, base_url, api_key, 0.0, 4, retry=False)
+    flagged = "warn" in (out or "").lower() or "ban" in (out or "").lower()
+    if flagged and warned:
+        return "ban"
+    if flagged:
+        return "warn"
+    return "normal"
+
+
 async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens, retry=False):
     try:
         out = await chat(messages, model=model, temperature=temperature, max_tokens=max_tokens,
@@ -256,10 +298,11 @@ async def _build_query(route, text, history, model, base_url, api_key, emit, ste
     qp = route.get("query_prompt")
     if not qp:
         return text
-    sys = ("You build a short search query for ONE source. Output ONLY the query, no quotes, no JSON.\n\n"
-           "How to build it: " + qp)
+    sys = ("Output ONLY 2-5 search keywords for one source — no sentence, no question, no answer, "
+           "no numbers/prices/hours of your own, no quotes, no JSON. Just the keywords.\n"
+           "Guidance: " + qp)
     msgs = [{"role": "system", "content": sys}] + _recent(history, text, n=4)
-    q = await _safe_chat(msgs, model, base_url, api_key, 0.1, 40, retry=True)
+    q = await _safe_chat(msgs, model, base_url, api_key, 0.0, 24, retry=True)
     q = (q or "").strip().strip('"').splitlines()[0] if q else ""
     emit(f"QUERY #{step}", route["code"], q or text)
     return q or text
@@ -273,12 +316,14 @@ async def _clean_source(route, need, raw, model, base_url, api_key, emit, step):
         return ""
     rules = route.get("result_validation_prompt") or route.get("source_description") or ""
     user = (
-        f"Клієнту потрібно: {need}\n"
+        f"Питання клієнта: {need}\n"
         f"Джерело: {route.get('label')}\n"
         + (f"Правила відбору: {rules}\n" if rules else "")
         + f"Сирі дані:\n{str(raw)[:3500]}\n\n"
-        "Витягни ТІЛЬКИ релевантні факти. Короткі рядки українською, без коментарів, "
-        "без вигаданих значень. Якщо релевантного нема — поверни рівно: -"
+        "Витягни ТІЛЬКИ факти про той самий прилад/тему, що в питанні клієнта. Відкинь рядки про інші "
+        "категорії приладів, навіть якщо є спільне слово (динамік телефона/колонки/ТВ ≠ навушники). "
+        "Бери лише числа з сирих даних — нічого не вигадуй. Короткі рядки українською, без коментарів. "
+        "Якщо релевантного нема — поверни рівно: -"
     )
     out = await _safe_chat([{"role": "user", "content": user}], model, base_url, api_key, 0.0, 350, retry=False)
     out = (out or "").strip()
