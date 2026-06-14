@@ -1682,17 +1682,13 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
+        # Only fields the lean engine actually uses are stored.
         meta_data = {
-            "target_category": target_category,
-            "fallback_action": fallback_action,
             "target_url": target_url,
             "tool_name": tool_name.strip(),
-            "reasoning": reasoning.strip(),
             "source_description": source_description.strip(),
             "query_prompt": query_prompt.strip(),
             "result_validation_prompt": result_validation_prompt.strip(),
-            "next_step_prompt": next_step_prompt.strip(),
-            "no_result_prompt": no_result_prompt.strip(),
         }
         logic = KnowledgeType(tenant_id=tenant_id, label=label, code=code, intent_patterns=patterns, handler=handler, enabled=enabled, meta=meta_data)
         db.add(logic)
@@ -1748,16 +1744,14 @@ async def logic_edit(
             logic.handler = handler
             logic.enabled = enabled
             meta_data = logic.meta if logic.meta else {}
-            meta_data["target_category"] = target_category
-            meta_data["fallback_action"] = fallback_action
             meta_data["target_url"] = target_url
             meta_data["tool_name"] = tool_name.strip()
-            meta_data["reasoning"] = reasoning.strip()
             meta_data["source_description"] = source_description.strip()
             meta_data["query_prompt"] = query_prompt.strip()
             meta_data["result_validation_prompt"] = result_validation_prompt.strip()
-            meta_data["next_step_prompt"] = next_step_prompt.strip()
-            meta_data["no_result_prompt"] = no_result_prompt.strip()
+            # drop legacy fields the lean engine never reads
+            for _dead in ("reasoning", "next_step_prompt", "no_result_prompt", "fallback_action", "target_category"):
+                meta_data.pop(_dead, None)
             logic.meta = meta_data
             
             from sqlalchemy.orm.attributes import flag_modified
