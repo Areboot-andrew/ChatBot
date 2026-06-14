@@ -35,10 +35,20 @@ from app.core.agent import (
     _extract_json,
     _clean_answer,
     _parse_synonyms_map,
-    _CATALOG_SYNONYMS,
 )
+from app.core.prompt_defaults import DEFAULT_UNIVERSAL_PERSONA
 
 logger = logging.getLogger(__name__)
+
+CONTROLLER_OUTPUT_SCHEMA = {
+    "route": "<route code or answer>",
+    "question": "",
+    "requested_fact": "",
+    "subject": "",
+    "identifier": "",
+    "operation": "",
+    "qualifiers": {},
+}
 
 def _recent(history: list, text: str, n: int = 8) -> list:
     msgs = []
@@ -155,7 +165,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     meta = (settings.meta or {}) if settings else {}
 
     persona = (settings.system_prompt if settings and settings.system_prompt
-               else "Ти майстер сервісного центру. Відповідай українською, коротко й по-людськи.")
+               else DEFAULT_UNIVERSAL_PERSONA)
     business_rules = settings.business_rules if settings and settings.business_rules else ""
     if business_rules:
         persona += "\n\n[BUSINESS RULES]\n" + business_rules
@@ -167,7 +177,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     answer_prompt = str(meta.get("lean_answer_prompt") or "").strip()
     conduct_prompt = str(meta.get("lean_conduct_prompt") or "").strip()
     warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
-    syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), _CATALOG_SYNONYMS)
+    syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), {})
     serper_key = meta.get("serper_api_key")
     try:
         max_iter = min(3, max(1, int(meta.get("agent_max_iterations", 3))))
@@ -215,8 +225,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # The main controller keeps the conversation goal. Route workers remain
         # isolated and never receive this persona, marketing or other routes.
         sys = (persona + "\n\n" + controller_prompt +
-               '\n\n[OUTPUT JSON SCHEMA]\n{"route":"<route code or answer>","question":"",'
-               '"needed_fact":"","device_type":"","brand":"","model":"","service":"","part":""}' +
+               "\n\n[OUTPUT JSON SCHEMA]\n" +
+               json.dumps(CONTROLLER_OUTPUT_SCHEMA, ensure_ascii=False) +
                "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
         if route_results:
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
@@ -238,12 +248,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
 
         route_request = {
             "question": str(decision.get("question") or text).strip(),
-            "needed_fact": str(decision.get("needed_fact") or "other").strip(),
-            "device_type": str(decision.get("device_type") or "").strip(),
-            "brand": str(decision.get("brand") or "").strip(),
-            "model": str(decision.get("model") or "").strip(),
-            "service": str(decision.get("service") or "").strip(),
-            "part": str(decision.get("part") or "").strip(),
+            "requested_fact": str(decision.get("requested_fact") or "").strip(),
+            "subject": str(decision.get("subject") or "").strip(),
+            "identifier": str(decision.get("identifier") or "").strip(),
+            "operation": str(decision.get("operation") or "").strip(),
+            "qualifiers": decision.get("qualifiers") if isinstance(decision.get("qualifiers"), dict) else {},
         }
 
         # The route owns one isolated LLM session. Its first turn creates the
@@ -265,8 +274,6 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     marketing = settings.marketing_rules if marketing_on and settings and settings.marketing_rules else ""
     if marketing:
         ans_sys += "\n\n[MARKETING PROMPT]\n" + marketing
-    if facts:
-        ans_sys += "\n\n[ROUTE FACTS]\n" + "\n".join(facts)
     if route_results:
         ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
     ans_sys += "\n\n" + answer_prompt

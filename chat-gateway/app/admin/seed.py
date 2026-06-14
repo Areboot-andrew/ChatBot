@@ -137,17 +137,13 @@ async def seed_admin():
         # Update default system prompt
         res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant.id))
         settings_db = res_s.scalars().first()
-        try:
-            with open("/app/app/givi_system_prompt.md", "r", encoding="utf-8") as f:
-                givi_prompt = f.read()
-        except Exception as e:
-            logger.error(f"Could not load givi_system_prompt.md: {e}")
-            givi_prompt = "Ти корисний асистент."
+        from app.core.prompt_defaults import DEFAULT_UNIVERSAL_PERSONA
+        default_prompt = DEFAULT_UNIVERSAL_PERSONA
 
         if not settings_db:
             default_settings = BotSetting(
                 tenant_id=tenant.id,
-                system_prompt=givi_prompt,
+                system_prompt=default_prompt,
                 llm_model="gemma-4",
                 temperature="0.7",
                 max_tokens="1024",
@@ -155,26 +151,18 @@ async def seed_admin():
                     "engine": "lean",
                     "agent_max_iterations": "3",
                     "enabled_tools": [],  # empty = all tools enabled
-                    "fallback_sites": "texno.plus",  # check our own site first
                     # Temporary Serper (Google) key — replace with your own in Settings
                     "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",
-                    "business_info": {
-                        "phone": "066-170-12-82",
-                        "hours": "Пн-Пт 10:00-19:00, Сб 10:00-15:00",
-                        "payment": "картка, готівка, наложений платіж, крипта",
-                        "delivery": "самовивіз з сервісу або відправка Новою Поштою",
-                        "warranty": "1-6 місяців залежно від типу робіт та запчастини",
-                        "extra": "Діагностика безкоштовна за умови ремонту в нас",
-                    },
+                    "business_info": {},
                 }
             )
             db.add(default_settings)
             await db.commit()
             logger.info("Default BotSettings created.")
         elif settings_db.system_prompt == "Ти корисний асистент.":
-            settings_db.system_prompt = givi_prompt
+            settings_db.system_prompt = default_prompt
             await db.commit()
-            logger.info("BotSettings system prompt updated to givi_system_prompt.md.")
+            logger.info("BotSettings system prompt updated to the universal default.")
 
         # Fill the control prompts into the DB for ALL tenants where empty, so the
         # panel shows them populated (and they are editable from there).
@@ -186,16 +174,14 @@ async def seed_default_prompts(db):
     from sqlalchemy.future import select as _select
     from sqlalchemy.orm.attributes import flag_modified
     from app.models.tenant import BotSetting
-    from app.core.agent import _CATALOG_SYNONYMS
     from app.core.prompt_defaults import (
         LEAN_CONTROLLER_PROMPT, LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT,
         LEAN_WARNING_PROMPT,
     )
 
-    synonyms_text = "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items())
     defaults = {
         "ban_message": "Вітаю, вас забанено.",
-        "catalog_synonyms": synonyms_text,
+        "catalog_synonyms": "",
         "conduct_enabled": "1",
         "conduct_warnings": "2",
         "marketing_enabled": "0",

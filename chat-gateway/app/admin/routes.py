@@ -202,16 +202,12 @@ async def create_tenant(
     await db.refresh(new_tenant)
     
     from app.core.prompt_defaults import (
-        ROUTE_PROMPTS, LEAN_CONTROLLER_PROMPT, LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT,
-        LEAN_WARNING_PROMPT,
+        ROUTE_PROMPTS, DEFAULT_UNIVERSAL_PERSONA, LEAN_CONTROLLER_PROMPT,
+        LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT, LEAN_WARNING_PROMPT,
     )
-    from app.core.agent import _CATALOG_SYNONYMS
-    from pathlib import Path
-    persona_path = Path(__file__).resolve().parents[1] / "givi_system_prompt.md"
-    default_persona = persona_path.read_text(encoding="utf-8")
     default_settings = BotSetting(
         tenant_id=new_tenant.id,
-        system_prompt=default_persona,
+        system_prompt=DEFAULT_UNIVERSAL_PERSONA,
         llm_model="gemma-4",
         temperature="0.7",
         max_tokens="1024",
@@ -227,18 +223,18 @@ async def create_tenant(
             "lean_answer_prompt": LEAN_ANSWER_PROMPT,
             "lean_conduct_prompt": LEAN_CONDUCT_PROMPT,
             "lean_warning_prompt": LEAN_WARNING_PROMPT,
-            "catalog_synonyms": "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items()),
+            "catalog_synonyms": "",
             "router_json_mode": True,
         },
     )
     db.add(default_settings)
     route_rows = [
-        ("catalog", "Наш каталог: товари, послуги та ціни", "qa_handler", ["чи є", "чи робите", "ціна", "прайс"]),
-        ("qa", "Затверджені Q&A та документи", "qa_handler", ["гарантія", "умови", "правила"]),
-        ("web_search", "Ідентифікація невідомого типу приладу", "web_search_handler", ["що це", "що за прилад", "який тип пристрою"]),
-        ("external_price", "Зовнішні ціни та постачальники", "web_search_handler", ["ціна деталі", "ринкова ціна", "у постачальників"]),
-        ("business_info", "Графік, адреса, оплата та доставка", "qa_handler", ["коли працюєте", "адреса", "оплата", "доставка"]),
-        ("handoff", "Передача оператору", "escalate", ["людина", "оператор", "менеджер"]),
+        ("catalog", "Внутрішній каталог і ціни", "qa_handler", ["наявність", "асортимент", "послуга", "ціна", "прайс"]),
+        ("qa", "Затверджені знання та документи", "qa_handler", ["умови", "правила", "політика", "гарантія"]),
+        ("web_search", "Зовнішній веб-пошук", "web_search_handler", ["що це", "характеристика", "специфікація"]),
+        ("external_price", "Зовнішні пропозиції та ціни", "web_search_handler", ["ринкова ціна", "у постачальників", "зовнішня пропозиція"]),
+        ("business_info", "Операційна інформація бізнесу", "qa_handler", ["графік", "адреса", "телефон", "оплата", "доставка"]),
+        ("handoff", "Передача людині", "escalate", ["людина", "оператор", "менеджер"]),
     ]
     for code_suffix, label, handler, patterns in route_rows:
         db.add(KnowledgeType(
@@ -819,31 +815,20 @@ async def update_settings(
     business_rules: str = Form(""),
     marketing_rules: str = Form(""),
     escalation_policy: str = Form("handoff"),
-    fallback_sites: str = Form(""),
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
-    tpl_evaluation_rules: str = Form(""),
     engine: str = Form("lean"),
     agent_max_iterations: str = Form("3"),
     enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),
     price_search_urls: str = Form(""),
-    parts_instruction: str = Form(""),
-    answer_style: str = Form(""),
-    intake_policy: str = Form(""),
-    web_research_mode: str = Form("normal"),
-    parts_sales_mode: str = Form("normal"),
-    external_part_price_mode: str = Form("normal"),
-    conduct_policy: str = Form(""),
     ban_message: str = Form("Вітаю, вас забанено."),
     conduct_enabled: str = Form("0"),
     conduct_warnings: str = Form("2"),
     marketing_enabled: str = Form(""),
-    agent_decision_rules: str = Form(""),
     catalog_synonyms: str = Form(""),
     router_json_mode: str = Form("on"),
-    tpl_escalate_instruction: str = Form(""),
     lean_controller_prompt: str = Form(""),
     lean_answer_prompt: str = Form(""),
     lean_conduct_prompt: str = Form(""),
@@ -923,6 +908,10 @@ _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
                      "lean_controller_prompt", "lean_answer_prompt", "lean_conduct_prompt",
                      "lean_warning_prompt",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)
+_CONFIG_ROUTE_META_KEYS = [
+    "tool_name", "source_description", "query_prompt",
+    "result_validation_prompt", "target_url",
+]
 
 
 @router.get("/settings/export")
@@ -956,7 +945,11 @@ async def export_config(
                 "handler": route.handler,
                 "intent_patterns": route.intent_patterns or [],
                 "enabled": bool(route.enabled),
-                "meta": route.meta or {},
+                "meta": {
+                    key: (route.meta or {}).get(key)
+                    for key in _CONFIG_ROUTE_META_KEYS
+                    if key in (route.meta or {})
+                },
             }
             for route in route_res.scalars().all()
         ]
@@ -1010,7 +1003,12 @@ async def import_config(
         route.handler = str(route_data.get("handler") or "fallback")
         route.intent_patterns = list(route_data.get("intent_patterns") or [])
         route.enabled = bool(route_data.get("enabled", True))
-        route.meta = dict(route_data.get("meta") or {})
+        imported_meta = dict(route_data.get("meta") or {})
+        route.meta = {
+            key: imported_meta[key]
+            for key in _CONFIG_ROUTE_META_KEYS
+            if key in imported_meta
+        }
         flag_modified(route, "meta")
     await db.commit()
     return RedirectResponse(url="/admin/settings?ok=imported", status_code=303)
@@ -1674,15 +1672,10 @@ async def logic_create(
     intent_patterns: str = Form(...),
     handler: str = Form(...),
     tool_name: str = Form(""),
-    target_category: str = Form(""),
     target_url: str = Form(""),
-    fallback_action: str = Form("escalate"),
-    reasoning: str = Form(""),
     source_description: str = Form(""),
     query_prompt: str = Form(""),
     result_validation_prompt: str = Form(""),
-    next_step_prompt: str = Form(""),
-    no_result_prompt: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -1728,15 +1721,10 @@ async def logic_edit(
     intent_patterns: str = Form(...),
     handler: str = Form(...),
     tool_name: str = Form(""),
-    target_category: str = Form(""),
     target_url: str = Form(""),
-    fallback_action: str = Form("escalate"),
-    reasoning: str = Form(""),
     source_description: str = Form(""),
     query_prompt: str = Form(""),
     result_validation_prompt: str = Form(""),
-    next_step_prompt: str = Form(""),
-    no_result_prompt: str = Form(""),
     enabled: bool = Form(False),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),

@@ -518,17 +518,6 @@ _CATALOG_STOPWORDS = {
 # These terms select a category but should not outrank the client's concrete
 # symptom/operation. For example, "кавомашина протікає" must rank leak repair
 # above the generic "діагностика кавомашини" row.
-_CATALOG_DEVICE_WORDS = {
-    "телефон", "телефона", "смартфон", "смартфона", "планшет", "планшета",
-    "ноутбук", "ноутбука", "комп'ютер", "компютер", "пк", "макбук",
-    "телевізор", "телевізора", "монітор", "монітора", "проектор", "проектора",
-    "навушники", "навушників", "гарнітура", "гарнітури", "колонка", "колонки",
-    "акустика", "акустики", "кавомашина", "кавомашини", "кавоварка", "кавоварки",
-    "чайник", "чайника", "пилосос", "пилососа", "мікрохвильовка", "мікрохвильовки",
-    "павербанк", "павербанка", "станція", "станції", "ecoflow", "блендер",
-}
-
-
 async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSession, synonyms: dict = None) -> str:
     """
     Candidate retrieval for semantic route validation. It searches both complete
@@ -580,17 +569,10 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             phrase = f"{category_text} {name}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
             name_hits = sum(1 for _, form in original_forms if form in name)
-            specific_name_hits = sum(
-                1 for token, form in original_forms
-                if token not in _CATALOG_DEVICE_WORDS and form in name
-            )
             category_hits = sum(1 for _, form in original_forms if form in category_text)
             synonym_hits = sum(1 for form in expanded_forms if form in phrase)
-            # Original phrase coverage dominates; category + row coverage is
-            # stronger than several synonym-only coincidences.
-            value = (original_hits * 10 + name_hits * 5 + specific_name_hits * 12 +
-                     category_hits * 4 + synonym_hits)
-            return value, specific_name_hits, name_hits, category_hits
+            value = original_hits * 10 + name_hits * 12 + category_hits * 6 + synonym_hits
+            return value, name_hits, category_hits
 
         ranked = sorted(candidates, key=score, reverse=True)[:12]
         return "\n".join(

@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from app.core import agent_lean
+from app.core.prompt_defaults import ROUTE_PROMPTS
 
 
 class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
@@ -33,12 +34,11 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
         }
         request = {
             "question": "Find the display price",
-            "needed_fact": "price",
-            "device_type": "smartphone",
-            "brand": "Xiaomi",
-            "model": "Redmi Note 10",
-            "service": "display replacement",
-            "part": "LCD",
+            "requested_fact": "current external price",
+            "subject": "LCD display",
+            "identifier": "Xiaomi Redmi Note 10",
+            "operation": "",
+            "qualifiers": {},
         }
         with patch.object(agent_lean, "_safe_chat", fake_chat), patch.object(agent_lean, "_run_tool", fake_tool):
             result = await agent_lean._run_route_session(
@@ -88,7 +88,7 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch.object(agent_lean, "_safe_chat", fake_chat), patch.object(agent_lean, "_run_tool", fake_tool):
             result = await agent_lean._run_route_session(
-                route, {"question": "бетономішалки", "needed_fact": "availability"},
+                route, {"question": "бетономішалки", "requested_fact": "availability", "subject": "бетономішалки"},
                 "text", None, None, None, {}, None, "m", None, None, lambda *a: None, 1,
             )
 
@@ -102,6 +102,17 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
             "web": {"code": "web", "label": "Web", "triggers": [], "source_description": description}
         })
         self.assertIn("Critical second sentence", source_map)
+
+    def test_default_routes_have_only_one_prompt_set(self):
+        expected = {"tool_name", "source_description", "query_prompt", "result_validation_prompt"}
+        for route in ROUTE_PROMPTS.values():
+            self.assertEqual(set(route), expected)
+
+    def test_controller_schema_is_business_neutral(self):
+        self.assertEqual(
+            set(agent_lean.CONTROLLER_OUTPUT_SCHEMA),
+            {"route", "question", "requested_fact", "subject", "identifier", "operation", "qualifiers"},
+        )
 
 
 if __name__ == "__main__":

@@ -10,18 +10,18 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label for="label" class="block mb-2 text-sm font-medium text-gray-300">Назва (зрозуміла)</label>
-                <input type="text" name="label" id="label" value="{{ logic.label if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Запит статусу ремонту" required onkeyup="generateCode(this.value)">
+                <input type="text" name="label" id="label" value="{{ logic.label if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Каталог або Умови доставки" required onkeyup="generateCode(this.value)">
             </div>
             <div>
                 <label for="code" class="block mb-2 text-sm font-medium text-gray-300">Внутрішній Код</label>
                 <p class="text-[10px] text-gray-500 mb-1 absolute -mt-3">Генерується автоматично, для внутрішньої роботи системи.</p>
-                <input type="text" name="code" id="code" value="{{ logic.code if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="CHECK_REPAIR_STATUS" required>
+                <input type="text" name="code" id="code" value="{{ logic.code if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="DELIVERY_POLICY" required>
             </div>
         </div>
 
         <div>
             <label for="intent_patterns" class="block mb-2 text-sm font-medium text-gray-300">Тригери / Приклади фраз (через кому)</label>
-            <p class="text-xs text-gray-500 mb-2"><strong>Не хвилюйтесь про помилки чи мову!</strong> Бот використовує Штучний Інтелект. Вам достатньо написати 2-3 приклади (напр: "статус ремонту", "ціна"), і ШІ сам зрозуміє синоніми, помилки ("скока стоїть") або російську мову.</p>
+            <p class="text-xs text-gray-500 mb-2"><strong>Пишіть фразами клієнта.</strong> Дайте 2-5 прикладів наміру, який належить саме цьому джерелу: «чи є в наявності», «умови доставки», «графік роботи». Помилки й мову розпізнає модель.</p>
             <input type="text" name="intent_patterns" id="intent_patterns" value="{{ logic.intent_patterns|join(', ') if logic and logic.intent_patterns else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
         </div>
 
@@ -33,20 +33,20 @@
 
             <div>
                 <label for="source_description" class="block mb-2 text-sm font-medium text-gray-300">1. Що це за джерело (для вибору роута)</label>
-                <p class="text-xs text-gray-500 mb-2">Одне-два речення: що ця база дає й коли її брати. Саме за цим описом модель вирішує, чи слати сюди запит. Напр.: «Наш прайс і послуги — звідси ціни й що ремонтуємо» / «Адреса, графік, телефон, оплата, доставка» / «Ринкові ціни деталей у постачальників».</p>
-                <textarea name="source_description" id="source_description" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Наш внутрішній каталог послуг і цін: звідси беремо, що ми ремонтуємо та орієнтовну вартість.">{{ logic.meta.get('source_description', '') if logic and logic.meta else '' }}</textarea>
+                <p class="text-xs text-gray-500 mb-2">Опишіть, які факти належать цьому джерелу, а які не належать. Саме за цією межею головна модель обирає роут. Напр.: «Внутрішній каталог товарів, послуг і наших цін; не містить контактів та ринкових пропозицій».</p>
+                <textarea name="source_description" id="source_description" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Внутрішній каталог товарів, послуг, варіантів і наших цін. Не містить політик, контактів або зовнішніх пропозицій.">{{ logic.meta.get('source_description', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
                 <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">2. Як сформувати пошуковий запит</label>
-                <p class="text-xs text-gray-500 mb-2">Як із розмови зробити короткий запит до цієї бази. Напр.: «2-4 ключові слова: тип приладу + операція (ремонт колонки, заміна дисплея)». Без речень і вигаданих чисел.</p>
-                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="2-4 ключові слова: тип приладу + операція. Напр.: ремонт колонки; заміна дисплея смартфон.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
+                <p class="text-xs text-gray-500 mb-2">Поясніть окремій моделі роута, як перетворити структурований запит на коротку фразу для цього джерела. Вкажіть потрібні складові та що заборонено додумувати.</p>
+                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Склади короткий запит: предмет + потрібна властивість або дія + точний ідентифікатор, якщо він заданий. Не додавай невідомі характеристики, числа чи відповідь.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
                 <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">3. Що лишити зі знайденого (очищення)</label>
-                <p class="text-xs text-gray-500 mb-2">Особисті настанови ізольованій LLM цього route: як визначити релевантність і достатність, які факти повернути та який fallback дати головному чату, якщо підтвердження немає. Вона не бачить persona, маркетинг, контакти чи інші routes.</p>
-                <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Лиши лише факти про той самий прилад/тему, що в питанні клієнта. Відкинь рядки про інші категорії. Бери лише числа з сирих даних — нічого не вигадуй.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
+                <p class="text-xs text-gray-500 mb-2">Задайте критерії повного збігу предмета, потрібного факту та уточнень. Сирий результат не потрапляє в чат: далі передаються лише підтверджені факти або короткий fallback. Ізольована модель не бачить persona, маркетинг чи інші routes.</p>
+                <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Звір повний зміст: той самий предмет, ідентифікатор, потрібний факт і суттєві уточнення. Спільних окремих слів недостатньо. Лиши лише явно підтверджені факти й числа; нічого не домислюй.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
         </div>
 
