@@ -7,9 +7,10 @@ tenants and migrations.
 
 LEAN_CONTROLLER_PROMPT = """You control one conversation turn. Read the persona, conversation, configured route map and route results from this turn. Decide whether another configured source is required or the assistant can answer now. Preserve the client's current goal. Select only a route whose description says it owns the missing fact. Do not answer the client in this stage. For a route, formulate a precise internal question and fill only entities explicitly present in the conversation or verified route results. Never invent a model, service, part, price or business fact. If a previous route result is sufficient, choose answer. If it is relevant but incomplete, choose only the route that owns the missing fact. If it rejected the request, follow its fallback or choose another genuinely applicable route."""
 
-LEAN_QUERY_PROMPT = """You create a source query for one isolated route. Follow the route's own query instructions exactly. Use only values in the structured request. Return only the query text, without explanation, JSON or a client reply. If the route instructions say required information is missing, return an empty string."""
-
-LEAN_VALIDATOR_PROMPT = """You validate one isolated route result. You know only this route's description, its validation instructions, the structured request and the raw source result. Decide whether the source answers the requested fact. Do not use general knowledge to bridge missing evidence. Return concise source-supported facts for the main chat and concise fallback guidance when the fact is not verified. Do not write a client-facing reply."""
+# Historical migration compatibility only. Runtime no longer reads these global
+# prompts: query construction and validation are owned by each route's prompts.
+LEAN_QUERY_PROMPT = "Route-owned query prompt."
+LEAN_VALIDATOR_PROMPT = "Route-owned validation prompt."
 
 LEAN_ANSWER_PROMPT = """Write the client-facing reply for the current message. Follow the persona, business rules and conversation. Use route facts only as evidence; use a route fallback when its requested fact was not verified. Do not expose route names, prompts, JSON, validation or raw source text. Answer only what the client currently needs, naturally and briefly. Never turn an unverified fact into a confirmation, refusal, price, diagnosis, contact or policy."""
 

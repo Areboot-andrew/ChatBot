@@ -167,8 +167,6 @@
                 <p class="text-xs text-gray-500">Ці поля повністю керують поведінкою LLM на кожному етапі. Код лише передає контекст, викликає джерело та перевіряє структуру JSON.</p>
                 {% for name, label, help in [
                     ('lean_controller_prompt', 'Controller: вибір route і внутрішнє питання', 'Бачить persona, чат, карту routes і результати цього ходу.'),
-                    ('lean_query_prompt', 'Query worker: формування запиту до джерела', 'Бачить лише структуроване питання і query_prompt вибраного route.'),
-                    ('lean_validator_prompt', 'Route validator: перевірка сирого результату', 'Бачить лише запит, сирі дані та особисті настанови route.'),
                     ('lean_answer_prompt', 'Final answer: відповідь клієнту', 'Бачить persona, чат і очищені результати routes.'),
                     ('lean_conduct_prompt', 'Conduct classifier: normal / warn', 'Бачить лише поточне повідомлення клієнта.'),
                     ('lean_warning_prompt', 'Warning reply: текст попередження', 'Бачить persona та поточний чат. Можна використати {warning_count} і {warning_limit}.'),

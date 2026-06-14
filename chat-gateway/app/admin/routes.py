@@ -202,8 +202,7 @@ async def create_tenant(
     await db.refresh(new_tenant)
     
     from app.core.prompt_defaults import (
-        ROUTE_PROMPTS, LEAN_CONTROLLER_PROMPT, LEAN_QUERY_PROMPT,
-        LEAN_VALIDATOR_PROMPT, LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT,
+        ROUTE_PROMPTS, LEAN_CONTROLLER_PROMPT, LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT,
         LEAN_WARNING_PROMPT,
     )
     from app.core.agent import _CATALOG_SYNONYMS
@@ -225,8 +224,6 @@ async def create_tenant(
             "conduct_warnings": "2",
             "marketing_enabled": "0",
             "lean_controller_prompt": LEAN_CONTROLLER_PROMPT,
-            "lean_query_prompt": LEAN_QUERY_PROMPT,
-            "lean_validator_prompt": LEAN_VALIDATOR_PROMPT,
             "lean_answer_prompt": LEAN_ANSWER_PROMPT,
             "lean_conduct_prompt": LEAN_CONDUCT_PROMPT,
             "lean_warning_prompt": LEAN_WARNING_PROMPT,
@@ -848,8 +845,6 @@ async def update_settings(
     router_json_mode: str = Form("on"),
     tpl_escalate_instruction: str = Form(""),
     lean_controller_prompt: str = Form(""),
-    lean_query_prompt: str = Form(""),
-    lean_validator_prompt: str = Form(""),
     lean_answer_prompt: str = Form(""),
     lean_conduct_prompt: str = Form(""),
     lean_warning_prompt: str = Form(""),
@@ -895,8 +890,6 @@ async def update_settings(
                 meta_data["conduct_warnings"] = "2"
             meta_data["marketing_enabled"] = "1" if str(marketing_enabled).lower() in ("1", "true", "on", "yes") else "0"
             meta_data["lean_controller_prompt"] = lean_controller_prompt.strip()
-            meta_data["lean_query_prompt"] = lean_query_prompt.strip()
-            meta_data["lean_validator_prompt"] = lean_validator_prompt.strip()
             meta_data["lean_answer_prompt"] = lean_answer_prompt.strip()
             meta_data["lean_conduct_prompt"] = lean_conduct_prompt.strip()
             meta_data["lean_warning_prompt"] = lean_warning_prompt.strip()
@@ -927,8 +920,8 @@ _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
                      "ban_message", "conduct_enabled", "conduct_warnings",
                      "marketing_enabled", "parts_sites", "price_search_urls",
                      "catalog_synonyms", "business_info", "router_json_mode",
-                     "lean_controller_prompt", "lean_query_prompt", "lean_validator_prompt",
-                     "lean_answer_prompt", "lean_conduct_prompt", "lean_warning_prompt",
+                     "lean_controller_prompt", "lean_answer_prompt", "lean_conduct_prompt",
+                     "lean_warning_prompt",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)
 
 

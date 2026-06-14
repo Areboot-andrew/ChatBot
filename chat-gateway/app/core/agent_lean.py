@@ -10,12 +10,13 @@ the memory:
   1. DECIDE  — a COMPACT map built from the tenant's own routes + chat + route
                outcomes from this turn. One job: create a structured internal
                question and pick a route or answer. Small -> reliable JSON.
-  2. QUERY   — isolated call using ONLY that route's own query_prompt: turn the
-               controller's structured need into the source query. No chat
-               history or persistent route memory is attached.
-  3. tool    — engine runs the real DB/web fetch for that route's tool.
-  4. CLEAN   — isolated STATELESS call using ONLY that route's source_description
-               + result_validation_prompt: raw source text -> clean facts.
+  2. ROUTE   — a private LLM session receives only that route's three prompts
+               and the controller's structured request. Its first turn builds
+               the query; the tool result returns into the same local memory;
+               its second turn validates and filters the result.
+  3. tool    — engine runs the real DB/web fetch selected by that route.
+  4. result  — the route session returns clean facts/fallback, then its private
+               memory is discarded.
   5. ANSWER  — persona + chat + the cleaned facts -> the client reply.
 
 Only cleaned facts move forward; raw bases never enter the main context.
@@ -163,8 +164,6 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     api_key = meta.get("llm_api_key")
     model = settings.llm_model if settings and settings.llm_model else "gemma-4"
     controller_prompt = str(meta.get("lean_controller_prompt") or "").strip()
-    query_worker_prompt = str(meta.get("lean_query_prompt") or "").strip()
-    validator_prompt = str(meta.get("lean_validator_prompt") or "").strip()
     answer_prompt = str(meta.get("lean_answer_prompt") or "").strip()
     conduct_prompt = str(meta.get("lean_conduct_prompt") or "").strip()
     warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
@@ -247,16 +246,14 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             "part": str(decision.get("part") or "").strip(),
         }
 
-        # 2) QUERY — isolated call with ONLY this route's own query_prompt
-        query = await _build_query(route, route_request, query_worker_prompt, model, base_url, api_key, emit, step)
-
-        # 3) tool — raw fetch
-        raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
-        emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
-
-        # 4) CLEAN — isolated stateless call. Validate against the structured
-        # request, never against the generated search phrase alone.
-        result = await _clean_source(route, route_request, raw_result, validator_prompt, model, base_url, api_key, emit, step)
+        # The route owns one isolated LLM session. Its first turn creates the
+        # source query; the raw tool result is then returned to the SAME local
+        # message list for validation. Persona/chat/marketing/other routes never
+        # enter this memory, and the memory is discarded after this route call.
+        result = await _run_route_session(
+            route, route_request, text, tenant_id, db, settings, syn_map,
+            serper_key, model, base_url, api_key, emit, step,
+        )
         route_results.append(json.dumps({"route": route["code"], **result}, ensure_ascii=False))
         if result["relevant"]:
             facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
@@ -315,42 +312,41 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
     return out or ""
 
 
-async def _build_query(route, request, worker_prompt, model, base_url, api_key, emit, step):
-    """Isolated query construction using ONLY this route's query_prompt."""
-    qp = route.get("query_prompt")
-    if not qp:
-        return ""
-    sys = worker_prompt + "\n\n[ROUTE QUERY INSTRUCTIONS]\n" + qp
-    msgs = [
-        {"role": "system", "content": sys},
-        {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
-    ]
-    q = await _safe_chat(msgs, model, base_url, api_key, 0.0, 24, retry=True)
-    q = (q or "").strip().strip('"').splitlines()[0] if q else ""
-    emit(f"QUERY #{step}", route["code"], q or "[empty query]")
-    return q
-
-
-async def _clean_source(route, request, raw, validator_prompt, model, base_url, api_key, emit, step):
-    """Isolated stateless cleaner using ONLY this route's clean prompts. The LLM
-    judges usefulness and filters naturally — no hardcoded marker scripts."""
-    if not str(raw or "").strip():
-        emit(f"CLEAN #{step}", "Порожньо", "Джерело нічого не повернуло")
-        return {"relevant": False, "sufficient": False, "facts": [], "fallback": "no_result"}
-    raw_text = str(raw).strip()
-    rules = route.get("result_validation_prompt") or route.get("source_description") or ""
+async def _run_route_session(route, request, text, tenant_id, db, settings, syn_map,
+                             serper_key, model, base_url, api_key, emit, step):
+    """Run one route-owned LLM session with short-lived private memory."""
     system = (
-        validator_prompt + "\n\n[OUTPUT JSON SCHEMA]\n"
-        '{"relevant":true|false,"sufficient":true|false,"facts":["..."],"fallback":"..."|null}\n\n'
-        f"[WHAT THIS ROUTE CONTAINS]\n{route.get('source_description') or ''}\n\n"
-        f"[ROUTE VALIDATION AND FALLBACK INSTRUCTIONS]\n{rules}"
+        f"[ROUTE SOURCE]\n{route.get('source_description') or ''}\n\n"
+        f"[HOW THIS ROUTE BUILDS ITS SOURCE QUERY]\n{route.get('query_prompt') or ''}\n\n"
+        f"[HOW THIS ROUTE VALIDATES AND FILTERS RESULTS]\n{route.get('result_validation_prompt') or ''}"
     )
-    user = (
-        f"Структурований запит головної моделі: {json.dumps(request, ensure_ascii=False)}\n"
-        f"Сирі дані джерела:\n{raw_text[:5000]}"
-    )
-    out = await _safe_chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
-                           model, base_url, api_key, 0.0, 450, retry=True)
+    route_memory = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": (
+            "PHASE: BUILD_SOURCE_QUERY\n"
+            f"REQUEST: {json.dumps(request, ensure_ascii=False)}\n"
+            'Return JSON only: {"query":"..."}'
+        )},
+    ]
+    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 80, retry=True)
+    try:
+        query = str(_extract_json(query_raw).get("query") or "").strip()
+    except Exception:
+        query = ""
+    emit(f"QUERY #{step}", route["code"], query or "[empty query]")
+
+    raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
+    emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
+
+    route_memory.append({"role": "assistant", "content": query_raw or '{"query":""}'})
+    route_memory.append({"role": "user", "content": (
+        "PHASE: VALIDATE_SOURCE_RESULT\n"
+        f"REQUEST: {json.dumps(request, ensure_ascii=False)}\n"
+        f"SOURCE_RESULT:\n{str(raw_result or '')[:5000]}\n"
+        'Return JSON only: {"relevant":true|false,"sufficient":true|false,'
+        '"facts":["..."],"fallback":"..."|null}'
+    )})
+    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 450, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)

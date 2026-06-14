@@ -188,8 +188,8 @@ async def seed_default_prompts(db):
     from app.models.tenant import BotSetting
     from app.core.agent import _CATALOG_SYNONYMS
     from app.core.prompt_defaults import (
-        LEAN_CONTROLLER_PROMPT, LEAN_QUERY_PROMPT, LEAN_VALIDATOR_PROMPT,
-        LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT, LEAN_WARNING_PROMPT,
+        LEAN_CONTROLLER_PROMPT, LEAN_ANSWER_PROMPT, LEAN_CONDUCT_PROMPT,
+        LEAN_WARNING_PROMPT,
     )
 
     synonyms_text = "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items())
@@ -200,8 +200,6 @@ async def seed_default_prompts(db):
         "conduct_warnings": "2",
         "marketing_enabled": "0",
         "lean_controller_prompt": LEAN_CONTROLLER_PROMPT,
-        "lean_query_prompt": LEAN_QUERY_PROMPT,
-        "lean_validator_prompt": LEAN_VALIDATOR_PROMPT,
         "lean_answer_prompt": LEAN_ANSWER_PROMPT,
         "lean_conduct_prompt": LEAN_CONDUCT_PROMPT,
         "lean_warning_prompt": LEAN_WARNING_PROMPT,

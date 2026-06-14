@@ -6,14 +6,31 @@ from app.core import agent_lean
 
 
 class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_query_worker_receives_only_route_prompt_and_structured_request(self):
-        captured = []
+    async def test_route_owns_query_and_validation_in_one_private_memory(self):
+        calls = []
 
         async def fake_chat(messages, *args, **kwargs):
-            captured.extend(messages)
-            return "Xiaomi Redmi Note 10 LCD"
+            calls.append([dict(message) for message in messages])
+            if len(calls) == 1:
+                return json.dumps({"query": "Xiaomi Redmi Note 10 LCD"})
+            return json.dumps({
+                "relevant": True,
+                "sufficient": True,
+                "facts": ["LCD коштує 1200 грн у зовнішнього постачальника"],
+                "fallback": None,
+            }, ensure_ascii=False)
 
-        route = {"code": "external_price", "query_prompt": "brand + model + exact part"}
+        async def fake_tool(route, query, *args, **kwargs):
+            self.assertEqual(query, "Xiaomi Redmi Note 10 LCD")
+            return "Xiaomi Redmi Note 10 LCD — 1200 грн", "search_parts"
+
+        route = {
+            "code": "external_price",
+            "label": "Parts",
+            "source_description": "SUPPLIER SOURCE PROMPT",
+            "query_prompt": "ROUTE QUERY PROMPT",
+            "result_validation_prompt": "ROUTE VALIDATION PROMPT",
+        }
         request = {
             "question": "Find the display price",
             "needed_fact": "price",
@@ -23,65 +40,56 @@ class LeanRouteIsolationTests(unittest.IsolatedAsyncioTestCase):
             "service": "display replacement",
             "part": "LCD",
         }
-        with patch.object(agent_lean, "_safe_chat", fake_chat):
-            query = await agent_lean._build_query(
-                route, request, "CONFIGURED QUERY WORKER", "m", None, None, lambda *a: None, 1
-            )
-
-        self.assertEqual(query, "Xiaomi Redmi Note 10 LCD")
-        self.assertEqual(len(captured), 2)
-        self.assertIn("CONFIGURED QUERY WORKER", captured[0]["content"])
-        self.assertIn(route["query_prompt"], captured[0]["content"])
-        self.assertEqual(json.loads(captured[1]["content"]), request)
-        self.assertNotIn("marketing", " ".join(m["content"].lower() for m in captured))
-
-    async def test_validator_receives_only_its_route_instructions(self):
-        captured = []
-
-        async def fake_chat(messages, *args, **kwargs):
-            captured.extend(messages)
-            return json.dumps({
-                "relevant": True,
-                "sufficient": True,
-                "facts": ["Робота коштує 800-1200 грн"],
-                "fallback": None,
-            }, ensure_ascii=False)
-
-        route = {
-            "label": "Каталог",
-            "source_description": "Internal service catalog only",
-            "result_validation_prompt": "Accept the same device category and service",
-        }
-        request = {"question": "Price", "needed_fact": "price", "device_type": "smartphone"}
-        with patch.object(agent_lean, "_safe_chat", fake_chat):
-            result = await agent_lean._clean_source(
-                route, request, "Заміна роз'єму смартфона — 800-1200 грн", "CONFIGURED VALIDATOR", "m", None, None,
-                lambda *a: None, 1,
+        with patch.object(agent_lean, "_safe_chat", fake_chat), patch.object(agent_lean, "_run_tool", fake_tool):
+            result = await agent_lean._run_route_session(
+                route, request, "client text", None, None, None, {}, None,
+                "model", None, None, lambda *a: None, 1,
             )
 
         self.assertTrue(result["sufficient"])
-        system = captured[0]["content"]
-        self.assertIn("CONFIGURED VALIDATOR", system)
-        self.assertIn(route["source_description"], system)
-        self.assertIn(route["result_validation_prompt"], system)
-        self.assertNotIn("Інженер Андрон", system)
-        self.assertNotIn("MARKETING", system)
+        self.assertEqual(len(calls), 2)
+        first_system = calls[0][0]["content"]
+        self.assertIn("SUPPLIER SOURCE PROMPT", first_system)
+        self.assertIn("ROUTE QUERY PROMPT", first_system)
+        self.assertIn("ROUTE VALIDATION PROMPT", first_system)
+        self.assertNotIn("Інженер Андрон", first_system)
+        self.assertNotIn("MARKETING", first_system)
+
+        # The validation turn keeps the route's first query turn as private,
+        # route-local memory and adds only the raw result from its own source.
+        self.assertEqual(calls[1][0:2], calls[0])
+        self.assertEqual(calls[1][2]["role"], "assistant")
+        self.assertIn("Xiaomi Redmi Note 10 LCD", calls[1][2]["content"])
+        self.assertIn("1200 грн", calls[1][3]["content"])
 
     async def test_irrelevant_route_cannot_export_facts(self):
-        async def fake_chat(messages, *args, **kwargs):
-            return json.dumps({
+        responses = iter([
+            json.dumps({"query": "ремонт бетономішалки"}),
+            json.dumps({
                 "relevant": False,
                 "sufficient": False,
                 "facts": ["Сервіс ремонтує бетономішалки"],
                 "fallback": "Каталог цього не підтвердив",
-            }, ensure_ascii=False)
+            }, ensure_ascii=False),
+        ])
 
-        route = {"label": "Каталог", "source_description": "catalog", "result_validation_prompt": "validate"}
-        with patch.object(agent_lean, "_safe_chat", fake_chat):
-            result = await agent_lean._clean_source(
+        async def fake_chat(*args, **kwargs):
+            return next(responses)
+
+        async def fake_tool(*args, **kwargs):
+            return "Категорія: дрібна побутова техніка", "search_catalog"
+
+        route = {
+            "code": "catalog",
+            "label": "Каталог",
+            "source_description": "catalog",
+            "query_prompt": "build catalog query",
+            "result_validation_prompt": "validate category",
+        }
+        with patch.object(agent_lean, "_safe_chat", fake_chat), patch.object(agent_lean, "_run_tool", fake_tool):
+            result = await agent_lean._run_route_session(
                 route, {"question": "бетономішалки", "needed_fact": "availability"},
-                "Категорії: дрібна побутова техніка", "CONFIGURED VALIDATOR", "m", None, None,
-                lambda *a: None, 1,
+                "text", None, None, None, {}, None, "m", None, None, lambda *a: None, 1,
             )
 
         self.assertFalse(result["relevant"])
