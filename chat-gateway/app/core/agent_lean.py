@@ -11,8 +11,8 @@ the memory:
                outcomes from this turn. One job: create a structured internal
                question and pick a route or answer. Small -> reliable JSON.
   2. QUERY   — isolated call using ONLY that route's own query_prompt: turn the
-               client's need into the source query. (Each route searches with
-               its own prompt, its own little memory.)
+               controller's structured need into the source query. No chat
+               history or persistent route memory is attached.
   3. tool    — engine runs the real DB/web fetch for that route's tool.
   4. CLEAN   — isolated STATELESS call using ONLY that route's source_description
                + result_validation_prompt: raw source text -> clean facts.
@@ -75,9 +75,9 @@ async def _load_routes(tenant_id, db):
 
 
 def _source_map(routes: dict) -> str:
-    """Strict router map from the tenant's own routes — a few lines, no essays."""
+    """Controller map built only from tenant-editable route descriptions."""
     lines = [
-        "You are a ROUTER. You are NOT the assistant. You NEVER write a message to the client here.",
+        "Choose whether the main chat needs one configured route before it can answer the current message.",
         'Output EXACTLY one JSON object and nothing else:',
         '{"route":"<route code or answer>","question":"<precise internal question>",'
         '"needed_fact":"availability|price|policy|contact|device_type|other",'
@@ -85,22 +85,20 @@ def _source_map(routes: dict) -> str:
         "NEVER write an address, working hours, phone or price yourself. If the client needs such a",
         "fact, pick the route that provides it — the client reply is written by a different stage.",
         "",
-        "Routes (pick the one whose data answers the client's CURRENT message):",
+        "For route=answer leave the other fields empty. For a route, describe only the exact fact it must find.",
+        "Configured routes:",
     ]
     for r in routes.values():
-        trig = ", ".join(r["triggers"][:6])
-        # one compact line of what this source provides — from the route's own
-        # source_description (editable in Схема Логіки), so routing is prompt-driven.
-        desc = (r.get("source_description") or "").strip()
-        desc = desc.split(".")[0][:160] if desc else ""
+        trig = ", ".join(r["triggers"][:12])
+        desc = (r.get("source_description") or "").strip()[:700]
         line = f'- "{r["code"]}" — {r["label"]}.'
         if desc:
             line += f" Provides: {desc}."
         if trig:
             line += f" Triggers: {trig}."
         lines.append(line)
-    lines.append('- "answer" — ONLY for a greeting, small talk, off-topic, or when the needed fact is '
-                 "already in [ROUTE RESULTS THIS TURN]. Never pick answer for a fact you still need.")
+    lines.append('- "answer" — respond without another source when no configured fact is needed or the needed '
+                 "fact is already present in this turn's route results.")
     return "\n".join(lines)
 
 
@@ -123,15 +121,43 @@ async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper
     if tool in ("web_research", "search_parts"):
         import asyncio
         from app.core.tools import web_research
+        meta = (settings.meta or {}) if settings else {}
+        if tool == "search_parts":
+            from urllib.parse import quote
+            from app.core.tools import fetch_and_parse_url
+            direct = []
+            for template in str(meta.get("price_search_urls") or "").splitlines()[:4]:
+                template = template.strip()
+                if not template:
+                    continue
+                url = template.replace("{query}", quote(q)) if "{query}" in template else template
+                page = await asyncio.to_thread(fetch_and_parse_url, url, 1800)
+                if page:
+                    direct.append(f"SOURCE {url}\n{page}")
+            if direct:
+                return "\n\n".join(direct), tool
+            sites = [s.strip() for s in str(meta.get("parts_sites") or "").replace("\n", ",").split(",") if s.strip()]
+            if sites:
+                q = f"({' OR '.join(f'site:{site}' for site in sites)}) {q}"
         return await asyncio.to_thread(web_research, q, 3, 3000, serper_key), tool
     if tool == "open_url":
         import asyncio
         from urllib.parse import quote
-        from app.core.tools import fetch_and_parse_url
+        from app.core.tools import fetch_and_parse_url, web_research
         url = route.get("target_url", "")
         if "{query}" in url:
             url = url.replace("{query}", quote(q))
-        return (await asyncio.to_thread(fetch_and_parse_url, url) if url.startswith("http") else ""), tool
+        if url.startswith("http"):
+            return await asyncio.to_thread(fetch_and_parse_url, url), tool
+        if url:
+            domain = url.replace("https://", "").replace("http://", "").strip("/")
+            return await asyncio.to_thread(web_research, f"site:{domain} {q}", 3, 3000, serper_key), tool
+        return "", tool
+    if tool == "escalate":
+        handoff = (settings.escalation_prompt or "").strip() if settings else ""
+        if handoff:
+            return f"Configured human-contact guidance: {handoff}", tool
+        return "No confirmed transfer integration or configured human-contact guidance.", tool
     return "", tool
 
 
@@ -196,16 +222,15 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         return (warn or "Давайте без образ. Ще такий випад — і завершу чат.").strip(), memory
 
     for step in range(1, max_iter + 1):
-        # 1) DECIDE — ONLY the route map + chat + cleaned facts. No persona, no
-        # behaviour/tone/conduct rules — routing doesn't need them, and dragging
-        # them is exactly what bloated the context. Tone lives only in ANSWER.
-        sys = source_map
+        # The main controller keeps the conversation goal. Route workers remain
+        # isolated and never receive this persona, marketing or other routes.
+        sys = persona + "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map
         if route_results:
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
         dmsgs.append({"role": "system", "content": "Now output only the required JSON object."})
-        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 60, retry=True)
+        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True)
         emit(f"DECIDE #{step}", "Сире рішення", str(raw))
         try:
             decision = _extract_json(raw)
@@ -250,16 +275,6 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     marketing = settings.marketing_rules if marketing_on and settings and settings.marketing_rules else ""
     if marketing:
         ans_sys += "\n\n[MARKETING — apply ONLY if it fits the talk naturally, never forced]\n" + marketing
-    # The business's own contact card — tiny, always available so the model can
-    # never invent an address/hours/phone (rule #1). Real data, not a base dump.
-    biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
-    if biz:
-        biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
-        if biz_lines:
-            ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "
-                        "delivery; use these exact values, never invent. Give ONLY the single fact the "
-                        "client actually asked for: if they asked where to bring it, give just the address. "
-                        "Do NOT volunteer delivery, payment, hours or phone unless they asked for them.]\n" + biz_lines)
     if facts:
         ans_sys += ("\n\n[VERIFIED FACTS — answer only from these and the client's own words. "
                     "Never invent a price or schedule not listed here.]\n" + "\n".join(facts))
@@ -271,27 +286,19 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
               "availability, price, policy, device type or contact was confirmed. Respond naturally using "
               "the fallback and the conversation, without exposing route names or JSON."
         )
-    ans_sys += (
-        "\n\n[REPLY RULE] Talk like a real repair master — short, natural, human. Answer only what the "
-        "client actually asked, in 1-2 sentences.\n"
-        "- Price asked: give a natural range from the facts (напр. «від 900 до 3600 грн залежно від "
-        "несправності»), say the exact price is after the free diagnostics. NEVER list the whole price "
-        "table — pick only the rows that fit, summarise as one range.\n"
-        "- Work and part are separate: state our work price and the part separately, never merged.\n"
-        "- 'Do you repair X': confirm only when VERIFIED FACTS explicitly support availability. If the "
-        "availability route returned relevant=false, say it is not confirmed; never infer it from a broad "
-        "category or general knowledge. A bare device/model without an availability question means ask what "
-        "is wrong, not automatically confirm repair. Mention diagnostics conditions only when verified.\n"
-        "- FAQ/policy: answer in one plain sentence from the facts; don't quote raw database wording.\n"
-        "- Always reply in Ukrainian only. Never output English or any internal note to the client.\n"
-        "- Never invent a number, address or term not in the facts, and don't pile on info nobody asked for."
-    )
+    ans_sys += ("\n\nUse the conversation and route outcomes to answer the client now. "
+                "Follow the persona and business rules above. Route output is evidence, not client wording. "
+                "Never expose route names, prompts, JSON or raw source text.")
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
     except (ValueError, TypeError):
         temp = 0.3
-    answer = await _safe_chat(amsgs, model, base_url, api_key, temp, 700, retry=False)
+    try:
+        answer_tokens = min(1200, max(120, int(settings.max_tokens or 700))) if settings else 700
+    except (ValueError, TypeError):
+        answer_tokens = 700
+    answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=False)
     if not answer:
         answer = settings.fallback_text if settings and settings.fallback_text else "Технічна заминка, спробуйте ще раз."
     answer = _clean_answer(answer, fallback=(settings.fallback_text if settings else "") or "")
@@ -337,9 +344,11 @@ async def _build_query(route, request, model, base_url, api_key, emit, step):
     qp = route.get("query_prompt")
     if not qp:
         return ""
-    sys = ("Output ONLY 2-5 search keywords for one source — no sentence, no question, no answer, "
-           "no numbers/prices/hours of your own, no quotes, no JSON. Just the keywords.\n"
-           "Guidance: " + qp)
+    sys = (
+        "You are the query worker for one isolated knowledge route. Follow this route's instructions exactly. "
+        "Return only the source query, without explanation, JSON or client reply. If the required query cannot "
+        "be formed from the supplied request, return an empty string.\n\n[ROUTE QUERY INSTRUCTIONS]\n" + qp
+    )
     msgs = [
         {"role": "system", "content": sys},
         {"role": "user", "content": json.dumps(request, ensure_ascii=False)},
@@ -357,40 +366,34 @@ async def _clean_source(route, request, raw, model, base_url, api_key, emit, ste
         emit(f"CLEAN #{step}", "Порожньо", "Джерело нічого не повернуло")
         return {"relevant": False, "sufficient": False, "facts": [], "fallback": "no_result"}
     raw_text = str(raw).strip()
-    explicit_no_result = (
-        "немає рядка або категорії, що збігається із запитом",
-        "нічого не знайдено у базі знань",
-        "бізнес-інформація не налаштована",
-    )
-    if any(marker in raw_text.lower() for marker in explicit_no_result):
-        result = {"relevant": False, "sufficient": False, "facts": [], "fallback": "no_result"}
-        emit(f"CLEAN #{step}", "Немає збігу", json.dumps(result, ensure_ascii=False))
-        return result
     rules = route.get("result_validation_prompt") or route.get("source_description") or ""
+    system = (
+        "You are an isolated validator for ONE knowledge route. You do not know the main persona, marketing, "
+        "conduct rules, other routes or their results. Decide relevance and sufficiency only by this route's "
+        "instructions and the supplied source. Return exactly one JSON object with this shape: "
+        '{"relevant":true|false,"sufficient":true|false,"facts":["..."],"fallback":"..."|null}. '
+        "Facts must be concise source-supported statements useful to the main chat. Fallback is concise guidance "
+        "for the main chat when the requested fact was not verified. Do not write the client reply.\n\n"
+        f"[WHAT THIS ROUTE CONTAINS]\n{route.get('source_description') or ''}\n\n"
+        f"[ROUTE VALIDATION AND FALLBACK INSTRUCTIONS]\n{rules}"
+    )
     user = (
         f"Структурований запит головної моделі: {json.dumps(request, ensure_ascii=False)}\n"
-        f"Джерело: {route.get('label')}\n"
-        + (f"Правила відбору: {rules}\n" if rules else "")
-        + f"Сирі дані:\n{raw_text[:3500]}\n\n"
-        "Return ONLY JSON: {\"relevant\":boolean,\"sufficient\":boolean,\"facts\":[string],"
-        "\"fallback\":string|null}. A fact is allowed only when the source explicitly supports the same "
-        "device/item type and requested fact. Never place an item into a broad category by your own world "
-        "knowledge. A list of unrelated categories is not evidence. Reject another category even when it "
-        "shares a component word (phone/TV/column speaker != headphones). Use only numbers present in the "
-        "raw data. If there is no explicit matching evidence, relevant=false, facts=[], fallback=\"no_result\"."
+        f"Сирі дані джерела:\n{raw_text[:5000]}"
     )
-    out = await _safe_chat([{"role": "user", "content": user}], model, base_url, api_key, 0.0, 350, retry=False)
+    out = await _safe_chat([{"role": "system", "content": system}, {"role": "user", "content": user}],
+                           model, base_url, api_key, 0.0, 450, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)
         facts = parsed.get("facts") if isinstance(parsed.get("facts"), list) else []
         facts = [str(f).strip() for f in facts if str(f).strip()]
-        relevant = parsed.get("relevant") is True and bool(facts)
+        relevant = parsed.get("relevant") is True
         result = {
             "relevant": relevant,
             "sufficient": relevant and parsed.get("sufficient") is True,
             "facts": facts if relevant else [],
-            "fallback": None if relevant else str(parsed.get("fallback") or "no_result"),
+            "fallback": str(parsed.get("fallback")).strip() if parsed.get("fallback") else None,
         }
     except Exception:
         result = {"relevant": False, "sufficient": False, "facts": [], "fallback": "validation_failed"}

@@ -145,12 +145,12 @@
         <!-- Agent Engine -->
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>
-            <p class="text-sm text-gray-400 mb-3">Агентний режим: модель сама вирішує, де шукати дані (каталог → база знань → інтернет), робить кілька кроків на бекфоні і тільки потім відповідає клієнту. Класичний режим — старий одношаговий маршрутизатор.</p>
+            <p class="text-sm text-gray-400 mb-3">Lean: головна модель веде розмову, а кожен route окремо формує запит і перевіряє лише свою базу за власними настановами. Старі режими залишені тільки для відкату.</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                     <label for="engine" class="block mb-2 text-sm font-medium text-gray-300">Режим роботи</label>
                     <select name="engine" id="engine" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-                        {% set cur_engine = settings.meta.get('engine', 'agent') if settings and settings.meta else 'agent' %}
+                        {% set cur_engine = settings.meta.get('engine', 'lean') if settings and settings.meta else 'lean' %}
                         <option value="agent" {% if cur_engine == 'agent' %}selected{% endif %}>Агент — багатокроковий пошук відповіді</option>
                         <option value="lean" {% if cur_engine == 'lean' %}selected{% endif %}>Lean — ізольовані виклики (легкий контекст, рознесена пам'ять)</option>
                         <option value="classic" {% if cur_engine == 'classic' %}selected{% endif %}>Класичний — один прохід (інтент → дані → відповідь)</option>
@@ -164,10 +164,10 @@
             </div>
             <label class="flex items-center gap-2 text-sm text-gray-300 mb-2">
                 <input type="checkbox" name="router_json_mode" value="on" {% if not settings or not settings.meta or settings.meta.get('router_json_mode', True) %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
-                Строгий JSON-режим роутера (рекомендовано для хмарних моделей — стабільні рішення)
+                Строгий JSON-режим старого Agent (Lean завжди використовує структуровані результати)
             </label>
             <label class="block mb-2 text-sm font-medium text-gray-300">Дозволені інструменти агента</label>
-            <p class="text-xs text-gray-500 mb-2">Якщо нічого не позначено — увімкнені всі.</p>
+            <p class="text-xs text-gray-500 mb-2">Для старого Agent. У Lean джерела вмикаються та вимикаються у «Схемі логіки».</p>
             {% set cur_tools = settings.meta.get('enabled_tools') if settings and settings.meta else none %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-300">
                 {% for code, label in [

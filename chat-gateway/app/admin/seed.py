@@ -152,7 +152,7 @@ async def seed_admin():
                 temperature="0.7",
                 max_tokens="1024",
                 meta={
-                    "engine": "agent",
+                    "engine": "lean",
                     "agent_max_iterations": "3",
                     "enabled_tools": [],  # empty = all tools enabled
                     "fallback_sites": "texno.plus",  # check our own site first
@@ -182,30 +182,19 @@ async def seed_admin():
 
 
 async def seed_default_prompts(db):
-    """Populate editable control prompts (decision rules, answer style, parts
-    instruction, synonyms) into bot_settings.meta where empty."""
+    """Populate only live universal settings. Route prompts live on routes."""
     from sqlalchemy.future import select as _select
     from sqlalchemy.orm.attributes import flag_modified
     from app.models.tenant import BotSetting
     from app.core.agent import _CATALOG_SYNONYMS
-    from app.core.prompt_defaults import (
-        DEFAULT_DECISION_RULES, DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_INTAKE_POLICY, DEFAULT_PARTS_INSTRUCTION,
-        DEFAULT_EVALUATION_RULES,
-    )
 
     synonyms_text = "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items())
     defaults = {
-        "agent_decision_rules": DEFAULT_DECISION_RULES,
-        "answer_style": DEFAULT_ANSWER_STYLE,
-        "intake_policy": DEFAULT_INTAKE_POLICY,
-        "web_research_mode": "normal",
-        "parts_sales_mode": "normal",
-        "external_part_price_mode": "normal",
-        "conduct_policy": DEFAULT_CONDUCT_POLICY,
         "ban_message": "Вітаю, вас забанено.",
-        "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
         "catalog_synonyms": synonyms_text,
-        "tpl_evaluation_rules": DEFAULT_EVALUATION_RULES,
+        "conduct_enabled": "1",
+        "conduct_warnings": "2",
+        "marketing_enabled": "0",
     }
     res = await db.execute(_select(BotSetting))
     changed = 0

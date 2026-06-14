@@ -201,10 +201,7 @@ async def create_tenant(
     await db.commit()
     await db.refresh(new_tenant)
     
-    from app.core.prompt_defaults import (
-        DEFAULT_ANSWER_STYLE, DEFAULT_CONDUCT_POLICY, DEFAULT_DECISION_RULES, DEFAULT_EVALUATION_RULES, DEFAULT_INTAKE_POLICY,
-        DEFAULT_PARTS_INSTRUCTION, ROUTE_PROMPTS,
-    )
+    from app.core.prompt_defaults import ROUTE_PROMPTS
     from app.core.agent import _CATALOG_SYNONYMS
     from pathlib import Path
     persona_path = Path(__file__).resolve().parents[1] / "givi_system_prompt.md"
@@ -216,19 +213,13 @@ async def create_tenant(
         temperature="0.7",
         max_tokens="1024",
         meta={
-            "engine": "agent",
+            "engine": "lean",
             "agent_max_iterations": "3",
             "enabled_tools": [],
-            "agent_decision_rules": DEFAULT_DECISION_RULES,
-            "answer_style": DEFAULT_ANSWER_STYLE,
-            "intake_policy": DEFAULT_INTAKE_POLICY,
-            "web_research_mode": "normal",
-            "parts_sales_mode": "normal",
-            "external_part_price_mode": "normal",
-            "conduct_policy": DEFAULT_CONDUCT_POLICY,
             "ban_message": "Вітаю, вас забанено.",
-            "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
-            "tpl_evaluation_rules": DEFAULT_EVALUATION_RULES,
+            "conduct_enabled": "1",
+            "conduct_warnings": "2",
+            "marketing_enabled": "0",
             "catalog_synonyms": "\n".join(f"{k}={','.join(v)}" for k, v in _CATALOG_SYNONYMS.items()),
             "router_json_mode": True,
         },
@@ -237,7 +228,7 @@ async def create_tenant(
     route_rows = [
         ("catalog", "Наш каталог: товари, послуги та ціни", "qa_handler", ["чи є", "чи робите", "ціна", "прайс"]),
         ("qa", "Затверджені Q&A та документи", "qa_handler", ["гарантія", "умови", "правила"]),
-        ("web_search", "Зовнішні характеристики та ідентифікація", "web_search_handler", ["характеристики", "сумісність", "що це"]),
+        ("web_search", "Ідентифікація невідомого типу приладу", "web_search_handler", ["що це", "що за прилад", "який тип пристрою"]),
         ("external_price", "Зовнішні ціни та постачальники", "web_search_handler", ["ціна деталі", "ринкова ціна", "у постачальників"]),
         ("business_info", "Графік, адреса, оплата та доставка", "qa_handler", ["коли працюєте", "адреса", "оплата", "доставка"]),
         ("handoff", "Передача оператору", "escalate", ["людина", "оператор", "менеджер"]),
@@ -825,7 +816,7 @@ async def update_settings(
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
     tpl_evaluation_rules: str = Form(""),
-    engine: str = Form("agent"),
+    engine: str = Form("lean"),
     agent_max_iterations: str = Form("3"),
     enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
@@ -870,7 +861,7 @@ async def update_settings(
             meta_data["llm_api_key"] = llm_api_key
 
             # Engine + universal config the lean engine actually reads
-            meta_data["engine"] = engine if engine in ("agent", "lean", "classic") else "agent"
+            meta_data["engine"] = engine if engine in ("agent", "lean", "classic") else "lean"
             meta_data["agent_max_iterations"] = agent_max_iterations
             meta_data["enabled_tools"] = enabled_tools or []
             meta_data["serper_api_key"] = serper_api_key.strip()
@@ -911,10 +902,9 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
-                     "agent_decision_rules", "answer_style", "intake_policy", "web_research_mode", "parts_sales_mode", "external_part_price_mode", "conduct_policy", "ban_message", "parts_instruction",
-                     "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
+                     "ban_message", "conduct_enabled", "conduct_warnings",
+                     "marketing_enabled", "parts_sites", "price_search_urls",
                      "catalog_synonyms", "business_info", "router_json_mode",
-                     "tpl_escalate_instruction",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)
 
 

@@ -45,7 +45,7 @@
 
             <div>
                 <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">3. Що лишити зі знайденого (очищення)</label>
-                <p class="text-xs text-gray-500 mb-2">Головний захист від вигадок. Що з сирого результату брати, а що відкидати. Напр.: «лише рядки про той самий прилад, що в питанні; відкинь інші категорії навіть зі спільним словом; бери лише числа з даних, нічого не вигадуй».</p>
+                <p class="text-xs text-gray-500 mb-2">Особисті настанови ізольованій LLM цього route: як визначити релевантність і достатність, які факти повернути та який fallback дати головному чату, якщо підтвердження немає. Вона не бачить persona, маркетинг, контакти чи інші routes.</p>
                 <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Лиши лише факти про той самий прилад/тему, що в питанні клієнта. Відкинь рядки про інші категорії. Бери лише числа з сирих даних — нічого не вигадуй.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
         </div>

@@ -70,9 +70,8 @@ async def process_message_pipeline(
     """
     Core pipeline to process an incoming message and return the LLM response.
 
-    Engine is per-tenant (meta.engine): "agent" (default) runs the agentic
-    action loop; "classic" runs the one-shot intent router. Agent errors fall
-    back to classic automatically.
+    Engine is per-tenant (meta.engine): "lean" is the default isolated-route
+    controller; "agent" and "classic" remain available for explicit rollback.
 
     `trace` is an optional callback(step, status, details, duration) used by the
     admin sandbox to visualize every step. The same pipeline serves all channels.
@@ -84,7 +83,7 @@ async def process_message_pipeline(
     settings = res.scalars().first()
 
     # --- AGENT ENGINE (Givi-style action loop) ---
-    engine = (settings.meta.get("engine") if settings and settings.meta else None) or "agent"
+    engine = (settings.meta.get("engine") if settings and settings.meta else None) or "lean"
     if engine in ("agent", "lean"):
         if engine == "lean":
             from app.core.agent_lean import run_agent_lean as run_agent
@@ -107,7 +106,10 @@ async def process_message_pipeline(
                     await record_session_ban(db, tenant_id, chat_key, text)
             return answer
         except Exception as e:
-            logger.error(f"Agent engine failed, falling back to classic: {e}")
+            logger.error(f"{engine} engine failed: {e}")
+            if engine == "lean":
+                emit("LEAN ENGINE", "Помилка", str(e))
+                return settings.fallback_text if settings and settings.fallback_text else "Технічна заминка, спробуйте ще раз."
             emit("AGENT ENGINE", "Помилка → класичний режим", str(e))
 
     # --- CLASSIC ENGINE (one-shot intent router) ---
