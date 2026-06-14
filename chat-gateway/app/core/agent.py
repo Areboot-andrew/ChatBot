@@ -266,6 +266,31 @@ def _is_type_identification_decision(decision: dict) -> bool:
     ))
 
 
+_FORBIDDEN_INTAKE_REQUEST_RE = re.compile(
+    r"(?iu)(?:скинь|надішл|пришліть|покажіть|уточніть|напишіть|потрібн\w*)[^.!?\n]{0,80}"
+    r"(?:точн\w*\s+модел|модел\w*|фото|фотограф|посилан|серійн\w*\s+номер|маркуван|етикет)"
+)
+
+
+def _remove_forbidden_intake_requests(answer: str, text: str, history: list = None) -> str:
+    """Last-resort tenant safeguard against stale shop-style identification asks."""
+    if not _FORBIDDEN_INTAKE_REQUEST_RE.search(answer or ""):
+        return answer
+    kept = [
+        part.strip()
+        for part in re.split(r"(?<=[.!?])\s+|\n+", answer or "")
+        if part.strip() and not _FORBIDDEN_INTAKE_REQUEST_RE.search(part)
+    ]
+    cleaned = " ".join(kept).strip()
+    if cleaned:
+        return cleaned
+    if _has_known_device_type(text, history):
+        if _is_bare_item_intake(text, history):
+            return "А що саме в ньому не працює?"
+        return "Без діагностики точну причину не визначити. Привозьте, глянемо."
+    return "Уточніть, що саме це у вас за прилад?"
+
+
 _GREETING_WORDS = {
     "привіт", "привітик", "прив", "вітаю", "добрий", "доброго", "здрастуйте", "здоров",
     "хай", "дякую", "дякс", "спасибі", "ок", "окей", "окк", "бувай", "па", "пока",
@@ -1029,6 +1054,13 @@ async def run_agent(
                 decision["action"] = action
                 query = ""
                 decision["query"] = query
+        if action == "open_url" and web_research_mode == "identify_unknown_type_only":
+            emit(f"AGENT ROUTER #{iteration}", "Відкриття веб-сторінки відхилено",
+                 "У сервісному режимі зовнішні сторінки не використовуються для моделей, характеристик чи цін.")
+            action = "answer"
+            decision["action"] = action
+            query = ""
+            decision["query"] = query
         if action == "search_parts" and parts_sales_mode == "service_only":
             emit(f"AGENT ROUTER #{iteration}", "Зовнішній пошук запчастини відхилено",
                  "Для цього tenant-а запчастини окремо не продаються, зовнішній пошук вимкнений.")
@@ -1189,6 +1221,8 @@ async def run_agent(
     )
     fallback_text = settings.fallback_text if settings and settings.fallback_text else ""
     answer = _clean_answer(answer, fallback=fallback_text)
+    if web_research_mode == "identify_unknown_type_only":
+        answer = _remove_forbidden_intake_requests(answer, text, history)
     # Only memory_patch (short durable facts) persists between messages — no raw
     # lookup dumps. Keeps the next turn's context clean.
     memory.pop("_facts", None)
