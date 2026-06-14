@@ -224,6 +224,7 @@ async def create_tenant(
             "intake_policy": DEFAULT_INTAKE_POLICY,
             "web_research_mode": "normal",
             "parts_sales_mode": "normal",
+            "external_part_price_mode": "normal",
             "conduct_policy": DEFAULT_CONDUCT_POLICY,
             "ban_message": "Вітаю, вас забанено.",
             "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
@@ -793,6 +794,7 @@ async def update_settings(
     intake_policy: str = Form(""),
     web_research_mode: str = Form("normal"),
     parts_sales_mode: str = Form("normal"),
+    external_part_price_mode: str = Form("normal"),
     conduct_policy: str = Form(""),
     ban_message: str = Form("Вітаю, вас забанено."),
     agent_decision_rules: str = Form(""),
@@ -838,6 +840,7 @@ async def update_settings(
             meta_data["intake_policy"] = intake_policy.strip()
             meta_data["web_research_mode"] = web_research_mode if web_research_mode in ("normal", "identify_unknown_type_only") else "normal"
             meta_data["parts_sales_mode"] = parts_sales_mode if parts_sales_mode in ("normal", "service_only") else "normal"
+            meta_data["external_part_price_mode"] = external_part_price_mode if external_part_price_mode in ("normal", "repair_quote_only") else "normal"
             meta_data["conduct_policy"] = conduct_policy.strip()
             meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
             meta_data["agent_decision_rules"] = agent_decision_rules.strip()
@@ -865,7 +868,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
 _CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
-                     "agent_decision_rules", "answer_style", "intake_policy", "web_research_mode", "parts_sales_mode", "conduct_policy", "ban_message", "parts_instruction",
+                     "agent_decision_rules", "answer_style", "intake_policy", "web_research_mode", "parts_sales_mode", "external_part_price_mode", "conduct_policy", "ban_message", "parts_instruction",
                      "parts_sites", "price_search_urls", "fallback_sites", "tpl_evaluation_rules",
                      "catalog_synonyms", "business_info", "router_json_mode",
                      "tpl_escalate_instruction",

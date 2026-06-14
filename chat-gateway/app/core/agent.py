@@ -242,7 +242,7 @@ _PART_PURCHASE_RE = re.compile(
     r"можна\s+у\s+вас\s+взяти|почому|скільки\s+коштує|ціна|вартість|\bє\b)"
 )
 _PART_ONLY_RE = re.compile(
-    r"(?iu)(?:запчаст|детал|дисплей|екран|матриц|акумулятор|батаре|акб|роз['’]?єм|"
+    r"(?iu)(?:запчаст|детал|диспле|екран|матриц|акумулятор|батаре|акб|роз['’]?єм|"
     r"гнізд|шлейф|камер|динамік|мікрофон|корпус|кришк|плат|мотор|двигун|помп|тен)"
 )
 _INSTALL_OR_REPAIR_RE = re.compile(r"(?iu)(?:ремонт|полагод|зробити|замінити|заміна|встановити|поставити|поміняти)")
@@ -254,6 +254,39 @@ def _wants_part_only(text: str) -> bool:
         _PART_PURCHASE_RE.search(current) and
         _PART_ONLY_RE.search(current) and
         not _INSTALL_OR_REPAIR_RE.search(current)
+    )
+
+
+_MODEL_IDENTIFIER_RE = re.compile(
+    r"(?iu)\b(?:[a-z\u0400-\u04ff]*\d+[a-z\u0400-\u04ff0-9-]*|m\d|q[c]?\d+|[ivx]{2,})\b"
+)
+
+
+def _is_concrete_repair_part_quote(text: str, history: list = None) -> bool:
+    """Allow supplier lookup only for a concrete part used in a repair quote.
+
+    The component and model signal must come from the client conversation, not
+    from a diagnosis invented by the router.
+    """
+    client_turns = [
+        str(item.get("content") or "")
+        for item in (history or [])[-8:]
+        if item.get("role") == "user" and item.get("content")
+    ]
+    if not client_turns or client_turns[-1] != text:
+        client_turns.append(text or "")
+    client_blob = " ".join(client_turns)
+    understood_device = (
+        _has_known_device_type(text, history) or
+        any(brand in client_blob.lower() for brand in _BRANDS)
+    )
+    return bool(
+        _client_requested_price(text, history) and
+        not _wants_part_only(text) and
+        understood_device and
+        _PART_ONLY_RE.search(client_blob) and
+        _INSTALL_OR_REPAIR_RE.search(client_blob) and
+        _MODEL_IDENTIFIER_RE.search(client_blob)
     )
 
 
@@ -329,10 +362,15 @@ def _normalize_source_query(action: str, query: str, text: str, web_research_mod
     if action == "web_research" and web_research_mode == "identify_unknown_type_only":
         identity = _compact_source_query(text, max_terms=3) or _compact_source_query(query, max_terms=3)
         return f"{identity} device type".strip()
+    if action == "search_parts":
+        part_terms = [
+            term for term in _query_terms(query)
+            if term.lower() not in {"repair", "replacement", "replace", "ремонт", "ремонту", "заміна", "замінити"}
+        ]
+        return _compact_source_query(" ".join(part_terms), max_terms=7)
     limits = {
         "search_catalog": 6,
         "search_knowledge": 6,
-        "search_parts": 7,
         "get_business_info": 4,
     }
     if action in limits:
@@ -715,8 +753,10 @@ async def run_agent(
     intake_policy = (meta.get("intake_policy") or "").strip() or DEFAULT_INTAKE_POLICY
     web_research_mode = (meta.get("web_research_mode") or "normal").strip()
     parts_sales_mode = (meta.get("parts_sales_mode") or "normal").strip()
+    external_part_price_mode = (meta.get("external_part_price_mode") or "normal").strip()
     conduct_policy = (meta.get("conduct_policy") or "").strip() or DEFAULT_CONDUCT_POLICY
-    decision_rules += "\n\n" + intake_policy + "\n\n" + conduct_policy
+    parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
+    decision_rules += "\n\n" + intake_policy + "\n\n" + parts_instruction + "\n\n" + conduct_policy
     router_protocol = (ROUTER_PROTOCOL
                        .replace("{tools_block}", tools_block)
                        .replace("{decision_rules}", decision_rules)
@@ -826,8 +866,6 @@ async def run_agent(
                     "check / take the device in.]\n" + (result or ""))
         return result
 
-    # External part-price logic/labelling (panel field). Default at module level.
-    parts_instruction = (meta.get("parts_instruction") or "").strip() or DEFAULT_PARTS_INSTRUCTION
     # Direct price-site search URL templates with {query} (panel). The model
     # provides a normalized query; we build the URL and parse the results page.
     price_search_urls = [u.strip() for u in (meta.get("price_search_urls") or "").splitlines() if u.strip()]
@@ -1091,6 +1129,12 @@ async def run_agent(
             decision["needed_fact"] = needed_fact
             query = ""
             decision["query"] = query
+        configured_tool = route_configs.get(route_code, {}).get("tool_name", "")
+        if configured_tool and action != "answer" and action != configured_tool:
+            emit(f"AGENT ROUTER #{iteration}", "Дію виправлено контрактом роута",
+                 f"route={route_code}: model action={action}, configured tool={configured_tool}")
+            action = configured_tool
+            decision["action"] = action
         if action == "web_research" and web_research_mode == "identify_unknown_type_only":
             web_allowed = (
                 _is_type_identification_decision(decision) and
@@ -1110,13 +1154,19 @@ async def run_agent(
             decision["action"] = action
             query = ""
             decision["query"] = query
-        if action == "search_parts" and parts_sales_mode == "service_only":
-            emit(f"AGENT ROUTER #{iteration}", "Зовнішній пошук запчастини відхилено",
-                 "Для цього tenant-а запчастини окремо не продаються, зовнішній пошук вимкнений.")
-            action = "answer"
-            decision["action"] = action
-            query = ""
-            decision["query"] = query
+        if action == "search_parts" and external_part_price_mode == "repair_quote_only":
+            quote_allowed = (
+                explicit_price_requested and
+                needed_fact == "price" and
+                _is_concrete_repair_part_quote(text, history)
+            )
+            if not quote_allowed:
+                emit(f"AGENT ROUTER #{iteration}", "Зовнішній пошук деталі відхилено",
+                     "Пошук дозволений лише для приблизної ціни ремонту з конкретною деталлю та моделлю.")
+                action = "answer"
+                decision["action"] = action
+                query = ""
+                decision["query"] = query
         if action != "answer" and _is_assistant_claim_challenge(text, history):
             emit(f"AGENT ROUTER #{iteration}", "Уточнення власної фрази",
                  "Клієнт оскаржує термін із попередньої відповіді; треба виправитись без нового пошуку.")
@@ -1124,12 +1174,6 @@ async def run_agent(
             decision["action"] = action
             query = ""
             decision["query"] = query
-        configured_tool = route_configs.get(route_code, {}).get("tool_name", "")
-        if configured_tool and action != "answer" and action != configured_tool:
-            emit(f"AGENT ROUTER #{iteration}", "Дію виправлено контрактом роута",
-                 f"route={route_code}: model action={action}, configured tool={configured_tool}")
-            action = configured_tool
-            decision["action"] = action
         if action != "answer":
             normalized_query = _normalize_source_query(action, query, text, web_research_mode)
             if not normalized_query and action in {"search_catalog", "search_knowledge", "search_parts"}:

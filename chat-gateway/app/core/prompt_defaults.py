@@ -14,6 +14,8 @@ DEFAULT_DECISION_RULES = """Decision policy for the universal business agent:
 - A client-provided name is not proof that an item exists. Verify an uncertain model only when existence matters to the answer.
 - Do not search for greetings, thanks, emotion, or a reply that needs no external fact.
 - Internal catalog data describes this business. External supplier/web data is third-party evidence and must never silently become our own price, stock, warranty, or policy.
+- For a repair-price request, search the internal catalog first. If it verifies labour but explicitly excludes a concrete required part, the answer is incomplete; use the configured external-part route only when the client already provided a sufficiently exact model and the part/operation is explicit.
+- Never infer a part from a symptom in order to launch external search. "Does not turn on" is not a battery, board, power supply, heater or any other searchable part.
 - After every tool call read only the VERIFIED ROUTE RESULT. Raw source text is not evidence until the route validator accepts matching phrases.
 - If verified facts are sufficient, answer. If they are relevant but incomplete, choose the next configured route needed for the missing fact. If irrelevant, reformulate once or use the configured fallback route.
 - Treat the client's requested fact as immutable for the current turn. Never expand an availability, diagnosis or intake question into a price search merely because an assistant message mentioned cost.
@@ -30,7 +32,7 @@ DEFAULT_INTAKE_POLICY = """Conversation intake policy:
 - For repair intake, use this strict order: (1) device/product type if unclear, (2) symptom or requested operation if the client has not stated it, (3) one decisive follow-up about behavior, damage, liquid, charging, sound or indicators. Do not skip directly to model identification.
 - If the device type is already obvious from the client's words, do not web-search an uncertain model before learning the problem. Example: "Bose Q19 headphones" -> ask what is wrong with the headphones; do not ask for a photo merely to validate the model.
 - Ask whether headphones are TWS/in-ear/on-ear only when form factor changes the next repair question. Do not interrogate the client for metadata that is not yet useful.
-- Web research is allowed only to identify the generic type of an item the model genuinely does not understand. It is not allowed for model validation, specifications, repair intake, symptoms, prices, parts, availability, or because a spelling looks uncertain.
+- General web research is allowed only to identify the generic type of an item the model genuinely does not understand. It is not allowed for model validation, specifications, repair intake, symptoms, availability, or because a spelling looks uncertain. The separate external-part route may search suppliers/web only for the concrete repair-quote case defined below.
 - If type-identification web research returns no verified result, ask one plain question such as "Уточніть, що саме це у вас за прилад?" Do not ask for a model, photo, label, link or serial number. Once the type is known, ask what is broken if the client has not said it.
 - Once the client states a symptom, use internal category/service knowledge when availability or price is needed. Do not web-search the model.
 - Never convert a symptom into a named failed component. "Does not turn on" does not prove power supply, board, fuse, cable, battery, heating element or any other cause.
@@ -76,12 +78,14 @@ DEFAULT_EVALUATION_RULES = """--- VERIFIED-EVIDENCE POLICY ---
 
 
 DEFAULT_PARTS_INSTRUCTION = """External part/supplier route policy:
-- Use this route only when the active question requires an external item/part price, availability, or supplier fact that is absent from internal business data.
-- Build the query from the exact item/part name, compatible device/product type, exact model/revision when known, and the requested fact. Do not search a generic noun alone.
+- Use this route only when the client explicitly asks for an approximate repair price, the repair clearly requires a named concrete part, internal data has no price for that part, and the client conversation already contains a sufficiently exact model/revision.
+- Never use it to diagnose a symptom, validate a model, research general specifications, or answer a separate part-purchase request. A symptom alone never authorizes choosing a part.
+- Build the query only as brand + exact model/revision + exact part name, normally 3-7 keywords. Do not search a generic noun, symptom, sentence or question.
 - Search configured direct supplier URLs first, configured supplier domains second, and the open web only as the allowed fallback.
-- Treat every returned price as a third-party market reference, never as our own final price.
+- Treat every returned price as a third-party market reference for the repair estimate, never as our stock, sale price or final commitment.
 - Accept a result only when the full product phrase matches the requested item and model/compatibility requirements. Reject accessories, another generation, another device type, advertising text, and ambiguous ranges.
-- If no verified supplier result exists, do not invent an average. Use the route's no-result guidance."""
+- Combine it only with a verified matching internal labour price, and keep the two components visibly separate. If either component is missing, do not invent a total.
+- If no verified supplier result exists, do not invent an average. State that the part price could not be confirmed and the exact quote requires diagnostics/supplier confirmation."""
 
 
 ROUTE_PROMPTS = {
@@ -101,7 +105,7 @@ ROUTE_PROMPTS = {
         "reasoning": "Use this route for business availability, assortment, services and internal prices. Distinguish availability from price. Evaluate capability in this order: exact model/service match; otherwise verified device/product category match; otherwise a matching common operation within that category. Absence of an exact model row is not a refusal. Extract the item type, model if relevant, requested operation/product and whether the client explicitly requested a price.",
         "query_prompt": "Write 2-6 catalog keywords, not a sentence. Use requested operation + generic device type: заміна дисплея смартфона; ремонт електрочайника; роз'єм зарядки ноутбука. For broad availability use ремонт + device type. Do not include symptom-analysis words, client story, question words or price boilerplate. Include model only when an existing model-specific row is expected.",
         "result_validation_prompt": "Compare complete phrases. The category and row must describe the same item/device type and requested product/service. Reject a row from another category even if it shares words such as screen, matrix, battery, board, bouquet or composition. A category match can prove broad availability but cannot prove a specific price. A price is valid only from a matching internal row.",
-        "next_step_prompt": "For availability, a matching enabled category or a matching common operation inside the verified category may support conditional intake even without an exact model row. State that final feasibility depends on construction/inspection when appropriate. For a concrete price, require a matching internal row; otherwise continue to the configured external-price route only when business rules allow external orientation. Do not expose unrelated rows.",
+        "next_step_prompt": "For availability, a matching enabled category or a matching common operation inside the verified category may support conditional intake even without an exact model row. State that final feasibility depends on construction/inspection when appropriate. For price, distinguish a complete service price from labour marked as excluding the part. A matching labour-only row is relevant but insufficient for an approximate total when the client named a concrete replacement; preserve that labour fact and continue to the configured external-price route only when its repair-quote rules allow it. A generic symptom never justifies choosing or pricing a part. Do not expose unrelated rows.",
         "no_result_prompt": "Do not conclude that the business does not handle the request merely because an exact catalog row is absent. Use the next configured business/site/knowledge route. If all routes fail, state that the exact availability or price needs confirmation; mention price only when it was requested.",
         "fallback_action": "google",
     },
@@ -118,10 +122,10 @@ ROUTE_PROMPTS = {
     "external_price": {
         "tool_name": "search_parts",
         "source_description": "This route searches configured supplier and price sites for third-party market offers. Results are external market references, not the business's own final price, stock, warranty or commitment.",
-        "reasoning": "Use only when the client explicitly asks for a price/availability and internal data lacks the required external item or component price. Extract the exact component/product, host item/device, model/revision and compatibility constraints.",
+        "reasoning": "Use only for an approximate repair quote after internal catalog lookup verified a matching labour price that excludes a named concrete part. The client must explicitly ask for repair price and must already have supplied a sufficiently exact model/revision and replacement part/operation. Never use for separate part sales, generic symptoms, diagnosis or model validation.",
         "query_prompt": "Write compact marketplace keywords: brand + exact model + exact part name, normally 3-7 tokens. Example: Xiaomi Redmi Note 10 LCD. Do not write a sentence, symptom, diagnosis or words such as needed/wanted/problem/symptoms.",
         "result_validation_prompt": "Accept only offers whose full title matches the requested component/product and compatible model/revision. Reject another device type, generation, size, accessory, repair service presented as a part, and prices without identifiable matching context. Preserve URL and currency when present. Never average unrelated offers.",
-        "next_step_prompt": "One or more matching offers may provide an external orientation. Keep it explicitly separate from internal labour/product price. If no matching offer remains, stop and use no-result guidance rather than fabricating a range.",
+        "next_step_prompt": "One or more matching offers may provide an external part-price orientation. Keep it explicitly separate from the verified internal labour price. The final answer may present labour + external part orientation and an arithmetic total only when both components are verified and currency/compatibility match. If no matching offer remains, stop and use no-result guidance rather than fabricating a range.",
         "no_result_prompt": "If the client asked for price, say naturally in the tenant persona that the exact price cannot currently be confirmed because the configured suppliers returned no matching offer. Do not invent a range. If price was not requested, do not mention this route or price.",
         "fallback_action": "decline",
     },

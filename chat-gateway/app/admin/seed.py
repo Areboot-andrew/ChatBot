@@ -200,6 +200,7 @@ async def seed_default_prompts(db):
         "intake_policy": DEFAULT_INTAKE_POLICY,
         "web_research_mode": "normal",
         "parts_sales_mode": "normal",
+        "external_part_price_mode": "normal",
         "conduct_policy": DEFAULT_CONDUCT_POLICY,
         "ban_message": "Вітаю, вас забанено.",
         "parts_instruction": DEFAULT_PARTS_INSTRUCTION,
