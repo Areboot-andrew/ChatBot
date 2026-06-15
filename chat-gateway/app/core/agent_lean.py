@@ -218,11 +218,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     routes = await _load_routes(tenant_id, db)
     source_map = _source_map(routes)
 
-    # Route results exist only inside this turn. Conversation continuity comes
-    # from chat history; facts from an old device/topic must not leak into a new
-    # request. Session memory is reserved for conduct/ban state.
-    memory.pop("_facts", None)
-    facts = []
+    # Verified facts/steps persist in chat memory so the model remembers what it
+    # already checked (e.g. that we do/don't repair a given item) across turns and
+    # does not re-verify or assume. Seeded from memory, saved back (capped) at end.
+    facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
     route_results = []
     done = set()
 
@@ -262,6 +261,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                "\n\n[OUTPUT JSON SCHEMA]\n" +
                json.dumps(CONTROLLER_OUTPUT_SCHEMA, ensure_ascii=False) +
                "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
+        if facts:
+            sys += "\n\n[ALREADY VERIFIED EARLIER IN THIS CHAT]\n" + "\n".join(facts)
         if route_results:
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
@@ -313,6 +314,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     marketing = settings.marketing_rules if marketing_on and settings and settings.marketing_rules else ""
     if marketing:
         ans_sys += "\n\n[MARKETING PROMPT]\n" + marketing
+    if facts:
+        ans_sys += "\n\n[VERIFIED FACTS (this chat) — use these, do not contradict or re-ask them]\n" + "\n".join(facts)
     if route_results:
         ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
     # The business's own contact card — tiny, always available so the model can
@@ -344,7 +347,16 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         emit("ANSWER", "Фолбек", f"Модель віддала порожнє/None/«{str(raw_answer)[:40]}» → підставлено запасний текст.")
         answer = safe_fallback
 
-    emit("ANSWER", "OK", f"Відповідь: {len(answer)} симв. · фактів: {len(facts)}")
+    # Persist the verified facts/steps (deduped, capped) so the next turn's model
+    # remembers what it already checked — no re-verifying, no assuming.
+    seen, kept = set(), []
+    for f in facts:
+        key = f.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            kept.append(f.strip())
+    memory["_facts"] = kept[-8:]
+    emit("ANSWER", "OK", f"Відповідь: {len(answer)} симв. · памʼять фактів: {len(memory['_facts'])}")
     return answer, memory
 
 

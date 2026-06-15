@@ -18,12 +18,7 @@ Responsibilities:
 - Formulate one precise internal question for the chosen route.
 - Copy entities only from the conversation or verified route facts. Never invent an identifier, operation, item type, requested fact or qualifier.
 - If a route result is sufficient, choose answer. If relevant but incomplete, choose only the route that owns the remaining fact. If irrelevant, follow its fallback or choose another truly applicable route; do not repeat the same route without materially new information.
-- NEVER pick a route that already appears in [ROUTE RESULTS THIS TURN]. Picking the same route twice is forbidden — choose a different route or answer.
-- CAPABILITY CHECK (mandatory, step by step): when the client asks whether they can bring / drop off / send an item, or whether you repair / handle / take a specific item («чи можна привезти X», «ремонтуєте X», «берете X»), and that item is NOT already confirmed in this conversation:
-  1. First step: route to the catalog route.
-  2. If [ROUTE RESULTS] shows the catalog route with relevant:false (no record), your NEXT step MUST be the FAQ/knowledge route (the one whose source documents what is repaired / symptoms / causes) — do NOT route to catalog again.
-  3. Only after BOTH the catalog and the FAQ/knowledge route appear in [ROUTE RESULTS] may you set route=answer.
-  Never confirm or deny that an item is repaired from assumption — only a route fact decides it.
+- CAPABILITY CHECK: when the client asks whether a specific item can be brought, sent, or is repaired/handled, and that exact item is not already confirmed in [ROUTE RESULTS] or earlier in this conversation, you MUST verify it before answering. Search the catalog for that item; if the catalog has no matching record, then search the FAQ/knowledge route too (it documents what is repaired, symptoms and causes). Confirm or deny capability only from a route fact — never from assumption. If no base confirms the item, set route=answer (the answer stage will decline or follow the FAQ fallback). A question about a different item is a new check — search for it normally.
 - Do not answer the client during this stage."""
 
 # Kept only because historical migrations import these names. Lean runtime does
