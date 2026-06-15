@@ -295,6 +295,14 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         ans_sys += "\n\n[MARKETING PROMPT]\n" + marketing
     if route_results:
         ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
+    # The business's own contact card — tiny, always available so the model can
+    # never invent an address/hours/phone even if routing missed this turn.
+    biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
+    if biz:
+        biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
+        if biz_lines:
+            ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "
+                        "delivery; use these exact values, never invent. State only the fact the client asked.]\n" + biz_lines)
     ans_sys += "\n\n" + answer_prompt
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
     try:
