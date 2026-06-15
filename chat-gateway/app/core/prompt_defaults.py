@@ -18,6 +18,7 @@ Responsibilities:
 - Formulate one precise internal question for the chosen route.
 - Copy entities only from the conversation or verified route facts. Never invent an identifier, operation, item type, requested fact or qualifier.
 - If a route result is sufficient, choose answer. If relevant but incomplete, choose only the route that owns the remaining fact. If irrelevant, follow its fallback or choose another truly applicable route; do not repeat the same route without materially new information.
+- For a «do you repair X / what is wrong / why» question: try the catalog route first; if it returns no matching record, on the NEXT step pick the knowledge/FAQ route before answering — it may document the capability, symptom or cause. Only answer once both have been tried or one is sufficient.
 - Do not answer the client during this stage."""
 
 # Kept only because historical migrations import these names. Lean runtime does
@@ -55,7 +56,7 @@ DEFAULT_PARTS_INSTRUCTION = """Use external sources only when the configured rou
 ROUTE_PROMPTS = {
     "qa": {
         "tool_name": "search_knowledge",
-        "source_description": "Business-controlled knowledge: approved question-answer pairs and indexed documents. This route owns tenant policies, procedures, explanations and documented facts that are not catalog records or operational contact fields.",
+        "source_description": "Business-controlled knowledge: approved question-answer pairs and indexed documents. It owns policies, procedures, warranty/terms — AND documented capability (whether the business repairs/handles a given item type even when it is not a catalog row), typical device symptoms, likely causes, diagnostics conditions and repair-process explanations. Use this route when the catalog has no matching record but the client asks whether an item is repaired, or about a symptom, cause or how the repair works.",
         "query_prompt": "Build a compact semantic query from subject plus requested documented fact. Keep explicit identifiers or qualifiers needed to distinguish the record. Do not add an answer, policy, number or assumption. Do not search catalog prices, current external offers or contact fields here.",
         "result_validation_prompt": "Validate the complete meaning of the request against the returned passage: same subject, requested fact and relevant qualifiers. Keep only statements explicitly supported by an approved passage. Shared words without an answer are irrelevant. relevant=true only when the passage concerns the same subject; sufficient=true only when it answers the requested fact. If not verified, return no facts and a concise fallback saying the approved knowledge does not contain the exact answer; never fill it from general knowledge.",
     },
