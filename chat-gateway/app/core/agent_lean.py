@@ -23,6 +23,7 @@ Only cleaned facts move forward; raw bases never enter the main context.
 """
 import json
 import logging
+import re
 
 from sqlalchemy import select
 
@@ -57,6 +58,27 @@ def _ua_fallback(settings) -> str:
     if ft.lower() in ("none", "null", "undefined", "nil", "-"):
         ft = ""
     return ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+
+
+def _decision_from_raw(raw: str):
+    """Parse the controller decision tolerantly. Small models (llama) sometimes
+    emit slightly broken JSON (stray comma, extra quote). Returns (decision,
+    recovered): if strict JSON fails we still pull the route code + key fields by
+    regex instead of dropping the whole routing decision."""
+    raw = raw or ""
+    try:
+        return _extract_json(raw), False
+    except Exception:
+        pass
+    m = re.search(r'"route"\s*:\s*"?([a-zA-Z_][\w]*)"?', raw)
+    if not m:
+        return {"route": "answer"}, False
+    d = {"route": m.group(1)}
+    for k in ("question", "requested_fact", "subject", "identifier", "operation"):
+        mm = re.search(r'"%s"\s*:\s*"([^"]*)"' % k, raw)
+        if mm:
+            d[k] = mm.group(1)
+    return d, True
 
 
 def _recent(history: list, text: str, n: int = 8) -> list:
@@ -247,13 +269,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
-        try:
-            decision = _extract_json(raw)
-        except Exception:
-            emit(f"DECIDE #{step}", "Не JSON → відповідаю",
-                 "Контролер віддав не-JSON (проза/порожньо). Поправте lean_controller_prompt, "
-                 "щоб віддавав лише JSON. Переходжу до стадії відповіді.")
-            decision = {"action": "answer"}
+        decision, recovered = _decision_from_raw(raw)
+        if recovered:
+            emit(f"DECIDE #{step}", "JSON виправлено", "Контролер дав кривий JSON — route витягнуто толерантним парсером.")
+        elif not str(raw or "").strip():
+            emit(f"DECIDE #{step}", "Порожньо → відповідаю", "Контролер нічого не повернув (див. помилку LLM вище).")
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
         if pick in ("answer", "") or pick not in routes:
             emit(f"DECIDE #{step}", "Рішення: відповідь", f"route/answer = '{pick or 'answer'}'")
