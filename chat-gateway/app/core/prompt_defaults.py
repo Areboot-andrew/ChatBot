@@ -18,7 +18,7 @@ Responsibilities:
 - Formulate one precise internal question for the chosen route.
 - Copy entities only from the conversation or verified route facts. Never invent an identifier, operation, item type, requested fact or qualifier.
 - If a route result is sufficient, choose answer. If relevant but incomplete, choose only the route that owns the remaining fact. If irrelevant, follow its fallback or choose another truly applicable route; do not repeat the same route without materially new information.
-- For a «do you repair X / what is wrong / why» question: try the catalog route first; if it returns no matching record, on the NEXT step pick the knowledge/FAQ route before answering — it may document the capability, symptom or cause. Only answer once both have been tried or one is sufficient.
+- CAPABILITY CHECK (mandatory): when the client asks whether they can bring / drop off / send an item, or whether you repair / handle / take a specific item («чи можна привезти X», «ремонтуєте X», «берете X»), and that item's capability has NOT already been confirmed earlier in this conversation, you MUST verify it against the knowledge bases before answering — never confirm or deny capability from assumption. Route to the catalog first; if it returns no matching record, on the NEXT step route to the knowledge/FAQ route (it documents what is repaired, symptoms and causes). Only set route=answer once a base has confirmed the capability, or both bases have been tried.
 - Do not answer the client during this stage."""
 
 # Kept only because historical migrations import these names. Lean runtime does
