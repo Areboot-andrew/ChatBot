@@ -50,6 +50,15 @@ CONTROLLER_OUTPUT_SCHEMA = {
     "qualifiers": {},
 }
 
+def _ua_fallback(settings) -> str:
+    """A real Ukrainian fallback that never returns the literal 'None' even if the
+    tenant's fallback_text got corrupted in the DB."""
+    ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
+    if ft.lower() in ("none", "null", "undefined", "nil", "-"):
+        ft = ""
+    return ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+
+
 def _recent(history: list, text: str, n: int = 8) -> list:
     msgs = []
     for h in (history or [])[-n:]:
@@ -218,13 +227,16 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         emit("CONDUCT", "Попередження", f"{cnt}/{warn_limit}")
         warn_sys = persona + "\n\n" + warning_prompt.replace("{warning_count}", str(cnt)).replace("{warning_limit}", str(warn_limit))
         warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
-                                model, base_url, api_key, 0.3, 80, retry=False)
-        return (warn or (settings.fallback_text if settings else "") or "Технічна заминка, спробуйте ще раз.").strip(), memory
+                                model, base_url, api_key, 0.3, 80, retry=False, emit=emit, label="WARNING")
+        return (warn.strip() if warn.strip() else _ua_fallback(settings)), memory
+
+    # The controller only routes — it does NOT need the full persona (tone, safety,
+    # catalog/price rules etc.). Sending a short identity instead of the whole
+    # persona roughly halves tokens per turn (the full persona stays in ANSWER).
+    controller_identity = persona.split("\n\n")[0][:500] if persona else ""
 
     for step in range(1, max_iter + 1):
-        # The main controller keeps the conversation goal. Route workers remain
-        # isolated and never receive this persona, marketing or other routes.
-        sys = (persona + "\n\n" + controller_prompt +
+        sys = (controller_identity + "\n\n" + controller_prompt +
                "\n\n[OUTPUT JSON SCHEMA]\n" +
                json.dumps(CONTROLLER_OUTPUT_SCHEMA, ensure_ascii=False) +
                "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
@@ -296,10 +308,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True,
                                   emit=emit, label="ANSWER")
     emit("ANSWER", "Сира відповідь моделі", str(raw_answer) or "[порожньо — модель нічого не повернула]")
-    ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
-    if ft.lower() in ("none", "null", "undefined", "nil", "-"):
-        ft = ""  # DB value got corrupted to the literal "None" — ignore it
-    safe_fallback = ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+    safe_fallback = _ua_fallback(settings)
     answer = _clean_answer(raw_answer, fallback=safe_fallback)
     # Hard guard: never send an empty / None / placeholder reply to the client
     # (e.g. when the LLM server is overloaded and returns nothing).
