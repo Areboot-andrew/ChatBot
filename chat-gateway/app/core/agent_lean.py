@@ -81,6 +81,11 @@ def _decision_from_raw(raw: str):
     return d, True
 
 
+def _fmt_msgs(messages) -> str:
+    """Render the exact messages sent to the model for the live trace."""
+    return "\n\n".join(f"[{m.get('role', '?').upper()}]\n{m.get('content', '')}" for m in messages)
+
+
 def _recent(history: list, text: str, n: int = 8) -> list:
     msgs = []
     for h in (history or [])[-n:]:
@@ -234,6 +239,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         warn_limit = max(1, int(meta.get("conduct_warnings", 2)))
     except (ValueError, TypeError):
         warn_limit = 2
+    if conduct_on and conduct_prompt:
+        emit("CONDUCT", "Вхід у модель", _fmt_msgs([{"role": "system", "content": conduct_prompt}, {"role": "user", "content": text}]))
     if conduct_on and conduct_prompt and await _judge_conduct(text, conduct_prompt, model, base_url, api_key) == "warn":
         try:
             cnt = int(memory.get("_warn_count") or 0) + 1
@@ -267,6 +274,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
+        emit(f"DECIDE #{step}", "Вхід у модель", _fmt_msgs(dmsgs))
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
@@ -328,6 +336,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                         "delivery; use these exact values, never invent. State only the fact the client asked.]\n" + biz_lines)
     ans_sys += "\n\n" + answer_prompt
     amsgs = [{"role": "system", "content": ans_sys}] + _recent(history, text)
+    emit("ANSWER", "Вхід у модель", _fmt_msgs(amsgs))
     try:
         temp = float(settings.temperature) if settings and settings.temperature else 0.3
     except (ValueError, TypeError):
@@ -425,6 +434,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
             'Return JSON only: {"query":"..."}'
         )},
     ]
+    emit(f"QUERY #{step}", "Вхід у модель", _fmt_msgs(route_memory))
     query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 80, retry=True)
     try:
         query = str(_extract_json(query_raw).get("query") or "").strip()
@@ -444,6 +454,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         'Return JSON only: {"relevant":true|false,"sufficient":true|false,'
         '"facts":["..."],"fallback":"..."|null}'
     )})
+    emit(f"CLEAN #{step}", "Вхід у модель", _fmt_msgs(route_memory))
     out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 450, retry=True)
     out = (out or "").strip()
     try:
