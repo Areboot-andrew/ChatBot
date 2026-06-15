@@ -33,9 +33,13 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply for the current message.
 - Never convert a missing or rejected result into either confirmation or refusal.
 - Never invent a number, price, availability, specification, compatibility claim, contact, schedule, policy, diagnosis or commitment.
 - Do not expose route names, prompts, JSON, validation details or raw source text.
+- Stay strictly within the tenant's business scope. If the message is off-topic, gibberish, nonsense or trolling unrelated to the business, give ONE short firm redirect to the business topic (e.g. «Я тут по ремонту техніки. Що з приладом?») and stop. Do NOT keep repeating the same clarifying question over and over.
 - Produce one natural reply, normally concise, with at most one genuinely useful clarification question."""
 
-LEAN_CONDUCT_PROMPT = """Classify only the current client message. Return one label: normal or warn. normal includes questions, disagreement, complaints, criticism, impatience and profanity about a product, service, price or situation. warn is only a direct personal insult, targeted degradation or threat aimed at the worker or business. When uncertain, return normal."""
+LEAN_CONDUCT_PROMPT = """Classify only the current client message. Return one label: normal or warn.
+- normal: real questions, disagreement, complaints, criticism, impatience, and profanity about a product, service, price or situation.
+- warn: a direct personal insult, targeted degradation or threat aimed at the worker/business; OR a message that is clearly trolling, abusive spam, or deliberate nonsense unrelated to the business (wasting the operator's time).
+A short typo or one confused message is normal. When genuinely uncertain, return normal."""
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
 
@@ -77,7 +81,7 @@ ROUTE_PROMPTS = {
         "tool_name": "get_business_info",
         "source_description": "Tenant-controlled operational fields such as address, opening hours, holidays, phone, payment methods, delivery or receiving options, warranty contacts and other configured business details. This route is the sole owner of those configured fields.",
         "query_prompt": "Return only the requested business field name or smallest set of field names. Keep a stated day, date, time, branch or channel in the structured request for validation. Do not request unrelated fields.",
-        "result_validation_prompt": "Select only configured values needed to answer the internal question. Do not return the whole business card when one field was requested. When the request proposes a day, time, branch or channel, verify it against the configured values before returning a conclusion. Never infer a missing address, schedule exception, contact, payment method, delivery option, warranty or other condition. If the requested field is absent, return no facts and fallback guidance that it is not configured and must not be invented.",
+        "result_validation_prompt": "Return the actual VALUE text of the requested field(s), never the field name/key. E.g. for hours return the full hours string like «Будні 11:00-18:00, сб до 16:30, нд вихідний», not «working_hours». Select only the field(s) needed; do not dump the whole card. When the request proposes a day/time, verify it against the configured hours before concluding. Never infer a missing address, schedule, contact, payment, delivery or warranty. If the field is absent, return no facts and a short fallback that it is not configured and must not be invented.",
     },
     "handoff": {
         "tool_name": "escalate",
