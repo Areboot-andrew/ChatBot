@@ -13,7 +13,6 @@ import sqlalchemy as sa
 from alembic import op
 
 from app.core.prompt_defaults import (
-    DEFAULT_UNIVERSAL_PERSONA,
     LEAN_ANSWER_PROMPT,
     LEAN_CONDUCT_PROMPT,
     LEAN_CONTROLLER_PROMPT,
@@ -73,14 +72,12 @@ def upgrade() -> None:
             sa.text(
                 """
                 UPDATE bot_settings
-                SET system_prompt = :system_prompt,
-                    meta = CAST(:meta AS jsonb)
+                SET meta = CAST(:meta AS jsonb)
                 WHERE id = :id
                 """
             ),
             {
                 "id": row["id"],
-                "system_prompt": DEFAULT_UNIVERSAL_PERSONA,
                 "meta": json.dumps(meta, ensure_ascii=False),
             },
         )
