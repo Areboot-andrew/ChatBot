@@ -58,7 +58,7 @@
                 <p class="text-xs text-gray-500 mb-2">Один роут = один вхід у базу знань або зовнішнє джерело.</p>
                 {% set selected_tool = logic.meta.get('tool_name', '') if logic and logic.meta else '' %}
                 <select id="tool_name" name="tool_name" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
-                    <option value="search_knowledge" {% if selected_tool == 'search_knowledge' or not selected_tool %}selected{% endif %}>База знань: Q&amp;A та документи</option>
+                    <option value="search_knowledge" {% if selected_tool == 'search_knowledge' or not selected_tool %}selected{% endif %}>База знань: записи знань та документи</option>
                     <option value="search_catalog" {% if selected_tool == 'search_catalog' %}selected{% endif %}>Каталог: категорії, товари/послуги, ціни, описи</option>
                     <option value="get_business_info" {% if selected_tool == 'get_business_info' %}selected{% endif %}>Бізнес-факти: адреса, години, контакти</option>
                     <option value="search_parts" {% if selected_tool == 'search_parts' %}selected{% endif %}>Зовнішні ціни / постачальники</option>

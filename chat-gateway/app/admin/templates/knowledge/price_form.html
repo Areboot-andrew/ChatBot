@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="mb-6">
-    <a href="/admin/knowledge/prices" class="text-sm text-gray-400 hover:text-white mb-2 inline-block">← Назад до Прайсів</a>
-    <h1 class="text-2xl font-bold text-gray-100">Редагування Категорії: {{ cat.slug }}</h1>
+    <div class="mb-6">
+    <a href="/admin/knowledge/prices" class="text-sm text-gray-400 hover:text-white mb-2 inline-block">← Назад до каталогу</a>
+    <h1 class="text-2xl font-bold text-gray-100">Редагування категорії: {{ cat.slug }}</h1>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -15,35 +15,38 @@
                     <input type="text" name="title" value="{{ cat.title }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
                 </div>
                 <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Короткий опис</label>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Короткий опис категорії</label>
+                    <p class="text-xs text-gray-500 mb-2">Це загальна примітка до групи товарів/послуг. Роут може використати її як контекст, але точні умови краще писати в описі конкретної позиції нижче.</p>
                     <textarea name="description" rows="2" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.description }}</textarea>
                 </div>
                 <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Детальний опис</label>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Детальний опис категорії</label>
+                    <p class="text-xs text-gray-500 mb-2">Додатковий контекст для моделі: що входить у категорію, які є обмеження, коли треба уточнювати деталі.</p>
                     <textarea name="detailed_description" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.meta.get('detailed_description', '') if cat.meta else '' }}</textarea>
                 </div>
                 <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Типові несправності (по одній на рядок)</label>
-                    <textarea name="problems" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Не вмикається&#10;Не заряджається">{% if cat.meta and cat.meta.get('problems') %}{{ cat.meta.get('problems') | join('\n') }}{% endif %}</textarea>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Типові запити / симптоми / ситуації (по одному на рядок)</label>
+                    <p class="text-xs text-gray-500 mb-2">Не жорсткі правила, а підказки для пошуку й порівняння. Для магазину це можуть бути “потрібен подарунок”, для сервісу — “не заряджається”.</p>
+                    <textarea name="problems" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Не вмикається&#10;Потрібна доставка&#10;Погодити ціну наперед">{% if cat.meta and cat.meta.get('problems') %}{{ cat.meta.get('problems') | join('\n') }}{% endif %}</textarea>
                 </div>
             </div>
 
             <h2 class="text-lg font-semibold text-gray-200 mb-4 flex justify-between items-center">
-                <span>Прайс-лист (Послуги)</span>
-                <button type="button" onclick="addPriceRow()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition">+ Додати послугу</button>
+                <span>Позиції каталогу: товари / послуги / роботи</span>
+                <button type="button" onclick="addPriceRow()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition">+ Додати позицію</button>
             </h2>
             
             <div id="prices-container" class="space-y-3 mb-8">
                 {% for price in cat.prices %}
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start price-row bg-gray-800 p-3 rounded-lg border border-gray-700">
                     <div class="md:col-span-5">
-                        <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва послуги" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                        <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
                     </div>
                     <div class="md:col-span-3">
                         <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
                     </div>
                     <div class="md:col-span-3">
-                        <textarea name="price_description[]" rows="2" placeholder="Опис / примітки для моделі" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
+                        <textarea name="price_description[]" rows="2" placeholder="Опис / примітки: умови, винятки, що уточнити, що входить у ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
                     </div>
                     <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -61,9 +64,9 @@
     
     <div class="space-y-6">
         <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h3 class="text-sm font-semibold text-gray-300 mb-3">Як редагувати FAQ?</h3>
-            <p class="text-sm text-gray-400">Питання та відповіді (FAQ) для цієї категорії знаходяться на головній сторінці "База Знань та Логіка" у відповідній таблиці.</p>
-            <a href="/admin/knowledge" class="mt-4 inline-block text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded transition">Перейти до FAQ →</a>
+            <h3 class="text-sm font-semibold text-gray-300 mb-3">Де писати знання без ціни?</h3>
+            <p class="text-sm text-gray-400">Якщо це не позиція з ціною, а пояснення “що робимо / що не робимо / як питати далі”, додавайте це у «Записи знань». Каталог лишаємо для категорій, товарів, послуг, робіт, цін і приміток до них.</p>
+            <a href="/admin/knowledge" class="mt-4 inline-block text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded transition">Перейти до записів знань →</a>
         </div>
     </div>
 </div>
@@ -75,13 +78,13 @@ function addPriceRow() {
     row.className = 'grid grid-cols-1 md:grid-cols-12 gap-3 items-start price-row bg-gray-800 p-3 rounded-lg border border-gray-700';
     row.innerHTML = `
         <div class="md:col-span-5">
-            <input type="text" name="price_name[]" placeholder="Назва послуги" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+            <input type="text" name="price_name[]" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
         </div>
         <div class="md:col-span-3">
             <input type="text" name="price_value[]" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
         </div>
         <div class="md:col-span-3">
-            <textarea name="price_description[]" rows="2" placeholder="Опис / примітки для моделі" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+            <textarea name="price_description[]" rows="2" placeholder="Опис / примітки: умови, винятки, що уточнити, що входить у ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
         </div>
         <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>

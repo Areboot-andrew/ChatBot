@@ -10,10 +10,10 @@
     <ol class="list-decimal list-inside text-sm text-gray-300 space-y-1">
       <li><b>Поведінка</b> — перевірка на грубість: образа → попередження, повтор → бан (вмикається в Налаштуваннях).</li>
       <li><b>Controller</b> — модель вирішує: відповісти зараз чи звернутись до роута за потрібним фактом.</li>
-      <li><b>Роут</b> — у власній ізольованій сесії формує запит, шукає у своєму джерелі (каталог / Q&A+Qdrant / бізнес-факти / web / постачальники) і чистить результат.</li>
+      <li><b>Роут</b> — у власній ізольованій сесії формує запит, шукає у своєму джерелі (записи знань/документи, каталог, бізнес-факти, web або постачальники) і чистить результат.</li>
       <li><b>Відповідь</b> — модель пише клієнту, спираючись на персону, чат і ТІЛЬКИ очищені факти роутів.</li>
     </ol>
-    <p class="text-xs text-gray-500 mt-3">Привітання («привіт», «дякую») роутів не викликають — одразу відповідь у вашому тоні. Усім керують промпти (Налаштування + Схема Логіки), код лише плумбить.</p>
+    <p class="text-xs text-gray-500 mt-3">Привітання («привіт», «дякую») роутів не викликають — одразу відповідь у вашому тоні. Усім керують промпти (Налаштування + Логіка pipeline), код лише передає дані між етапами.</p>
   </div>
 
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
@@ -22,7 +22,7 @@
       <tbody class="divide-y divide-gray-800">
         <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">list_categories</td><td class="py-2">Список категорій послуг (дешево, без цін) — щоб побачити, що ви взагалі робите.</td></tr>
         <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">search_catalog</td><td class="py-2">Пошук по прайсу <b>поетапно</b>: за назвою послуги → за категорією → список категорій. Не вантажить усі ціни одразу.</td></tr>
-        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">search_knowledge</td><td class="py-2">База знань: Q&A та документи (RAG).</td></tr>
+        <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">search_knowledge</td><td class="py-2">База знань: записи знань та документи.</td></tr>
         <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">web_research</td><td class="py-2">Пошук в інтернеті + <b>реальний захід на знайдені сайти</b> і читання тексту. Спершу по Довірених сайтах.</td></tr>
         <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">open_url</td><td class="py-2">Відкрити конкретне посилання і прочитати його.</td></tr>
         <tr><td class="py-2 pr-4 font-mono text-teal-400 align-top">get_business_info</td><td class="py-2">Адреса, години, телефон, оплата (з вкладки «Бізнес-факти»).</td></tr>
@@ -37,7 +37,7 @@
       <tbody class="divide-y divide-gray-800">
         <tr><td class="py-2 pr-4 align-top">Тон, персона, бізнес-правила, маркетинг, режим агента, інструменти, Serper-ключ</td><td class="py-2">⚙️ <b>Налаштування Бота</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Контакти, години, оплата (бот тягне на запит клієнта)</td><td class="py-2">📚 <b>База знань → Бізнес-факти</b></td></tr>
-        <tr><td class="py-2 pr-4 align-top">Q&A, документи-мануали</td><td class="py-2">📚 <b>База знань</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Записи знань і документи</td><td class="py-2">📚 <b>База знань</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Каталог і прайси (категорії з описами, товари/послуги з описами)</td><td class="py-2">📋 <b>Каталог і прайси</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Pipeline баз знань: джерело, пошук, перевірка, вмикання/вимикання</td><td class="py-2">📚 <b>Логіка pipeline</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Telegram-бот, Telegram особистий акаунт, чат на сайті</td><td class="py-2">📡 <b>Канали</b></td></tr>

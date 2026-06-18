@@ -123,7 +123,7 @@
             <p class="text-sm text-gray-400 mb-3">Вирівнюють побутові слова клієнта до назв у вашому прайсі (щоб пошук знаходив). Рядок: <code>слово=синонім,синонім</code>. Порожньо = розумний дефолт.</p>
             {% set m = settings.meta if settings and settings.meta else {} %}
             <textarea name="catalog_synonyms" rows="4" class="font-mono bg-gray-950 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-3" placeholder="букет=композиція&#10;доставка=відправлення,кур'єр&#10;консультація=підбір,допомога">{{ m.get('catalog_synonyms','') }}</textarea>
-            <p class="text-xs text-gray-500 mt-2">Тон, інтейк і правила рішень — у <b>головному промпті (Персона)</b>; пошук/відбір по кожному джерелу — у <b>Схема Логіки</b>. Окремі поля для цього прибрані.</p>
+            <p class="text-xs text-gray-500 mt-2">Тон, інтейк і правила рішень — у <b>головному промпті</b>; пошук/відбір по кожному джерелу — у <b>Логіці pipeline</b>. Окремі старі поля для цього прибрані.</p>
         </div>
 
         <!-- Conduct / Ban module -->
@@ -201,7 +201,7 @@
             <textarea name="price_search_urls" id="price_search_urls" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="https://brain.com.ua/search/?q={query}&#10;https://hotline.ua/sr/?q={query}">{{ settings.meta.get('price_search_urls', '') if settings and settings.meta else '' }}</textarea>
             <p class="mt-1 text-xs text-gray-500">Якщо сайт має пошук через URL — впишіть шаблон із <code>{query}</code>. Бот підставить короткий запит, відкриє сторінку і прочитає доступні пропозиції. Загальний веб-пошук лишається запасним.</p>
 
-            <p class="mt-1 text-xs text-gray-500">Як подавати зовнішню ціну (порядок сайтів, робота окремо від деталі) — опишіть у промпті роута зовнішніх цін у «Схема Логіки».</p>
+            <p class="mt-1 text-xs text-gray-500">Як подавати зовнішню ціну, порядок сайтів і як відділяти зовнішню вартість від вашої ціни — опишіть у промпті відповідного роута в «Логіці pipeline».</p>
         </div>
 
         <!-- Marketing Protocols -->

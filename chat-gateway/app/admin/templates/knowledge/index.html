@@ -27,7 +27,7 @@
     </ul>
 </div>
 
-<!-- Tab Content: Q&A -->
+<!-- Tab Content: Knowledge Records -->
 <div id="tab-qa" class="tab-pane">
     <div class="flex justify-between items-center mb-4">
         <p class="text-sm text-gray-400">Універсальні знання: тема / послуга / товар + опис для бота. Приклади фраз лише допомагають пошуку; остаточне рішення робить LLM роута.</p>
@@ -58,7 +58,7 @@
     </div>
 </div>
 
-<!-- Tab Content: Logic Schema -->
+<!-- Tab Content: Pipeline Logic -->
 <div id="tab-logic" class="tab-pane hidden">
     <div class="flex justify-between items-center mb-6">
         <p class="text-sm text-gray-400">Pipeline показує, які бази знань підключені до чат-моделі. Код лише запускає етапи; що шукати і як фільтрувати — задають промпти кожного роута.</p>
@@ -145,7 +145,7 @@
                 <div class="relative">
                     <div class="absolute -left-[29px] top-1 w-3 h-3 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
                     <p class="font-bold text-gray-200">2. Роут бази знань</p>
-                    <p class="text-xs text-gray-400 mt-1">Обраний роут у власній ізольованій сесії: формує запит → шукає у своєму джерелі (каталог / Q&A+Qdrant / бізнес-факти / web / постачальники) → перевіряє й чистить результат.</p>
+                    <p class="text-xs text-gray-400 mt-1">Обраний роут у власній ізольованій сесії: формує запит → шукає у своєму джерелі (записи знань/документи, каталог, бізнес-факти, web або постачальники) → перевіряє й чистить результат.</p>
                 </div>
 
                 <div class="relative">

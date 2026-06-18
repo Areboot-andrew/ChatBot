@@ -1212,23 +1212,23 @@ async def import_prices_yaml(
                 )
                 db.add(p)
                 
-            # Import Category FAQs
+            # Import category knowledge records
             for faq_data in cat_data.get("faqs", []):
                 q = QaPair(
                     tenant_id=tenant_id,
                     question=faq_data.get("question", ""),
                     answer=faq_data.get("answer", ""),
-                    category=f"FAQ_{cat.slug}"
+                    category=f"KNOWLEDGE_{cat.slug}"
                 )
                 db.add(q)
                 
-        # 2. Import Global FAQs
+        # 2. Import global knowledge records
         for faq_data in data.get("global_faq", []):
             q = QaPair(
                 tenant_id=tenant_id,
                 question=faq_data.get("question", ""),
                 answer=faq_data.get("answer", ""),
-                category="FAQ_Global"
+                category="KNOWLEDGE_Global"
             )
             db.add(q)
             
@@ -1610,7 +1610,7 @@ async def price_edit_submit(
         
     return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
 
-# --- KNOWLEDGE: Q&A ---
+# --- KNOWLEDGE: RECORDS ---
 @router.get("/knowledge/qa/create", response_class=HTMLResponse)
 async def qa_create_form(
     request: Request,
