@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="flex items-center justify-between mb-8">
-    <h1 class="text-2xl font-bold text-gray-100">Прайси та Послуги (Каталог)</h1>
+    <h1 class="text-2xl font-bold text-gray-100">Каталог і прайси</h1>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -27,7 +27,7 @@
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
             <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт / Експорт таблиці (XLSX, CSV)</h2>
             <p class="text-sm text-gray-400 mb-4">
-                Завантажте прайс у будь-якій схемі — система покаже знайдені колонки, ви вкажете, де назва, ціна та категорія.
+                Завантажте прайс у будь-якій схемі — система покаже знайдені колонки, ви вкажете, де назва, ціна, категорія та опис позиції.
             </p>
             <div class="flex flex-wrap gap-2 mb-4 text-sm">
                 <a href="/admin/knowledge/prices/template?fmt=xlsx" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg">Скачати шаблон XLSX</a>
@@ -42,7 +42,7 @@
                 <button onclick="previewTable()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">Аналізувати файл</button>
             </div>
             <div id="mapping-block" class="hidden mt-4 space-y-3">
-                <div class="grid grid-cols-3 gap-3 text-sm">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                     <div>
                         <label class="text-gray-400 block mb-1">Колонка з назвою послуги *</label>
                         <select id="map-name" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"></select>
@@ -54,6 +54,10 @@
                     <div>
                         <label class="text-gray-400 block mb-1">Колонка категорії (опц.)</label>
                         <select id="map-category" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Колонка опису (опц.)</label>
+                        <select id="map-description" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
                     </div>
                 </div>
                 <div class="bg-gray-950 border border-gray-800 rounded p-3 text-xs text-gray-400 font-mono overflow-auto max-h-48" id="table-preview"></div>
@@ -114,6 +118,7 @@
                                     <tr>
                                         <th class="px-4 py-2">Послуга</th>
                                         <th class="px-4 py-2">Ціна</th>
+                                        <th class="px-4 py-2">Опис</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -121,6 +126,7 @@
                                     <tr class="border-b border-gray-800 hover:bg-gray-900/50">
                                         <td class="px-4 py-2">{{ price.name }}</td>
                                         <td class="px-4 py-2 text-blue-400 font-medium">{{ price.price }}</td>
+                                        <td class="px-4 py-2 text-xs text-gray-500">{{ price.description or '' }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -260,7 +266,7 @@ async function previewTable() {
             sel.appendChild(o);
         });
     };
-    fill('map-name', false); fill('map-price', false); fill('map-category', true);
+    fill('map-name', false); fill('map-price', false); fill('map-category', true); fill('map-description', true);
 
     // Автовгадування колонок за типовими назвами
     const guess = (sel, names) => {
@@ -271,6 +277,7 @@ async function previewTable() {
     guess('map-name', ['назв', 'послуг', 'name', 'service']);
     guess('map-price', ['цін', 'price', 'варт', 'грн']);
     guess('map-category', ['категор', 'category', 'розділ', 'тип']);
+    guess('map-description', ['опис', 'приміт', 'description', 'note', 'comment']);
 
     document.getElementById('table-preview').textContent =
         'Рядків у файлі: ' + data.total + '\n\n' + JSON.stringify(data.rows, null, 2);
@@ -290,6 +297,8 @@ async function commitTable() {
     fd.append('price_col', priceCol);
     const catCol = document.getElementById('map-category').value;
     if (catCol) fd.append('category_col', catCol);
+    const descCol = document.getElementById('map-description').value;
+    if (descCol) fd.append('description_col', descCol);
 
     const btn = document.getElementById('btn-commit-table');
     btn.disabled = true; btn.innerText = 'Імпортую...';

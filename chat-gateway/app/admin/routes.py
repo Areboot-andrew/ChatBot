@@ -214,7 +214,6 @@ async def create_tenant(
         meta={
             "engine": "lean",
             "agent_max_iterations": "3",
-            "enabled_tools": [],
             "ban_message": "Вітаю, вас забанено.",
             "conduct_enabled": "1",
             "conduct_warnings": "2",
@@ -224,27 +223,27 @@ async def create_tenant(
             "lean_conduct_prompt": LEAN_CONDUCT_PROMPT,
             "lean_warning_prompt": LEAN_WARNING_PROMPT,
             "catalog_synonyms": "",
-            "router_json_mode": True,
         },
     )
     db.add(default_settings)
     route_rows = [
-        ("catalog", "Внутрішній каталог і ціни", "qa_handler", ["наявність", "асортимент", "послуга", "ціна", "прайс"]),
-        ("qa", "Затверджені знання та документи", "qa_handler", ["умови", "правила", "політика", "гарантія"]),
-        ("web_search", "Зовнішній веб-пошук", "web_search_handler", ["що це", "характеристика", "специфікація"]),
-        ("external_price", "Зовнішні пропозиції та ціни", "web_search_handler", ["ринкова ціна", "у постачальників", "зовнішня пропозиція"]),
-        ("business_info", "Операційна інформація бізнесу", "qa_handler", ["графік", "адреса", "телефон", "оплата", "доставка"]),
-        ("handoff", "Передача людині", "escalate", ["людина", "оператор", "менеджер"]),
+        ("catalog", "Каталог: товари/послуги, ціни, описи", ["наявність", "асортимент", "послуга", "ціна", "прайс"]),
+        ("qa", "Записи знань та документи", ["умови", "правила", "політика", "гарантія"]),
+        ("web_search", "Зовнішній веб-пошук", ["що це", "характеристика", "специфікація"]),
+        ("external_price", "Зовнішні пропозиції та ціни", ["ринкова ціна", "у постачальників", "зовнішня пропозиція"]),
+        ("business_info", "Бізнес-факти", ["графік", "адреса", "телефон", "оплата", "доставка"]),
+        ("handoff", "Передача людині", ["людина", "оператор", "менеджер"]),
     ]
-    for code_suffix, label, handler, patterns in route_rows:
+    for code_suffix, label, patterns in route_rows:
+        route_meta = dict(ROUTE_PROMPTS[code_suffix])
         db.add(KnowledgeType(
             tenant_id=new_tenant.id,
             code=code_suffix,
             label=label,
-            handler=handler,
+            handler=route_meta.get("tool_name") or "route",
             intent_patterns=patterns,
             enabled=True,
-            meta=dict(ROUTE_PROMPTS[code_suffix]),
+            meta=route_meta,
         ))
     await db.commit()
     return RedirectResponse(url="/admin/tenants", status_code=303)
@@ -817,9 +816,7 @@ async def update_settings(
     escalation_policy: str = Form("handoff"),
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
-    engine: str = Form("lean"),
     agent_max_iterations: str = Form("3"),
-    enabled_tools: List[str] = Form([]),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),
     price_search_urls: str = Form(""),
@@ -828,7 +825,6 @@ async def update_settings(
     conduct_warnings: str = Form("2"),
     marketing_enabled: str = Form(""),
     catalog_synonyms: str = Form(""),
-    router_json_mode: str = Form("on"),
     lean_controller_prompt: str = Form(""),
     lean_answer_prompt: str = Form(""),
     lean_conduct_prompt: str = Form(""),
@@ -856,15 +852,13 @@ async def update_settings(
             meta_data["llm_base_url"] = llm_base_url
             meta_data["llm_api_key"] = llm_api_key
 
-            # Engine + universal config the lean engine actually reads
-            meta_data["engine"] = engine if engine in ("agent", "lean", "classic") else "lean"
+            # Single active engine: prompt-driven Lean. Routes decide sources through prompts.
+            meta_data["engine"] = "lean"
             meta_data["agent_max_iterations"] = agent_max_iterations
-            meta_data["enabled_tools"] = enabled_tools or []
             meta_data["serper_api_key"] = serper_api_key.strip()
             meta_data["parts_sites"] = parts_sites.strip()
             meta_data["price_search_urls"] = price_search_urls.strip()
             meta_data["catalog_synonyms"] = catalog_synonyms.strip()
-            meta_data["router_json_mode"] = (router_json_mode == "on")
             meta_data["ban_message"] = ban_message.strip() or "Вітаю, вас забанено."
 
             # Conduct + Marketing modules (toggles)
@@ -883,7 +877,8 @@ async def update_settings(
             for _k in ("price_triggers", "capability_triggers", "business_info_triggers", "brand_words", "part_words",
                        "agent_decision_rules", "answer_style", "intake_policy", "conduct_policy", "parts_instruction",
                        "tpl_evaluation_rules", "web_research_mode", "parts_sales_mode", "external_part_price_mode",
-                       "fallback_sites", "tpl_escalate_instruction"):
+                       "fallback_sites", "tpl_escalate_instruction",
+                       "enabled_tools", "router_json_mode"):
                 meta_data.pop(_k, None)
             settings.meta = meta_data
             
@@ -901,10 +896,10 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "escalation_prompt", "escalation_policy", "fallback_text",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
-_CONFIG_META_KEYS = ["engine", "agent_max_iterations", "enabled_tools",
+_CONFIG_META_KEYS = ["engine", "agent_max_iterations",
                      "ban_message", "conduct_enabled", "conduct_warnings",
                      "marketing_enabled", "parts_sites", "price_search_urls",
-                     "catalog_synonyms", "business_info", "router_json_mode",
+                     "catalog_synonyms", "business_info",
                      "lean_controller_prompt", "lean_answer_prompt", "lean_conduct_prompt",
                      "lean_warning_prompt",
                      "llm_base_url"]  # serper_api_key intentionally omitted (secret)
@@ -1000,10 +995,10 @@ async def import_config(
             route = KnowledgeType(tenant_id=tenant_id, code=code, label=code, handler="fallback")
             db.add(route)
         route.label = str(route_data.get("label") or code)
-        route.handler = str(route_data.get("handler") or "fallback")
         route.intent_patterns = list(route_data.get("intent_patterns") or [])
         route.enabled = bool(route_data.get("enabled", True))
         imported_meta = dict(route_data.get("meta") or {})
+        route.handler = str(route_data.get("handler") or imported_meta.get("tool_name") or "route")
         route.meta = {
             key: imported_meta[key]
             for key in _CONFIG_ROUTE_META_KEYS
@@ -1212,7 +1207,8 @@ async def import_prices_yaml(
                     tenant_id=tenant_id,
                     category_id=cat.id,
                     name=price_data.get("name", ""),
-                    price=str(price_data.get("price", ""))
+                    price=str(price_data.get("price", "")),
+                    description=str(price_data.get("description", "") or ""),
                 )
                 db.add(p)
                 
@@ -1246,11 +1242,9 @@ async def import_prices_yaml(
 # --- Price table tooling: template / export / tabular import with column mapping ---
 
 PRICE_TEMPLATE_ROWS = [
-    {"category": "Телевізори", "name": "Діагностика", "price": "безкоштовно при ремонті"},
-    {"category": "Телевізори", "name": "Заміна підсвітки 32-43\"", "price": "1500-2500 грн"},
-    {"category": "Ноутбуки", "name": "Чистка від пилу + заміна термопасти", "price": "600 грн"},
-    {"category": "Ноутбуки", "name": "Заміна клавіатури", "price": "від 800 грн"},
-    {"category": "Смартфони", "name": "Заміна екрану", "price": "залежить від моделі"},
+    {"category": "Категорія", "name": "Назва товару або послуги", "price": "ціна або умова", "description": "примітки для моделі: що входить, що уточнити, коли погодити ціну"},
+    {"category": "Телевізори", "name": "Діагностика", "price": "безкоштовно при ремонті", "description": "Якщо ремонту немає — вкажіть вашу умову в описі."},
+    {"category": "Ноутбуки", "name": "Заміна клавіатури", "price": "від 800 грн", "description": "Ціна деталі залежить від моделі; роботу можна назвати окремо."},
 ]
 
 
@@ -1261,7 +1255,7 @@ def _slugify(title: str) -> str:
 
 
 def _rows_to_file(rows: list, fmt: str, filename_base: str):
-    """Serialize [{category,name,price}] to xlsx/csv/yaml StreamingResponse."""
+    """Serialize [{category,name,price,description}] to xlsx/csv/yaml StreamingResponse."""
     import io
     from fastapi.responses import StreamingResponse as _SR
 
@@ -1269,15 +1263,19 @@ def _rows_to_file(rows: list, fmt: str, filename_base: str):
         import csv as _csv
         buf = io.StringIO()
         writer = _csv.writer(buf)
-        writer.writerow(["category", "name", "price"])
+        writer.writerow(["category", "name", "price", "description"])
         for r in rows:
-            writer.writerow([r["category"], r["name"], r["price"]])
+            writer.writerow([r["category"], r["name"], r["price"], r.get("description", "")])
         data = buf.getvalue().encode("utf-8-sig")
         media, ext = "text/csv", "csv"
     elif fmt == "yaml":
         cats = {}
         for r in rows:
-            cats.setdefault(r["category"], []).append({"name": r["name"], "price": r["price"]})
+            cats.setdefault(r["category"], []).append({
+                "name": r["name"],
+                "price": r["price"],
+                "description": r.get("description", ""),
+            })
         doc = {"categories": [
             {"slug": _slugify(title), "title": title, "services": services}
             for title, services in cats.items()
@@ -1289,9 +1287,9 @@ def _rows_to_file(rows: list, fmt: str, filename_base: str):
         wb = Workbook()
         ws = wb.active
         ws.title = "Прайс"
-        ws.append(["category", "name", "price"])
+        ws.append(["category", "name", "price", "description"])
         for r in rows:
-            ws.append([r["category"], r["name"], r["price"]])
+            ws.append([r["category"], r["name"], r["price"], r.get("description", "")])
         bio = io.BytesIO()
         wb.save(bio)
         data = bio.getvalue()
@@ -1330,7 +1328,12 @@ async def export_prices(
             .order_by(ServiceCategory.title, ServicePrice.name)
         )
         for price, cat_title in res.all():
-            rows.append({"category": cat_title or "", "name": price.name, "price": price.price})
+            rows.append({
+                "category": cat_title or "",
+                "name": price.name,
+                "price": price.price,
+                "description": getattr(price, "description", "") or "",
+            })
     return _rows_to_file(rows, fmt, "prices_export")
 
 
@@ -1355,6 +1358,7 @@ async def import_prices_table(
     name_col: str = Form(None),
     price_col: str = Form(None),
     category_col: str = Form(None),
+    description_col: str = Form(None),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -1383,6 +1387,7 @@ async def import_prices_table(
         for rec in records:
             name = str(rec.get(name_col, "")).strip()
             price = str(rec.get(price_col, "")).strip()
+            description = str(rec.get(description_col, "")).strip() if description_col else ""
             if not name or not price:
                 skipped += 1
                 continue
@@ -1410,8 +1415,15 @@ async def import_prices_table(
             existing = res_p.scalars().first()
             if existing:
                 existing.price = price
+                existing.description = description
             else:
-                db.add(ServicePrice(tenant_id=tenant_id, category_id=cat.id, name=name, price=price))
+                db.add(ServicePrice(
+                    tenant_id=tenant_id,
+                    category_id=cat.id,
+                    name=name,
+                    price=price,
+                    description=description,
+                ))
             imported += 1
         await db.commit()
         return {"status": "ok", "imported": imported, "skipped": skipped}
@@ -1445,7 +1457,11 @@ async def preview_prices_feed(
             cat_info = {"category": cat.get("title") or cat.get("name"), "services": []}
             services = cat.get("prices") or cat.get("services") or []
             for s in services[:3]:
-                cat_info["services"].append({"name": s.get("name"), "price": s.get("price")})
+                cat_info["services"].append({
+                    "name": s.get("name"),
+                    "price": s.get("price"),
+                    "description": s.get("description", ""),
+                })
             preview.append(cat_info)
             
         return {"status": "ok", "preview": preview}
@@ -1496,14 +1512,22 @@ async def sync_prices_feed(
             for s in services:
                 s_name = s.get("name")
                 s_price = str(s.get("price"))
+                s_description = str(s.get("description") or "")
                 if not s_name: continue
                 
                 res_p = await db.execute(select(ServicePrice).where(ServicePrice.category_id == cat.id, ServicePrice.name == s_name))
                 price_obj = res_p.scalars().first()
                 if price_obj:
                     price_obj.price = s_price
+                    price_obj.description = s_description
                 else:
-                    price_obj = ServicePrice(tenant_id=tenant_id, category_id=cat.id, name=s_name, price=s_price)
+                    price_obj = ServicePrice(
+                        tenant_id=tenant_id,
+                        category_id=cat.id,
+                        name=s_name,
+                        price=s_price,
+                        description=s_description,
+                    )
                     db.add(price_obj)
                 count += 1
                 
@@ -1568,12 +1592,19 @@ async def price_edit_submit(
         form_data = await request.form()
         names = form_data.getlist("price_name[]")
         prices = form_data.getlist("price_value[]")
+        descriptions = form_data.getlist("price_description[]")
         
         await db.execute(ServicePrice.__table__.delete().where(ServicePrice.category_id == cat.id))
         
-        for name, price in zip(names, prices):
+        for idx, (name, price) in enumerate(zip(names, prices)):
             if name and price:
-                db.add(ServicePrice(tenant_id=tenant_id, category_id=cat.id, name=name, price=price))
+                db.add(ServicePrice(
+                    tenant_id=tenant_id,
+                    category_id=cat.id,
+                    name=name,
+                    price=price,
+                    description=descriptions[idx] if idx < len(descriptions) else "",
+                ))
                 
         await db.commit()
         
@@ -1670,8 +1701,7 @@ async def logic_create(
     label: str = Form(...),
     code: str = Form(...),
     intent_patterns: str = Form(...),
-    handler: str = Form(...),
-    tool_name: str = Form(""),
+    tool_name: str = Form(...),
     target_url: str = Form(""),
     source_description: str = Form(""),
     query_prompt: str = Form(""),
@@ -1683,15 +1713,20 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
+        tool = tool_name.strip()
         # Only fields the lean engine actually uses are stored.
         meta_data = {
             "target_url": target_url,
-            "tool_name": tool_name.strip(),
+            "tool_name": tool,
             "source_description": source_description.strip(),
             "query_prompt": query_prompt.strip(),
             "result_validation_prompt": result_validation_prompt.strip(),
         }
-        logic = KnowledgeType(tenant_id=tenant_id, label=label, code=code, intent_patterns=patterns, handler=handler, enabled=enabled, meta=meta_data)
+        logic = KnowledgeType(
+            tenant_id=tenant_id, label=label, code=code,
+            intent_patterns=patterns, handler=tool or "route",
+            enabled=enabled, meta=meta_data
+        )
         db.add(logic)
         await db.commit()
     return RedirectResponse(url="/admin/knowledge", status_code=303)
@@ -1712,6 +1747,25 @@ async def logic_edit_form(
         "current_tenant_id": tenant_id, "logic": logic
     })
 
+
+@router.post("/knowledge/logic/{logic_id}/toggle")
+async def logic_toggle(
+    logic_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant_id:
+        res = await db.execute(select(KnowledgeType).where(
+            KnowledgeType.id == logic_id,
+            KnowledgeType.tenant_id == tenant_id,
+        ))
+        logic = res.scalars().first()
+        if logic:
+            logic.enabled = not bool(logic.enabled)
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge?tab=logic", status_code=303)
+
 @router.post("/knowledge/logic/{logic_id}/edit")
 async def logic_edit(
     logic_id: uuid.UUID,
@@ -1719,8 +1773,7 @@ async def logic_edit(
     label: str = Form(...),
     code: str = Form(...),
     intent_patterns: str = Form(...),
-    handler: str = Form(...),
-    tool_name: str = Form(""),
+    tool_name: str = Form(...),
     target_url: str = Form(""),
     source_description: str = Form(""),
     query_prompt: str = Form(""),
@@ -1737,11 +1790,12 @@ async def logic_edit(
             logic.label = label
             logic.code = code
             logic.intent_patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-            logic.handler = handler
+            tool = tool_name.strip()
+            logic.handler = tool or "route"
             logic.enabled = enabled
             meta_data = logic.meta if logic.meta else {}
             meta_data["target_url"] = target_url
-            meta_data["tool_name"] = tool_name.strip()
+            meta_data["tool_name"] = tool
             meta_data["source_description"] = source_description.strip()
             meta_data["query_prompt"] = query_prompt.strip()
             meta_data["result_validation_prompt"] = result_validation_prompt.strip()

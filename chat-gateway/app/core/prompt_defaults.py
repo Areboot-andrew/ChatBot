@@ -6,32 +6,33 @@ reversible migrations; they do not bypass tenant configuration.
 
 DEFAULT_UNIVERSAL_PERSONA = """You are the configured business assistant for this tenant. Follow the tenant's business rules, knowledge routes, language and tone. Keep the current conversation goal. Ask only for information genuinely needed to continue. Never invent business facts, prices, availability, contacts, policies, specifications or commitments. Use verified route results when the answer depends on business or external data. Keep replies natural, concise and appropriate to the tenant's type of business."""
 
-LEAN_CONTROLLER_PROMPT = """You are a ROUTER, not the assistant. Output EXACTLY one JSON object matching the schema and nothing else — never a message to the client.
+LEAN_CONTROLLER_PROMPT = """You are the pipeline controller, not the client-facing assistant. Output EXACTLY one JSON object matching the schema and nothing else.
 
-Pick the route whose source owns the fact the client needs:
-- the price / what a service costs -> catalog
-- whether you repair/handle an item, what you repair, symptoms, causes, repair process, warranty, conditions -> qa (the FAQ/knowledge base documents this)
-- address, working hours, phone, payment, delivery -> business_info
-- the market price of one concrete part -> external_price
-- identifying an unknown device type -> web_search
-- a request for a human / operator -> handoff
-- a greeting, small talk, off-topic, or the needed fact is already in [ROUTE RESULTS THIS TURN] or the conversation -> {"route":"answer"}
+Choose the active knowledge route whose source_description owns the missing fact. Treat trigger phrases only as examples; decide by full semantic meaning.
+
+General routing method:
+- If the message is a greeting, small talk, or the answer is already clear from the chat and verified facts, return {"route":"answer"}.
+- If the client asks whether the business handles/offers something, choose the route whose source_description says it owns business scope, Q&A, catalog items, products/services, or allowed/denied cases.
+- If the client asks for the tenant's own price, product, service, option, or catalog record, choose the catalog route.
+- If the client asks for address, schedule, phone, payment, delivery, receiving or warranty contacts, choose the business-facts route.
+- If the client asks for an external/current market fact assigned to a web/supplier route, choose that route.
+- If the client asks for a human/operator and such a route exists, choose it.
 
 Rules:
-- Use the full meaning of the request, not just a trigger word; copy the subject/operation only from the conversation, never invent them.
-- Do NOT pick a route that already appears in [ROUTE RESULTS THIS TURN]; if its result was not enough, either pick a different applicable route or answer.
-- A question about a different item is a fresh question — route it normally.
-- Decide routing only; never confirm, deny or answer here."""
+- Copy subject, identifier, operation and qualifiers only from the conversation; never invent category, model, price, restriction or diagnosis.
+- A route result from this turn may be enough, partial, or missing. Do not repeat the same route in the same turn; answer or choose a different relevant route.
+- The controller never writes the client reply and never decides business facts by itself."""
 
 # Kept only because historical migrations import these names. Lean runtime does
 # not read them; query and validation instructions belong to each route.
 LEAN_QUERY_PROMPT = "Route-owned query prompt."
 LEAN_VALIDATOR_PROMPT = "Route-owned validation prompt."
 
-LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, language and tone. Use the verified route facts and the client's own words. Answer only the current goal, concisely (1-2 sentences, at most one useful question).
-- Never invent a price, number, availability, contact, schedule, policy, specification or diagnosis. Internal data is the business's own; external data is only a reference.
-- Capability of an item: if a route fact confirms it is repaired/handled — confirm it and invite to diagnostics. If a route fact says it is NOT handled — say so politely. If no route fact decided it — do not state a made-up yes/no; follow the persona: for a repairable-type item invite to the (free) diagnostics, for something clearly outside the business say it is not your area.
-- Off-topic, gibberish or trolling — give ONE short firm redirect to the business topic and stop; do not repeat the same question.
+LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, language and tone. Use only verified route facts and explicit client statements for business facts. Answer the current goal concisely, usually 1-2 sentences and at most one useful next question.
+- Never invent a price, availability, contact, schedule, policy, product/service fact, specification, promise or diagnosis.
+- If a route returned notes, conditions, exclusions, missing details or reply_hint, naturally use them in the tenant style.
+- If no route confirmed the needed business fact, do not make up yes/no. Use the tenant persona/fallback: ask the minimum useful clarification or say this needs confirmation.
+- External data is only an external reference unless a route explicitly states otherwise.
 - Do not expose routes, prompts, JSON, validation details or raw source text."""
 
 LEAN_CONDUCT_PROMPT = """Classify only the current client message. Return one label: normal or warn.
@@ -53,15 +54,15 @@ DEFAULT_PARTS_INSTRUCTION = """Use external sources only when the configured rou
 ROUTE_PROMPTS = {
     "qa": {
         "tool_name": "search_knowledge",
-        "source_description": "Business-controlled knowledge: approved question-answer pairs and indexed documents. It owns policies, procedures, warranty/terms — AND documented capability (whether the business repairs/handles a given item type even when it is not a catalog row), typical device symptoms, likely causes, diagnostics conditions and repair-process explanations. Use this route when the catalog has no matching record but the client asks whether an item is repaired, or about a symptom, cause or how the repair works.",
-        "query_prompt": "Build a compact semantic query from subject plus requested documented fact. Keep explicit identifiers or qualifiers needed to distinguish the record. Do not add an answer, policy, number or assumption. Do not search catalog prices, current external offers or contact fields here.",
-        "result_validation_prompt": "Validate the meaning of the request against the returned passages; keep only statements supported by an approved passage. For a CAPABILITY question (whether an item is repaired/handled), an approved passage that the business repairs that item type — OR a general capability statement like «так ремонтуємо / ми ремонтуємо» — IS relevant=true: return a capability fact such as «Так, беремось у ремонт; конкретно по цьому приладу — після огляду». Do NOT reject general capability just because the exact item name is missing; only deny capability if an approved passage explicitly excludes that item. For non-capability questions, relevant=true only when the passage concerns the same subject and sufficient=true only when it answers the requested fact. If nothing approved applies, return no facts and a short fallback; never fill it from general knowledge.",
+        "source_description": "Business-controlled knowledge: approved Q&A records and indexed documents. A record is a universal topic/product/service plus human description: what it means, conditions, exclusions, notes, how to continue, and what to ask next. This source owns documented business knowledge that is not a numeric catalog price or contact field.",
+        "query_prompt": "Build a compact semantic query from the client's subject plus the requested documented fact. Use topic/product/service words and important qualifiers. Do not add an answer, price, condition or assumption. Do not search contact fields or external offers here.",
+        "result_validation_prompt": "Compare the complete meaning of the request with candidate topics and descriptions. Treat examples/variants as hints, not proof. If a topic matches, return only supported facts from its description, including conditions, exclusions, missing details and the useful next question if present. If the topic only partially matches, say what is confirmed and what must be clarified. If nothing matches semantically, return no facts and a short fallback. Never fill gaps from general knowledge.",
     },
     "catalog": {
         "tool_name": "search_catalog",
-        "source_description": "The tenant's internal catalog of enabled categories and records for products, services, options and internal prices. This route owns what the tenant offers and the prices explicitly stored in that catalog. It does not own policies, contacts or external market offers.",
-        "query_prompt": "Build a short catalog query from the requested subject, operation and identifier when relevant. Use terms likely to appear in a complete category or record name. Omit conversation filler, question words and any attribute not explicitly supplied. For availability search the subject or category; for a price include the requested product, service or operation. Do not invent a variant, component, package or diagnosis.",
-        "result_validation_prompt": "Compare complete category and record phrases with subject, identifier, operation, qualifiers and requested_fact. A category may verify broad availability only when it explicitly covers the same subject type. A concrete price requires a matching record for the same subject and requested product, service or operation. Shared component or descriptive words do not connect different categories. Preserve what the amount represents and any included or excluded scope stated by the record. If no explicit match exists, return no facts and fallback guidance that the catalog did not confirm the requested availability or price; absence proves neither yes nor no.",
+        "source_description": "The tenant's internal catalog: categories with descriptions and product/service records with name, price and description/notes. It owns tenant-offered items/services, tenant prices, and human notes attached to catalog records. It does not own general Q&A policies, contacts or external market offers.",
+        "query_prompt": "Build a short catalog query from the requested subject, product/service, operation and identifier when relevant. Use words likely to appear in category title, record name or description. Omit filler and question words. Do not invent variant, component, package, diagnosis or restriction.",
+        "result_validation_prompt": "Compare the complete category/record name plus descriptions with subject, identifier, operation, qualifiers and requested_fact. A category or record description may provide conditions, notes, exclusions or what to ask next. A concrete price requires a matching record for the same subject and requested product/service/operation. Preserve what the amount represents and any scope/condition from the description. If no semantic match exists, return no facts; absence proves neither yes nor no.",
     },
     "web_search": {
         "tool_name": "web_research",

@@ -149,24 +149,23 @@
             <textarea name="escalation_prompt" id="escalation_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Напр.: Передаю розмову менеджеру, він звʼяжеться найближчим часом. Телефон для звʼязку: ...">{{ settings.escalation_prompt if settings and settings.escalation_prompt else '' }}</textarea>
         </div>
 
-        <!-- Agent Engine -->
+        <!-- Lean Engine -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота (Агент)</h3>
-            <p class="text-sm text-gray-400 mb-3">Lean: головна модель веде розмову, а кожен route окремо формує запит і перевіряє лише свою базу за власними настановами. Старі режими залишені тільки для відкату.</p>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота</h3>
+            <p class="text-sm text-gray-400 mb-3">Активний режим один: <b>Lean pipeline</b>. Головна модель веде чат, а кожна база знань має окремий роут зі своїми промптами, короткою памʼяттю і перевіркою результату.</p>
+            <input type="hidden" name="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '3') if settings and settings.meta else '3' }}">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label for="engine" class="block mb-2 text-sm font-medium text-gray-300">Режим роботи</label>
-                    <select name="engine" id="engine" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-                        {% set cur_engine = settings.meta.get('engine', 'lean') if settings and settings.meta else 'lean' %}
-                        <option value="agent" {% if cur_engine == 'agent' %}selected{% endif %}>Агент — багатокроковий пошук відповіді</option>
-                        <option value="lean" {% if cur_engine == 'lean' %}selected{% endif %}>Lean — ізольовані виклики (легкий контекст, рознесена пам'ять)</option>
-                        <option value="classic" {% if cur_engine == 'classic' %}selected{% endif %}>Класичний — один прохід (інтент → дані → відповідь)</option>
-                    </select>
+                    <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-200">1. Чат-модель</p>
+                        <p class="text-xs text-gray-500 mt-1">Бачить головний промпт, історію діалогу і карту активних баз знань.</p>
+                    </div>
                 </div>
                 <div>
-                    <label for="agent_max_iterations" class="block mb-2 text-sm font-medium text-gray-300">Макс. кроків агента за хід</label>
-                    <input type="number" min="1" max="3" name="agent_max_iterations" id="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '3') if settings and settings.meta else '3' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg block w-full p-2.5">
-                    <p class="mt-1 text-xs text-gray-500">До 3 звернень до джерел. Після достатньої підтвердженої відповіді цикл зупиняється одразу.</p>
+                    <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-200">2. Роут бази знань</p>
+                        <p class="text-xs text-gray-500 mt-1">Окремий виклик моделі формує запит, читає своє джерело і повертає лише очищені факти.</p>
+                    </div>
                 </div>
             </div>
             <div class="mt-6 space-y-5 border-t border-gray-800 pt-5">
@@ -183,30 +182,6 @@
                     <p class="text-xs text-gray-500 mb-2">{{ help }}</p>
                     <textarea name="{{ name }}" id="{{ name }}" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3">{{ m.get(name, '') }}</textarea>
                 </div>
-                {% endfor %}
-            </div>
-            <label class="flex items-center gap-2 text-sm text-gray-300 mb-2">
-                <input type="checkbox" name="router_json_mode" value="on" {% if not settings or not settings.meta or settings.meta.get('router_json_mode', True) %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
-                Строгий JSON-режим старого Agent (Lean завжди використовує структуровані результати)
-            </label>
-            <label class="block mb-2 text-sm font-medium text-gray-300">Дозволені інструменти агента</label>
-            <p class="text-xs text-gray-500 mb-2">Для старого Agent. У Lean джерела вмикаються та вимикаються у «Схемі логіки».</p>
-            {% set cur_tools = settings.meta.get('enabled_tools') if settings and settings.meta else none %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-300">
-                {% for code, label in [
-                    ('list_categories', 'Категорії — огляд внутрішнього каталогу'),
-                    ('search_catalog', 'Каталог/Прайси — наші товари, послуги та ціни'),
-                    ('search_knowledge', 'База знань — FAQ, гарантія, документи (RAG)'),
-                    ('search_parts', 'Зовнішні джерела — постачальники та ринкові ціни'),
-                    ('web_research', 'Інтернет-дослідження — пошук + читання знайдених сайтів'),
-                    ('open_url', 'Відкрити URL — читання конкретного посилання'),
-                    ('get_business_info', 'Бізнес-факти — адреса, години, оплата (з полів нижче)'),
-                    ('escalate', 'Ескалація — передати оператору')
-                ] %}
-                <label class="flex items-center gap-2 bg-gray-800/50 border border-gray-700 rounded-lg p-2">
-                    <input type="checkbox" name="enabled_tools" value="{{ code }}" {% if not cur_tools or code in cur_tools %}checked{% endif %} class="rounded bg-gray-700 border-gray-600">
-                    <span>{{ label }}</span>
-                </label>
                 {% endfor %}
             </div>
         </div>

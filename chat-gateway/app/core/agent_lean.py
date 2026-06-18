@@ -110,7 +110,6 @@ async def _load_routes(tenant_id, db):
         routes[str(kt.code)] = {
             "code": str(kt.code),
             "label": kt.label or kt.code,
-            "handler": kt.handler,
             "tool_name": (m.get("tool_name") or "").strip(),
             "triggers": list(kt.intent_patterns or []),
             "query_prompt": (m.get("query_prompt") or "").strip(),
@@ -136,11 +135,8 @@ def _source_map(routes: dict) -> str:
     return "\n".join(lines)
 
 
-_TOOL_BY_HANDLER = {"qa_handler": "search_catalog", "web_search_handler": "web_research", "site_search": "open_url"}
-
-
 async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key):
-    tool = route.get("tool_name") or _TOOL_BY_HANDLER.get(route.get("handler"), "")
+    tool = route.get("tool_name") or ""
     q = (query or "").strip()
     if not q and tool != "get_business_info":
         return "", tool
@@ -314,6 +310,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         route_results.append(json.dumps({"route": route["code"], **result}, ensure_ascii=False))
         if result["relevant"]:
             facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
+            facts.extend(f"[{route['label']} note] {note}" for note in result.get("notes", []))
+            facts.extend(f"[{route['label']} missing] {m}" for m in result.get("missing", []))
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
@@ -452,7 +450,10 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         f"REQUEST: {json.dumps(request, ensure_ascii=False)}\n"
         f"SOURCE_RESULT:\n{str(raw_result or '')[:5000]}\n"
         'Return JSON only: {"relevant":true|false,"sufficient":true|false,'
-        '"facts":["..."],"fallback":"..."|null}'
+        '"match_status":"confirmed|partial|denied|unknown",'
+        '"facts":["..."],"notes":["conditions/exclusions/important context"],'
+        '"missing":["needed client detail"],"reply_hint":"short guidance for final assistant"|null,'
+        '"fallback":"..."|null}'
     )})
     emit(f"CLEAN #{step}", "Вхід у модель", _fmt_msgs(route_memory))
     out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 450, retry=True)
@@ -461,14 +462,26 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         parsed = _extract_json(out)
         facts = parsed.get("facts") if isinstance(parsed.get("facts"), list) else []
         facts = [str(f).strip() for f in facts if str(f).strip()]
+        notes = parsed.get("notes") if isinstance(parsed.get("notes"), list) else []
+        notes = [str(f).strip() for f in notes if str(f).strip()]
+        missing = parsed.get("missing") if isinstance(parsed.get("missing"), list) else []
+        missing = [str(f).strip() for f in missing if str(f).strip()]
         relevant = parsed.get("relevant") is True
         result = {
             "relevant": relevant,
             "sufficient": relevant and parsed.get("sufficient") is True,
+            "match_status": str(parsed.get("match_status") or ("confirmed" if relevant else "unknown")),
             "facts": facts if relevant else [],
+            "notes": notes if relevant else [],
+            "missing": missing if relevant else [],
+            "reply_hint": str(parsed.get("reply_hint")).strip() if parsed.get("reply_hint") else None,
             "fallback": str(parsed.get("fallback")).strip() if parsed.get("fallback") else None,
         }
     except Exception:
-        result = {"relevant": False, "sufficient": False, "facts": [], "fallback": "validation_failed"}
+        result = {
+            "relevant": False, "sufficient": False, "match_status": "unknown",
+            "facts": [], "notes": [], "missing": [], "reply_hint": None,
+            "fallback": "validation_failed",
+        }
     emit(f"CLEAN #{step}", "Очищено", json.dumps(result, ensure_ascii=False))
     return result

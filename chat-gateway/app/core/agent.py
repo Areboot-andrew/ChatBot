@@ -548,7 +548,7 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
     name_conds = [ServicePrice.name.ilike(f"%{tok}%") for tok in search_tokens]
     cat_conds = [ServiceCategory.title.ilike(f"%{tok}%") for tok in search_tokens]
     res = await db.execute(
-        select(ServicePrice, ServiceCategory.title)
+        select(ServicePrice, ServiceCategory.title, ServiceCategory.description)
         .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
         .where(
             ServicePrice.tenant_id == tenant_id,
@@ -563,10 +563,11 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
         expanded_forms = [search_form(tok) for tok in tokens if tok not in raw]
 
         def score(row) -> tuple:
-            price, category = row
+            price, category, category_description = row
             name = (price.name or "").lower()
             category_text = (category or "").lower()
-            phrase = f"{category_text} {name}"
+            description = f"{category_description or ''} {getattr(price, 'description', '') or ''}".lower()
+            phrase = f"{category_text} {name} {description}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
             name_hits = sum(1 for _, form in original_forms if form in name)
             category_hits = sum(1 for _, form in original_forms if form in category_text)
@@ -575,10 +576,15 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             return value, name_hits, category_hits
 
         ranked = sorted(candidates, key=score, reverse=True)[:12]
-        return "\n".join(
-            f"- {category or 'Каталог'}: {price.name} — {price.price}"
-            for price, category in ranked
-        )
+        lines = []
+        for price, category, category_description in ranked:
+            bits = [f"- {category or 'Каталог'}: {price.name} — {price.price}"]
+            if category_description:
+                bits.append(f"Опис категорії: {category_description}")
+            if getattr(price, "description", None):
+                bits.append(f"Опис позиції: {price.description}")
+            lines.append(" | ".join(bits))
+        return "\n".join(lines)
 
     # A full category list is useful for an operator, but it is unsafe evidence
     # for the route validator: a model may place an unrelated item into a broad

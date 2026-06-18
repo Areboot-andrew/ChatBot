@@ -33,5 +33,6 @@ class ServicePrice(Base):
     
     name = Column(String, nullable=False) # e.g. "Заміна екрану"
     price = Column(String, nullable=False) # e.g. "1500 - 3000 грн" (string since it might be a range)
+    description = Column(String, nullable=True) # human notes/conditions for the route model
     
     category = relationship("ServiceCategory", back_populates="prices")

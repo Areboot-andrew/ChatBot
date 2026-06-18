@@ -101,22 +101,22 @@ async def seed_admin():
             logger.info("Seeding default intents...")
             from app.core.prompt_defaults import ROUTE_PROMPTS
             intents_data = [
-                {"code": "catalog", "label": "Наш каталог: товари, послуги та ціни", "handler": "qa_handler",
+                {"code": "catalog", "label": "Каталог: товари/послуги, ціни, описи",
                  "intent_patterns": ["чи є", "чи робите", "ремонтуєте", "скільки коштує", "ціна", "прайс"],
                  "prompt_key": "catalog"},
-                {"code": "qa", "label": "Затверджені Q&A та документи", "handler": "qa_handler",
+                {"code": "qa", "label": "Записи знань та документи",
                  "intent_patterns": ["гарантія", "умови", "як відбувається", "терміни", "правила"],
                  "prompt_key": "qa"},
-                {"code": "web_search", "label": "Зовнішні характеристики та ідентифікація", "handler": "web_search_handler",
+                {"code": "web_search", "label": "Зовнішній веб-пошук",
                  "intent_patterns": ["характеристики", "сумісність", "що це", "яка модель", "специфікація"],
                  "prompt_key": "web_search"},
-                {"code": "external_price", "label": "Зовнішні ціни та постачальники", "handler": "web_search_handler",
+                {"code": "external_price", "label": "Зовнішні ціни та постачальники",
                  "intent_patterns": ["ціна деталі", "ціна комплектуючої", "у постачальників", "ринкова ціна", "наявність деталі"],
                  "prompt_key": "external_price"},
-                {"code": "business_info", "label": "Графік, адреса, оплата та доставка", "handler": "qa_handler",
+                {"code": "business_info", "label": "Бізнес-факти",
                  "intent_patterns": ["коли працюєте", "адреса", "телефон", "оплата", "доставка", "коли прийти"],
                  "prompt_key": "business_info"},
-                {"code": "handoff", "label": "Передача оператору", "handler": "escalate",
+                {"code": "handoff", "label": "Передача оператору",
                  "intent_patterns": ["людина", "менеджер", "оператор", "скарга", "подзвонити"],
                  "prompt_key": "handoff"},
             ]
@@ -126,7 +126,7 @@ async def seed_admin():
                     tenant_id=tenant.id,
                     code=intent["code"],
                     label=intent["label"],
-                    handler=intent["handler"],
+                    handler=route_meta.get("tool_name") or "route",
                     intent_patterns=intent["intent_patterns"],
                     meta=route_meta,
                 )
@@ -150,7 +150,6 @@ async def seed_admin():
                 meta={
                     "engine": "lean",
                     "agent_max_iterations": "3",
-                    "enabled_tools": [],  # empty = all tools enabled
                     # Temporary Serper (Google) key — replace with your own in Settings
                     "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",
                     "business_info": {},

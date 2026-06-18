@@ -13,10 +13,10 @@
 <div class="mb-6 border-b border-gray-800">
     <ul class="flex flex-wrap -mb-px text-sm font-medium text-center text-gray-400" id="knowledgeTabs">
         <li class="mr-2">
-            <button class="inline-block p-4 border-b-2 border-blue-500 text-blue-500 rounded-t-lg active-tab" data-tab="qa">Питання-Відповідь (Q&A)</button>
+            <button class="inline-block p-4 border-b-2 border-blue-500 text-blue-500 rounded-t-lg active-tab" data-tab="qa">Записи знань</button>
         </li>
         <li class="mr-2">
-            <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="logic">Схема Логіки (Інтенти)</button>
+            <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="logic">Логіка pipeline</button>
         </li>
         <li class="mr-2">
             <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="docs">Документи (Мануали)</button>
@@ -30,16 +30,16 @@
 <!-- Tab Content: Q&A -->
 <div id="tab-qa" class="tab-pane">
     <div class="flex justify-between items-center mb-4">
-        <p class="text-sm text-gray-400">Прямі відповіді на часті запитання. Бот використовує їх як найвищий пріоритет.</p>
-        <a href="/admin/knowledge/qa/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати Q&A</a>
+        <p class="text-sm text-gray-400">Універсальні знання: тема / послуга / товар + опис для бота. Приклади фраз лише допомагають пошуку; остаточне рішення робить LLM роута.</p>
+        <a href="/admin/knowledge/qa/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати запис</a>
     </div>
     
     <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm">
         <table class="w-full text-sm text-left text-gray-400">
             <thead class="text-xs text-gray-300 uppercase bg-gray-800/50">
                 <tr>
-                    <th class="px-6 py-3">Питання</th>
-                    <th class="px-6 py-3">Відповідь</th>
+                    <th class="px-6 py-3">Тема / послуга / товар</th>
+                    <th class="px-6 py-3">Опис для бота</th>
                     <th class="px-6 py-3">Дії</th>
                 </tr>
             </thead>
@@ -61,43 +61,61 @@
 <!-- Tab Content: Logic Schema -->
 <div id="tab-logic" class="tab-pane hidden">
     <div class="flex justify-between items-center mb-6">
-        <p class="text-sm text-gray-400">Роути — це джерела даних бота. Для кожного: «що це за джерело», «як шукати» і «що лишити». Тригери — приклади фраз-підказок; рішення приймає LLM за змістом, не за точним словом.</p>
-        <a href="/admin/knowledge/logic/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати Логіку</a>
+        <p class="text-sm text-gray-400">Pipeline показує, які бази знань підключені до чат-моделі. Код лише запускає етапи; що шукати і як фільтрувати — задають промпти кожного роута.</p>
+        <a href="/admin/knowledge/logic/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати базу</a>
     </div>
     
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Ліва частина: Таблиця інтентів -->
         <div class="lg:col-span-2">
-            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-sm">
-                <table class="w-full text-sm text-left text-gray-400">
-                    <thead class="text-xs text-gray-300 uppercase bg-gray-800/50">
-                        <tr>
-                            <th class="px-4 py-3">Назва (Код)</th>
-                            <th class="px-4 py-3">Тригери (Патерни)</th>
-                            <th class="px-4 py-3">Джерело / промпти</th>
-                            <th class="px-4 py-3">Дії</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-800">
-                        {% for logic in logic_schemas %}
-                        <tr class="hover:bg-gray-800/30 transition">
-                            <td class="px-4 py-4 font-medium text-gray-200">{{ logic.label }} <span class="text-xs text-gray-500 block mt-1">{{ logic.code }}</span></td>
-                            <td class="px-4 py-4 text-xs max-w-[150px] truncate" title="{{ logic.intent_patterns | join(', ') }}">{{ logic.intent_patterns | join(', ') }}</td>
-                            <td class="px-4 py-4">
-                                <span class="bg-purple-900/30 text-purple-400 border border-purple-800/50 px-2 py-1 rounded text-xs">{{ logic.meta.get('tool_name', logic.handler) if logic.meta else logic.handler }}</span>
-                                {% if logic.meta and logic.meta.get('result_validation_prompt') %}
-                                <span class="block mt-2 text-[10px] text-green-400">перевірка налаштована</span>
-                                {% else %}
-                                <span class="block mt-2 text-[10px] text-yellow-400">потрібен промпт перевірки</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-4 py-4"><a href="/admin/knowledge/logic/{{ logic.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Немає логічних схем.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="space-y-4">
+                {% for logic in logic_schemas %}
+                {% set meta = logic.meta or {} %}
+                <div class="bg-gray-900 border {% if logic.enabled %}border-blue-900/60{% else %}border-gray-800 opacity-70{% endif %} rounded-xl p-5">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full {% if logic.enabled %}bg-green-500{% else %}bg-gray-600{% endif %}"></span>
+                                <h3 class="text-lg font-semibold text-gray-100">{{ logic.label }}</h3>
+                                <span class="text-xs text-gray-500 font-mono">{{ logic.code }}</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">{{ meta.get('source_description', 'Опис джерела ще не заповнений') }}</p>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            <form method="POST" action="/admin/knowledge/logic/{{ logic.id }}/toggle">
+                                <button class="text-xs px-3 py-1.5 rounded {% if logic.enabled %}bg-red-900/40 text-red-300 hover:bg-red-900/70{% else %}bg-green-900/40 text-green-300 hover:bg-green-900/70{% endif %}">
+                                    {% if logic.enabled %}Вимкнути{% else %}Увімкнути{% endif %}
+                                </button>
+                            </form>
+                            <a href="/admin/knowledge/logic/{{ logic.id }}/edit" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-1.5 rounded">Редагувати</a>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4 text-xs">
+                        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                            <p class="text-gray-500 mb-1">Метод</p>
+                            <p class="text-purple-300 font-mono">{{ meta.get('tool_name', logic.handler) }}</p>
+                        </div>
+                        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                            <p class="text-gray-500 mb-1">Вибір / опис</p>
+                            <p class="{% if meta.get('source_description') %}text-green-400{% else %}text-yellow-400{% endif %}">{% if meta.get('source_description') %}є{% else %}порожньо{% endif %}</p>
+                        </div>
+                        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                            <p class="text-gray-500 mb-1">Запит</p>
+                            <p class="{% if meta.get('query_prompt') %}text-green-400{% else %}text-yellow-400{% endif %}">{% if meta.get('query_prompt') %}є{% else %}порожньо{% endif %}</p>
+                        </div>
+                        <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                            <p class="text-gray-500 mb-1">Перевірка</p>
+                            <p class="{% if meta.get('result_validation_prompt') %}text-green-400{% else %}text-yellow-400{% endif %}">{% if meta.get('result_validation_prompt') %}є{% else %}порожньо{% endif %}</p>
+                        </div>
+                    </div>
+
+                    {% if logic.intent_patterns %}
+                    <p class="text-[11px] text-gray-500 mt-3">Приклади фраз: {{ logic.intent_patterns | join(', ') }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-500">Немає підключених баз знань.</div>
+                {% endfor %}
             </div>
         </div>
 
@@ -120,13 +138,13 @@
 
                 <div class="relative">
                     <div class="absolute -left-[29px] top-1 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
-                    <p class="font-bold text-gray-200">1. Рішення (Controller)</p>
+                    <p class="font-bold text-gray-200">1. Рішення чат-моделі</p>
                     <p class="text-xs text-gray-400 mt-1">LLM читає персону, чат і карту роутів нижче й вирішує: відповісти зараз чи звернутись до роута за потрібним фактом. Тригери — підказка, не жорстке правило.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[29px] top-1 w-3 h-3 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
-                    <p class="font-bold text-gray-200">2. Роут (окрема сесія)</p>
+                    <p class="font-bold text-gray-200">2. Роут бази знань</p>
                     <p class="text-xs text-gray-400 mt-1">Обраний роут у власній ізольованій сесії: формує запит → шукає у своєму джерелі (каталог / Q&A+Qdrant / бізнес-факти / web / постачальники) → перевіряє й чистить результат.</p>
                 </div>
 
@@ -139,7 +157,7 @@
             
             <div class="mt-8 pt-4 border-t border-gray-800">
                 <a href="/admin/knowledge/logic/create" class="block w-full text-center bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg text-sm transition">
-                    + Створити нове правило
+                    + Додати базу знань
                 </a>
             </div>
         </div>
@@ -245,8 +263,7 @@
 </div>
 
 <script>
-    document.querySelectorAll('#knowledgeTabs button').forEach(button => {
-        button.addEventListener('click', () => {
+    function activateKnowledgeTab(button) {
             // Reset styles
             document.querySelectorAll('#knowledgeTabs button').forEach(btn => {
                 btn.classList.remove('border-blue-500', 'text-blue-500', 'active-tab');
@@ -260,8 +277,18 @@
             button.classList.remove('border-transparent');
             const target = button.getAttribute('data-tab');
             document.getElementById('tab-' + target).classList.remove('hidden');
+    }
+
+    document.querySelectorAll('#knowledgeTabs button').forEach(button => {
+        button.addEventListener('click', () => {
+            activateKnowledgeTab(button);
         });
     });
+    const initialTab = new URLSearchParams(window.location.search).get('tab');
+    if (initialTab) {
+        const btn = document.querySelector(`#knowledgeTabs button[data-tab="${initialTab}"]`);
+        if (btn) activateKnowledgeTab(btn);
+    }
 </script>
 {% endif %}
 {% endblock %}

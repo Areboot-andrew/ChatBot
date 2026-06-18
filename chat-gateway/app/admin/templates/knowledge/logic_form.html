@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}{% if logic %}Редагувати Логіку{% else %}Додати Логіку{% endif %}{% endblock %}
-{% block header %}{% if logic %}Редагувати Інтент: {{ logic.label }}{% else %}Новий Інтент (Схема Логіки){% endif %}{% endblock %}
+{% block title %}{% if logic %}Редагувати базу знань{% else %}Додати базу знань{% endif %}{% endblock %}
+{% block header %}{% if logic %}Редагувати базу: {{ logic.label }}{% else %}Нова база знань / роут{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-3xl bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-sm">
@@ -9,19 +9,19 @@
         
         <div class="grid grid-cols-2 gap-4">
             <div>
-                <label for="label" class="block mb-2 text-sm font-medium text-gray-300">Назва (зрозуміла)</label>
-                <input type="text" name="label" id="label" value="{{ logic.label if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Каталог або Умови доставки" required onkeyup="generateCode(this.value)">
+                <label for="label" class="block mb-2 text-sm font-medium text-gray-300">Назва бази</label>
+                <input type="text" name="label" id="label" value="{{ logic.label if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Прайси, Питання-відповіді, Бізнес-факти" required onkeyup="generateCode(this.value)">
             </div>
             <div>
-                <label for="code" class="block mb-2 text-sm font-medium text-gray-300">Внутрішній Код</label>
+                <label for="code" class="block mb-2 text-sm font-medium text-gray-300">Код бази</label>
                 <p class="text-[10px] text-gray-500 mb-1 absolute -mt-3">Генерується автоматично, для внутрішньої роботи системи.</p>
                 <input type="text" name="code" id="code" value="{{ logic.code if logic else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="DELIVERY_POLICY" required>
             </div>
         </div>
 
         <div>
-            <label for="intent_patterns" class="block mb-2 text-sm font-medium text-gray-300">Тригери / Приклади фраз (через кому)</label>
-            <p class="text-xs text-gray-500 mb-2"><strong>Пишіть фразами клієнта.</strong> Дайте 2-5 прикладів наміру, який належить саме цьому джерелу: «чи є в наявності», «умови доставки», «графік роботи». Помилки й мову розпізнає модель.</p>
+            <label for="intent_patterns" class="block mb-2 text-sm font-medium text-gray-300">Приклади фраз клієнта (через кому)</label>
+            <p class="text-xs text-gray-500 mb-2">Це підказки для LLM, а не жорсткі тригери. Модель порівнює зміст запиту з описом бази й сама вирішує, чи цей роут підходить.</p>
             <input type="text" name="intent_patterns" id="intent_patterns" value="{{ logic.intent_patterns|join(', ') if logic and logic.intent_patterns else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
         </div>
 
@@ -51,32 +51,19 @@
         </div>
 
         <div class="p-4 bg-gray-950 border border-gray-800 rounded-lg space-y-4">
-            <h4 class="text-sm font-semibold text-gray-200">Ланцюг обробки (Як шукати інформацію)</h4>
+            <h4 class="text-sm font-semibold text-gray-200">Підключення джерела</h4>
 
             <div>
-                <label for="handler" class="block mb-2 text-sm font-medium text-gray-300">Дія бота</label>
-                <select id="handler" name="handler" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                    <option value="qa_handler" {% if logic and logic.handler == 'qa_handler' %}selected{% endif %}>Пошук по базі прайсів / Qdrant</option>
-                    <option value="web_search_handler" {% if logic and logic.handler == 'web_search_handler' %}selected{% endif %}>Пошук в інтернеті (Google)</option>
-                    <option value="site_search" {% if logic and logic.handler == 'site_search' %}selected{% endif %}>Парсинг вказаного сайту</option>
-                    <option value="escalate" {% if logic and logic.handler == 'escalate' %}selected{% endif %}>Перевести на оператора (Людину)</option>
-                    <option value="fallback" {% if logic and logic.handler == 'fallback' %}selected{% endif %}>Базова відповідь (Fallback)</option>
-                </select>
-            </div>
-
-            <div>
-                <label for="tool_name" class="block mb-2 text-sm font-medium text-gray-300">Конкретний інструмент агента</label>
-                <p class="text-xs text-gray-500 mb-2">Один роут бажано прив'язувати до одного джерела. Порожньо залишає старе автоматичне зіставлення через «Дію бота».</p>
+                <label for="tool_name" class="block mb-2 text-sm font-medium text-gray-300">Метод пошуку</label>
+                <p class="text-xs text-gray-500 mb-2">Один роут = один вхід у базу знань або зовнішнє джерело.</p>
                 {% set selected_tool = logic.meta.get('tool_name', '') if logic and logic.meta else '' %}
-                <select id="tool_name" name="tool_name" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">
-                    <option value="" {% if not selected_tool %}selected{% endif %}>Автоматично зі старого handler</option>
-                    <option value="list_categories" {% if selected_tool == 'list_categories' %}selected{% endif %}>Категорії каталогу</option>
-                    <option value="search_catalog" {% if selected_tool == 'search_catalog' %}selected{% endif %}>Каталог / наші ціни</option>
-                    <option value="search_knowledge" {% if selected_tool == 'search_knowledge' %}selected{% endif %}>Q&amp;A та документи</option>
+                <select id="tool_name" name="tool_name" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
+                    <option value="search_knowledge" {% if selected_tool == 'search_knowledge' or not selected_tool %}selected{% endif %}>База знань: Q&amp;A та документи</option>
+                    <option value="search_catalog" {% if selected_tool == 'search_catalog' %}selected{% endif %}>Каталог: категорії, товари/послуги, ціни, описи</option>
+                    <option value="get_business_info" {% if selected_tool == 'get_business_info' %}selected{% endif %}>Бізнес-факти: адреса, години, контакти</option>
                     <option value="search_parts" {% if selected_tool == 'search_parts' %}selected{% endif %}>Зовнішні ціни / постачальники</option>
                     <option value="web_research" {% if selected_tool == 'web_research' %}selected{% endif %}>Google та читання сторінок</option>
                     <option value="open_url" {% if selected_tool == 'open_url' %}selected{% endif %}>Конкретний сайт / URL-шаблон</option>
-                    <option value="get_business_info" {% if selected_tool == 'get_business_info' %}selected{% endif %}>Бізнес-факти</option>
                     <option value="escalate" {% if selected_tool == 'escalate' %}selected{% endif %}>Оператор</option>
                 </select>
             </div>
@@ -87,9 +74,6 @@
                 <p class="mt-1 text-xs text-gray-400">Напишіть `texno.plus` для пошуку Google по сайту, або посилання з `{query}` для прямого парсингу сторінки.</p>
             </div>
 
-            <div class="hidden">
-                <input type="text" name="target_category" id="target_category" value="{{ logic.meta.get('target_category', '') if logic and logic.meta else '' }}">
-            </div>
         </div>
 
         <div class="flex items-center mt-4">
@@ -106,18 +90,18 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const handlerSelect = document.getElementById('handler');
+        const toolSelect = document.getElementById('tool_name');
         const targetUrlDiv = document.getElementById('target_url_div');
         
         function updateFields() {
-            if (handlerSelect.value === 'site_search') {
+            if (['open_url', 'web_research', 'search_parts'].includes(toolSelect.value)) {
                 targetUrlDiv.classList.remove('hidden');
             } else {
                 targetUrlDiv.classList.add('hidden');
             }
         }
         
-        handlerSelect.addEventListener('change', updateFields);
+        toolSelect.addEventListener('change', updateFields);
         updateFields();
     });
 

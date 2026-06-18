@@ -1,27 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}{% if qa %}Редагувати Q&A{% else %}Додати Q&A{% endif %}{% endblock %}
-{% block header %}{% if qa %}Редагувати: {{ qa.question | truncate(30) }}{% else %}Нова пара Q&A{% endif %}{% endblock %}
+{% block title %}{% if qa %}Редагувати знання{% else %}Додати знання{% endif %}{% endblock %}
+{% block header %}{% if qa %}Редагувати: {{ qa.question | truncate(30) }}{% else %}Новий запис знань{% endif %}{% endblock %}
 
 {% block content %}
 <div class="max-w-3xl bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-sm">
     <form method="POST" action="{% if qa %}/admin/knowledge/qa/{{ qa.id }}/edit{% else %}/admin/knowledge/qa/create{% endif %}" class="space-y-6">
         
         <div>
-            <label for="question" class="block mb-2 text-sm font-medium text-gray-300">Питання (Основне)</label>
-            <input type="text" name="question" id="question" value="{{ qa.question if qa else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" required>
+            <label for="question" class="block mb-2 text-sm font-medium text-gray-300">Тема / послуга / товар</label>
+            <input type="text" name="question" id="question" value="{{ qa.question if qa else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр.: Ремонт навушників, доставка квітів, гарантія" required>
         </div>
 
         <div>
-            <label for="question_variants" class="block mb-2 text-sm font-medium text-gray-300">Варіанти питання (через кому)</label>
-            <p class="text-xs text-gray-500 mb-2">Наприклад: "чи доставляєте", "які умови доставки", "доставка НП"</p>
+            <label for="question_variants" class="block mb-2 text-sm font-medium text-gray-300">Приклади фраз клієнта (через кому)</label>
+            <p class="text-xs text-gray-500 mb-2">Це підказки для пошуку, не жорсткі тригери. Модель роута все одно звіряє зміст теми й опису.</p>
             <input type="text" name="question_variants" id="question_variants" value="{{ qa.question_variants|join(', ') if qa and qa.question_variants else '' }}" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
         </div>
 
         <div>
-            <label for="answer" class="block mb-2 text-sm font-medium text-gray-300">Фактична інформація (Або приклад відповіді)</label>
-            <p class="text-xs text-gray-500 mb-2">Це не жорсткий шаблон! Бот використає цю інформацію як "факт" і сформулює відповідь природно, відповідно до контексту розмови.</p>
-            <textarea name="answer" id="answer" rows="5" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр: Доставка здійснюється Новою Поштою за рахунок клієнта. При замовленні від 5000 грн - безкоштовно." required>{{ qa.answer if qa else '' }}</textarea>
+            <label for="answer" class="block mb-2 text-sm font-medium text-gray-300">Опис для бота</label>
+            <p class="text-xs text-gray-500 mb-2">Пишіть людськими словами: що це, умови, винятки, що уточнити, як рухатись далі. Це не готова відповідь клієнту, а знання для LLM.</p>
+            <textarea name="answer" id="answer" rows="7" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5" placeholder="Напр.: Беремо TWS, накладні та повнорозмірні навушники. Якщо модель невідома, спершу уточнити що саме не працює. Окремі запчастини не продаємо." required>{{ qa.answer if qa else '' }}</textarea>
         </div>
         
         <div>
