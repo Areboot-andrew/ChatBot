@@ -1377,6 +1377,11 @@ async def import_prices_table(
     price_col: str = Form(None),
     category_col: str = Form(None),
     description_col: str = Form(None),
+    item_type_col: str = Form(None),
+    brand_col: str = Form(None),
+    availability_col: str = Form(None),
+    characteristics_col: str = Form(None),
+    composition_col: str = Form(None),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -1406,6 +1411,14 @@ async def import_prices_table(
             name = str(rec.get(name_col, "")).strip()
             price = str(rec.get(price_col, "")).strip()
             description = str(rec.get(description_col, "")).strip() if description_col else ""
+            item_meta = {
+                "item_type": str(rec.get(item_type_col, "")).strip() if item_type_col else "",
+                "brand": str(rec.get(brand_col, "")).strip() if brand_col else "",
+                "availability": str(rec.get(availability_col, "")).strip() if availability_col else "",
+                "characteristics": str(rec.get(characteristics_col, "")).strip() if characteristics_col else "",
+                "composition": str(rec.get(composition_col, "")).strip() if composition_col else "",
+            }
+            item_meta = {k: v for k, v in item_meta.items() if v}
             if not name or not price:
                 skipped += 1
                 continue
@@ -1434,6 +1447,7 @@ async def import_prices_table(
             if existing:
                 existing.price = price
                 existing.description = description
+                existing.meta = item_meta
             else:
                 db.add(ServicePrice(
                     tenant_id=tenant_id,
@@ -1441,6 +1455,7 @@ async def import_prices_table(
                     name=name,
                     price=price,
                     description=description,
+                    meta=item_meta,
                 ))
             imported += 1
         await db.commit()

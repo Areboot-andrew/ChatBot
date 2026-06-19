@@ -27,7 +27,7 @@
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
             <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт / Експорт таблиці (XLSX, CSV)</h2>
             <p class="text-sm text-gray-400 mb-4">
-                Завантажте прайс у будь-якій схемі — система покаже знайдені колонки, ви вкажете, де назва, ціна, категорія та опис позиції.
+                Завантажте прайс у будь-якій схемі — система покаже колонки, ви вкажете, де назва, ціна, категорія, тип, бренд, наявність, характеристики, склад і примітки для моделі.
             </p>
             <div class="flex flex-wrap gap-2 mb-4 text-sm">
                 <a href="/admin/knowledge/prices/template?fmt=xlsx" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg">Скачати шаблон XLSX</a>
@@ -44,20 +44,40 @@
             <div id="mapping-block" class="hidden mt-4 space-y-3">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                     <div>
-                        <label class="text-gray-400 block mb-1">Колонка з назвою послуги *</label>
+                        <label class="text-gray-400 block mb-1">Назва товару/послуги *</label>
                         <select id="map-name" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"></select>
                     </div>
                     <div>
-                        <label class="text-gray-400 block mb-1">Колонка з ціною *</label>
+                        <label class="text-gray-400 block mb-1">Ціна / умова *</label>
                         <select id="map-price" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"></select>
                     </div>
                     <div>
-                        <label class="text-gray-400 block mb-1">Колонка категорії (опц.)</label>
+                        <label class="text-gray-400 block mb-1">Категорія (опц.)</label>
                         <select id="map-category" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
                     </div>
                     <div>
-                        <label class="text-gray-400 block mb-1">Колонка опису (опц.)</label>
+                        <label class="text-gray-400 block mb-1">Примітки для моделі (опц.)</label>
                         <select id="map-description" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Тип: товар/послуга (опц.)</label>
+                        <select id="map-item-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Бренд / група (опц.)</label>
+                        <select id="map-brand" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Наявність (опц.)</label>
+                        <select id="map-availability" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Характеристики (опц.)</label>
+                        <select id="map-characteristics" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 block mb-1">Склад / комплект (опц.)</label>
+                        <select id="map-composition" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-gray-200"><option value="">— немає —</option></select>
                     </div>
                 </div>
                 <div class="bg-gray-950 border border-gray-800 rounded p-3 text-xs text-gray-400 font-mono overflow-auto max-h-48" id="table-preview"></div>
@@ -166,33 +186,33 @@
                 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
-                    <p class="font-medium text-gray-200">1. Редагування YAML</p>
-                    <p class="text-xs text-gray-500 mt-1">Ви відкриваєте `knowledge_template.yaml` на комп'ютері. Змінюєте ціни або додаєте нові питання.</p>
+                    <p class="font-medium text-gray-200">1. Зміст каталогу</p>
+                    <p class="text-xs text-gray-500 mt-1">Категорія — це верхній заголовок карти. Позиції всередині — товари, послуги, складні послуги, умови або прайсові рядки.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
-                    <p class="font-medium text-gray-200">2. Імпорт в систему</p>
-                    <p class="text-xs text-gray-500 mt-1">Файл завантажується тут. Система оновлює SQL таблиці (ServiceCategory, ServicePrice) та таблицю питань-відповідей (QaPair).</p>
+                    <p class="font-medium text-gray-200">2. Поля для моделі</p>
+                    <p class="text-xs text-gray-500 mt-1">Назва/тип/бренд/ціна/наявність/характеристики/склад/примітки формують глибокий блок, який route-модель читає після вибору зі змісту.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-gray-900"></div>
-                    <p class="font-medium text-purple-300">3. Роут «каталог»</p>
-                    <p class="text-xs text-gray-400 mt-1">Коли клієнт питає <i>«Скільки коштує заміна екрану?»</i>, Controller обирає роут каталогу, той формує запит і шукає у цій таблиці цін.</p>
+                    <p class="font-medium text-purple-300">3. Controller → route</p>
+                    <p class="text-xs text-gray-400 mt-1">Controller спершу бачить коротку карту заголовків. Якщо пункт є — відкриває глибший блок; якщо нема — не вигадує послугу/товар.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
-                    <p class="font-medium text-green-300">4. Точна Відповідь</p>
-                    <p class="text-xs text-gray-400 mt-1">Роут перевіряє й чистить знайдене, а стадія Answer формулює живу відповідь клієнту лише з підтверджених цін — без галюцинацій.</p>
+                    <p class="font-medium text-green-300">4. Очищений стан</p>
+                    <p class="text-xs text-gray-400 mt-1">Route повертає не готовий текст, а факти, умови, винятки, що ще спитати, коли відмовити, і стан теми для наступного повідомлення.</p>
                 </div>
             </div>
             
             <div class="mt-6 p-3 bg-gray-800/50 rounded-lg border border-gray-800">
                 <p class="text-xs text-gray-400">
-                    <span class="text-orange-400 font-semibold">Чому не Qdrant?</span> 
-                    Векторна база Qdrant погано підходить для <i>точних чисел</i>. Її ми використовуємо для складних інструкцій ("що робити якщо..."). А прайси зберігаємо в чіткій таблиці.
+                    <span class="text-orange-400 font-semibold">Логіка:</span>
+                    це не просто прайс. Це ієрархічна карта бізнесу: що існує, що входить, скільки коштує, які є умови, що модель має уточнити або не обіцяти.
                 </p>
             </div>
         </div>
@@ -279,7 +299,15 @@ async function previewTable() {
             sel.appendChild(o);
         });
     };
-    fill('map-name', false); fill('map-price', false); fill('map-category', true); fill('map-description', true);
+    fill('map-name', false);
+    fill('map-price', false);
+    fill('map-category', true);
+    fill('map-description', true);
+    fill('map-item-type', true);
+    fill('map-brand', true);
+    fill('map-availability', true);
+    fill('map-characteristics', true);
+    fill('map-composition', true);
 
     // Автовгадування колонок за типовими назвами
     const guess = (sel, names) => {
@@ -291,6 +319,11 @@ async function previewTable() {
     guess('map-price', ['цін', 'price', 'варт', 'грн']);
     guess('map-category', ['категор', 'category', 'розділ', 'тип']);
     guess('map-description', ['опис', 'приміт', 'description', 'note', 'comment']);
+    guess('map-item-type', ['item_type', 'тип позиції', 'тип товару', 'тип послуги']);
+    guess('map-brand', ['бренд', 'brand', 'виробник', 'марка']);
+    guess('map-availability', ['наяв', 'stock', 'availability', 'склад']);
+    guess('map-characteristics', ['характер', 'spec', 'параметр', 'сумісн']);
+    guess('map-composition', ['склад', 'комплект', 'composition', 'входить']);
 
     document.getElementById('table-preview').textContent =
         'Рядків у файлі: ' + data.total + '\n\n' + JSON.stringify(data.rows, null, 2);
@@ -312,6 +345,16 @@ async function commitTable() {
     if (catCol) fd.append('category_col', catCol);
     const descCol = document.getElementById('map-description').value;
     if (descCol) fd.append('description_col', descCol);
+    const itemTypeCol = document.getElementById('map-item-type').value;
+    if (itemTypeCol) fd.append('item_type_col', itemTypeCol);
+    const brandCol = document.getElementById('map-brand').value;
+    if (brandCol) fd.append('brand_col', brandCol);
+    const availabilityCol = document.getElementById('map-availability').value;
+    if (availabilityCol) fd.append('availability_col', availabilityCol);
+    const characteristicsCol = document.getElementById('map-characteristics').value;
+    if (characteristicsCol) fd.append('characteristics_col', characteristicsCol);
+    const compositionCol = document.getElementById('map-composition').value;
+    if (compositionCol) fd.append('composition_col', compositionCol);
 
     const btn = document.getElementById('btn-commit-table');
     btn.disabled = true; btn.innerText = 'Імпортую...';
