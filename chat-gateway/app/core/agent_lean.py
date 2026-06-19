@@ -42,6 +42,14 @@ from app.core.prompt_defaults import DEFAULT_UNIVERSAL_PERSONA
 
 logger = logging.getLogger(__name__)
 
+_CONDUCT_PRECHECK_RE = re.compile(
+    r"(?iu)(?:"
+    r"\b(?:нах(?:уй|ер|рін|рен)|хуй|ху[яєею]|пизд|пізд|єба|еба|йоб|їб|бляд|сука)\w*\b"
+    r"|(?:іди|йди|пішов|пішла|пішли)\s+на\s*х"
+    r"|\b(?:дур(?:ак|епа)|ідіот|дебіл|тварина)\b"
+    r")"
+)
+
 CONTROLLER_OUTPUT_SCHEMA = {
     "route": "<route code or answer>",
     "question": "",
@@ -347,9 +355,15 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         warn_limit = max(1, int(meta.get("conduct_warnings", 2)))
     except (ValueError, TypeError):
         warn_limit = 2
+    conduct_warn = False
+    if conduct_on and _conduct_precheck(text):
+        conduct_warn = True
+        emit("CONDUCT", "Швидкий скан", "очевидна лайка або пряма образа")
     if conduct_on and conduct_prompt:
         emit("CONDUCT", "Вхід у модель", _fmt_msgs([{"role": "system", "content": conduct_prompt}, {"role": "user", "content": text}]))
-    if conduct_on and conduct_prompt and await _judge_conduct(text, conduct_prompt, model, base_url, api_key) == "warn":
+    if conduct_on and conduct_prompt and not conduct_warn:
+        conduct_warn = await _judge_conduct(text, conduct_prompt, model, base_url, api_key) == "warn"
+    if conduct_on and conduct_warn:
         try:
             cnt = int(memory.get("_warn_count") or 0) + 1
         except (ValueError, TypeError):
@@ -521,6 +535,15 @@ def _sanitize_query(q: str) -> str:
         if len(out) >= 8:
             break
     return " ".join(out)[:120]
+
+
+def _conduct_precheck(text: str) -> bool:
+    """Cheap safety net before the LLM conduct route.
+
+    The LLM still owns nuanced tone decisions, but obvious obscene abuse must
+    not slip through when a local model returns an empty or malformed answer.
+    """
+    return bool(_CONDUCT_PRECHECK_RE.search(text or ""))
 
 
 async def _judge_conduct(text, prompt, model, base_url, api_key):

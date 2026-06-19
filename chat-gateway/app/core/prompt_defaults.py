@@ -23,6 +23,7 @@ Your job is to pause after every client message and decide whether the chat mode
 
 Core method:
 - First understand the current client goal: greeting, abuse, availability/scope, own price, external part/item price, contacts/hours/payment, policy/process, product/service details, or ordinary follow-up.
+- If the client names a physical object/device/product/service with repair/sale/availability wording, treat it as an availability/scope question and choose catalog. The route will classify the item type and compare it with category headings.
 - For availability/scope questions ("do you repair/sell/handle X?"), choose the catalog route. Do not answer yes/no yourself. The catalog route must compare X against the category headings and return confirmed/unknown.
 - Use the CONTENT MAP only to choose the likely owning route/category. It is not final evidence for prices, brands, models, stock, characteristics or exact service details.
 - If the map clearly does not contain the requested product/service, still use the owning route for scope when available so it can return a clean unknown/not-listed state. Do not invent an intake flow.
@@ -32,6 +33,7 @@ Core method:
 
 Rules:
 - Copy subject, identifier, operation and qualifiers only from the conversation or the content map. Never invent a category, model, component, price, restriction or diagnosis.
+- Preserve noisy/typo item words in subject when the intended item is not obvious. Do not silently convert an unclear or unlisted object into the nearest known category.
 - Do not build long search sentences. Pass a compact subject plus requested fact. For scope, pass the client's item type. For price/detail, pass the selected category if known plus the concrete service/product words from the client.
 - Do not treat contact/address facts as permission to accept an unverified item/service.
 - Do not use web/external routes merely because a brand/model is unusual when the generic item type is already clear.
@@ -49,6 +51,7 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - If a route returned notes, conditions, exclusions, missing details, state, answer_instruction, fallback or reply_hint, naturally use them in the tenant style.
 - Treat route results as binding evidence. A result with relevant:false, sufficient:false, match_status:"unknown", match_status:"denied", empty facts, validation_failed or fallback is NOT permission to answer confidently.
 - If the client asks whether the tenant handles/repairs/sells a newly named item and the content map/deep route did not confirm it, explicitly do not confirm it. Say in tenant style that this item/service is not listed or not confirmed for this tenant. Do not continue intake as if it is accepted.
+- If the route says the item wording is unclear, noisy or possibly mistyped, ask one short clarification about what exact item/device the client means. Do not ask for photo/link unless a route specifically says that is needed.
 - If the client asks where/when/how to bring, send or submit a named item/service, contacts are not enough. Before giving address/hours as an intake instruction, availability/scope for that named item/service must be verified in route facts or state. If not verified, say that this item/service is not confirmed/listed for this tenant and do not provide drop-off instructions as if accepted.
 - If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification only when it can change the next search; otherwise say it needs confirmation.
 - Do not say the tenant handles/repairs/sells a newly named item unless a verified route fact or business rule confirms it. If the route was not checked and the current chat goal is business scope, say it needs checking rather than assuming.
@@ -62,7 +65,7 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 LEAN_CONDUCT_PROMPT = """You are the conduct decision route. Classify only the current client message, using common sense like a human operator. Return one label: normal or warn.
 - normal: real questions, disagreement, complaints, criticism or impatience without obscene abuse.
 - warn: any obscene profanity, direct personal insult, targeted degradation, threat, command to go away with obscene wording, or deliberately abusive spam.
-- Examples by meaning: "це дорого" = normal; "ви охреніли з ціною?" = warn; "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant = warn.
+- Examples by meaning: "це дорого" = normal; "ви охреніли з ціною?" = warn; "ти дурак", "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant = warn.
 A short typo or one confused message is normal. When genuinely uncertain, return normal."""
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
@@ -85,8 +88,8 @@ ROUTE_PROMPTS = {
     "catalog": {
         "tool_name": "search_catalog",
         "source_description": "Internal catalog. SOURCE CONTENT MAP is only category headings. Use it for scope/category selection only. Detailed item rows and prices are opened by source query after the category or concrete service/product words are chosen. This source owns tenant scope/availability and tenant catalog prices. It does not own contacts, policies outside catalog notes, or third-party market offers.",
-        "query_prompt": "Use a two-step mindset. For scope/availability, compare the client's item type only to SOURCE CONTENT MAP category headings and return the client's normalized item/category words, not prices or brands. For price/details, use the selected category when clear plus the concrete service/product words from the client. Keep 2-7 keywords. Do not add guessed components, diagnoses, brands, variants, symptoms, or sentence-style questions.",
-        "result_validation_prompt": "Validate by meaning, not shared letters. For scope/availability, confirmed requires a category heading or returned category/item that explicitly covers the same product/service type. Broad phrases like household appliances do not automatically cover an unlisted large appliance or unrelated item. If the category list/deep result does not contain the item/service, return relevant:false, sufficient:false, match_status unknown, no facts, and answer_instruction that the final assistant must say this item/service is not listed/confirmed and must not offer intake. For tenant price, confirmed requires a matching item/operation with price_or_condition. Return only the small facts needed for the client's current question.",
+        "query_prompt": "Use a two-step mindset. For scope/availability, first identify the client's item/device/product type from the words, then compare only to SOURCE CONTENT MAP category headings. Return the client's normalized item/category words, not prices, brands or symptoms. If the word is noisy, misspelled, merged with a particle, or could be an unlisted object, keep the original item words instead of replacing them with a guessed category. For price/details, use the selected category when clear plus the concrete service/product words from the client. Keep 2-7 keywords. Do not add guessed components, diagnoses, brands, variants, symptoms, or sentence-style questions.",
+        "result_validation_prompt": "Validate by meaning, not shared letters. For scope/availability, first classify the client subject as an item/device/product/service type, then compare that type with category headings and returned category/item names. Confirmed requires an explicit semantic cover of the same type. Typos and spacing errors are acceptable only when the intended listed type is clear. If the subject is unclear, noisy, industrial/construction equipment, or not semantically covered by headings/results, return relevant:false, sufficient:false, match_status unknown, no facts, and answer_instruction that the final assistant must not confirm service; if the wording itself is unclear, ask the client to clarify the exact item, otherwise say the item/service is not listed/confirmed. Broad phrases like household appliances do not automatically cover an unlisted large appliance or unrelated item. For tenant price, confirmed requires a matching item/operation with price_or_condition. Return only the small facts needed for the client's current question.",
     },
     "web_search": {
         "tool_name": "web_research",
