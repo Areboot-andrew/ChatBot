@@ -64,48 +64,30 @@ def _ua_fallback(settings) -> str:
     """A real Ukrainian fallback that never returns the literal 'None' even if the
     tenant's fallback_text got corrupted in the DB."""
     ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
-    stale_defaults = {
-        "вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом.",
-        "вибачте, сталася технічна помилка.",
-        "технічна заминка, спробуйте ще раз.",
-        "service temporarily unavailable.",
-    }
-    if ft.lower() in ("none", "null", "undefined", "nil", "-") or ft.lower() in stale_defaults:
+    if ft.lower() in ("none", "null", "undefined", "nil", "-"):
         ft = ""
-    if ft:
-        return ft
-
-    meta = (settings.meta or {}) if settings else {}
-    business_info = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else {}
-    phone = str((business_info or {}).get("phone") or "").strip()
-    msg = "Зараз технічна заминка з відповіддю. Напишіть ще раз за хвилину"
-    if phone:
-        msg += f" або подзвоніть: {phone}"
-    return msg + "."
+    return ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
 
 
 def _decision_from_raw(raw: str):
     """Parse the controller decision tolerantly. Small models (llama) sometimes
     emit slightly broken JSON (stray comma, extra quote). Returns (decision,
-    recovered, usable): if strict JSON fails we still pull the route code + key
-    fields by regex instead of dropping the whole routing decision. If neither
-    JSON nor a route field exists, the controller output is unusable and a
-    structural fallback may rescue the turn."""
+    recovered): if strict JSON fails we still pull the route code + key fields by
+    regex instead of dropping the whole routing decision."""
     raw = raw or ""
     try:
-        parsed = _extract_json(raw)
-        return parsed, False, bool(str(parsed.get("route") or parsed.get("action") or "").strip())
+        return _extract_json(raw), False
     except Exception:
         pass
     m = re.search(r'"route"\s*:\s*"?([a-zA-Z_][\w]*)"?', raw)
     if not m:
-        return {"route": "answer"}, False, False
+        return {"route": "answer"}, False
     d = {"route": m.group(1)}
     for k in ("question", "requested_fact", "subject", "identifier", "operation"):
         mm = re.search(r'"%s"\s*:\s*"([^"]*)"' % k, raw)
         if mm:
             d[k] = mm.group(1)
-    return d, True, bool(str(d.get("route") or "").strip())
+    return d, True
 
 
 def _text_blob(text: str, history: list | None = None) -> str:
@@ -255,23 +237,6 @@ def _conduct_warning_fallback(warning_count: int, warning_limit: int) -> str:
     if warning_limit <= 1:
         return "Я не продовжуватиму розмову в такому тоні."
     return "Я не продовжуватиму розмову в такому тоні. Наступна пряма образа — закрию чат."
-
-
-def _needs_business_contacts(text: str, route_results: list[str], facts: list[str]) -> bool:
-    """Only attach the tenant contact card when the current turn needs it."""
-    current = (text or "").lower()
-    if re.search(
-        r"(?iu)\b(адрес\w*|де\s+ви|куди|графік|коли\s+працю|години|"
-        r"номер|контакт\w*|ваш\s+телефон|телефон\s+для\s+зв'?язку|"
-        r"подзвон|зателефон|оплата|заплатити|нова\s+пошта|відправити|"
-        r"доставка|гарантія)\b",
-        current,
-    ):
-        return True
-    joined_routes = "\n".join(route_results).lower()
-    if '"route": "business_info"' in joined_routes:
-        return True
-    return any("бізнес-інфо" in f.lower() or "business_info" in f.lower() for f in facts)
 
 
 def _recent(history: list, text: str, n: int = 8) -> list:
@@ -432,10 +397,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
     syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), {})
     serper_key = meta.get("serper_api_key")
-    # One client message should open at most one knowledge source. Multi-route
-    # planning caused the assistant to dig through unrelated bases; the next
-    # client turn can request the next missing fact naturally.
-    max_iter = 1
+    try:
+        max_iter = min(3, max(1, int(meta.get("agent_max_iterations", 3))))
+    except (ValueError, TypeError):
+        max_iter = 3
 
     routes = await _load_routes(tenant_id, db)
     source_map = _source_map(routes)
@@ -498,7 +463,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
-        decision, recovered, controller_usable = _decision_from_raw(raw)
+        decision, recovered = _decision_from_raw(raw)
         if recovered:
             emit(f"DECIDE #{step}", "JSON виправлено", "Контролер дав кривий JSON — route витягнуто толерантним парсером.")
         elif not str(raw or "").strip():
@@ -506,17 +471,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             controller_status_notes.append(
                 "The controller returned no usable decision this turn, so no new business fact was verified by a route."
             )
-        elif not controller_usable:
-            emit(f"DECIDE #{step}", "Непридатне рішення", "Контролер не повернув JSON route/action, тому можна застосувати структурний fallback.")
-            controller_status_notes.append(
-                "The controller returned prose or malformed output without a usable route/action, so no new business fact was verified by that controller decision."
-            )
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
         fallback_on = str(meta.get("controller_structural_fallback", "1")).strip().lower() in ("1", "true", "on", "yes")
         if fallback_on:
             fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
-            invalid_pick = pick not in routes and pick not in ("answer", "")
-            if fallback_decision and (not controller_usable or invalid_pick):
+            if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
                 decision = fallback_decision
                 pick = str(decision.get("route") or "answer").strip()
                 emit(
@@ -585,8 +544,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             + "\n".join(f"- {note}" for note in controller_status_notes)
             + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Also do not claim the item is absent from the catalog merely because the controller failed; say it needs checking or ask the one detail needed to check it."
         )
+    # The business's own contact card — tiny, always available so the model can
+    # never invent an address/hours/phone even if routing missed this turn.
     biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
-    if biz and _needs_business_contacts(text, route_results, facts):
+    if biz:
         biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
         if biz_lines:
             ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "

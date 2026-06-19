@@ -114,8 +114,7 @@ async def dashboard(
                 if models:
                     loaded_models = ", ".join(models)
                 else:
-                    lmstudio_status = "ERROR"
-                    loaded_models = "Моделі не завантажені — відкрийте LM Studio і натисніть Load model"
+                    loaded_models = "Моделі не завантажені"
     except Exception:
         loaded_models = "Недоступно (Check URL/Network)"
 
@@ -227,12 +226,11 @@ async def create_tenant(
     default_settings = BotSetting(
         tenant_id=new_tenant.id,
         system_prompt=DEFAULT_UNIVERSAL_PERSONA,
-        fallback_text="Зараз технічна заминка з відповіддю. Напишіть ще раз за хвилину.",
         llm_model="gemma-4",
         temperature="0.7",
         max_tokens="1024",
         meta={
-            "agent_max_iterations": "1",
+            "agent_max_iterations": "3",
             "controller_structural_fallback": "1",
             "ban_message": "Вітаю, вас забанено.",
             "conduct_enabled": "1",
@@ -836,7 +834,7 @@ async def update_settings(
     escalation_policy: str = Form("handoff"),
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
-    agent_max_iterations: str = Form("1"),
+    agent_max_iterations: str = Form("3"),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),
     price_search_urls: str = Form(""),
@@ -1959,10 +1957,7 @@ async def test_llm_connection_api(
         response = await chat(messages, model=model, temperature=0.1, max_tokens=10, base_url=base_url, api_key=api_key, raise_error=True)
         return {"status": "success", "message": f"Успішне підключення! Відповідь моделі: {response}"}
     except Exception as e:
-        msg = str(e)
-        if "No models loaded" in msg:
-            msg = "LM Studio працює, але модель не завантажена. Відкрийте LM Studio → Developer/Models → Load model або виконайте lms load."
-        return {"status": "error", "message": f"Помилка: {type(e).__name__} - {msg}"}
+        return {"status": "error", "message": f"Помилка: {type(e).__name__} - {str(e)}"}
 
 class FetchModelsRequest(BaseModel):
     base_url: str
