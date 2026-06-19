@@ -1,6 +1,6 @@
 """Refresh prompts so unknown scope is never confirmed.
 
-Revision ID: b7c8d9e0f1a2
+Revision ID: 19f0a1b2c3d4
 Revises: a6b7c8d9e0f1
 Create Date: 2026-06-19 13:00:00.000000
 """
@@ -21,7 +21,7 @@ from app.core.prompt_defaults import (
 )
 
 
-revision = "b7c8d9e0f1a2"
+revision = "19f0a1b2c3d4"
 down_revision = "a6b7c8d9e0f1"
 branch_labels = None
 depends_on = None
