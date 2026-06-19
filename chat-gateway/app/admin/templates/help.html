@@ -6,7 +6,7 @@
 
   <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
     <h2 class="text-lg font-semibold text-gray-100 mb-3">Як бот думає над повідомленням</h2>
-    <p class="text-sm text-gray-400 mb-3">У режимі <b>Lean</b> кожне повідомлення проходить кілька окремих викликів LLM, кожен зі своїм промптом. Етапи (видно в Тест-чаті):</p>
+    <p class="text-sm text-gray-400 mb-3">Кожне повідомлення проходить єдиний pipeline з кількома ізольованими викликами LLM, кожен зі своїм промптом. Етапи видно в Тест-чаті:</p>
     <ol class="list-decimal list-inside text-sm text-gray-300 space-y-1">
       <li><b>Поведінка</b> — перевірка на грубість: образа → попередження, повтор → бан (вмикається в Налаштуваннях).</li>
       <li><b>Controller</b> — модель вирішує: відповісти зараз чи звернутись до роута за потрібним фактом.</li>
@@ -35,7 +35,7 @@
     <h2 class="text-lg font-semibold text-gray-100 mb-3">Де що налаштовувати</h2>
     <table class="w-full text-sm text-left text-gray-300">
       <tbody class="divide-y divide-gray-800">
-        <tr><td class="py-2 pr-4 align-top">Тон, персона, бізнес-правила, маркетинг, режим агента, інструменти, Serper-ключ</td><td class="py-2">⚙️ <b>Налаштування Бота</b></td></tr>
+        <tr><td class="py-2 pr-4 align-top">Тон, персона, бізнес-правила, маркетинг, промпти pipeline, Serper-ключ</td><td class="py-2">⚙️ <b>Налаштування Бота</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Контакти, години, оплата (бот тягне на запит клієнта)</td><td class="py-2">📚 <b>База знань → Бізнес-факти</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Записи знань і документи</td><td class="py-2">📚 <b>База знань</b></td></tr>
         <tr><td class="py-2 pr-4 align-top">Каталог і прайси (категорії з описами, товари/послуги з описами)</td><td class="py-2">📋 <b>Каталог і прайси</b></td></tr>
@@ -57,12 +57,12 @@
         <p class="text-gray-500 text-xs mt-1">→ search_catalog(«чистка ноутбука») → ціна з прайсу + «точно після безкоштовної діагностики».</p>
       </div>
       <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
-        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«ремонтуєте міксери?»</span></p>
-        <p class="text-gray-500 text-xs mt-1">→ каталог → нема прямого → база знань → сайт/інтернет (Довірені сайти). Якщо підтвердилось, що робите дрібну побутову — «так, привозьте на діагностику», а не вгадане «ні».</p>
+        <p class="text-gray-400">Клієнт: <span class="text-gray-200">«холодильник в ремонт здати хочу»</span></p>
+        <p class="text-gray-500 text-xs mt-1">→ controller бачить складений запит: спершу перевірка scope у змісті каталогу. Якщо холодильники не підтверджені, бот не дає адресу як прийом у ремонт.</p>
       </div>
       <div class="bg-gray-950 border border-gray-800 rounded-lg p-3">
         <p class="text-gray-400">Клієнт: <span class="text-gray-200">«які у вас години роботи»</span></p>
-        <p class="text-gray-500 text-xs mt-1">→ get_business_info(hours) → відповідь з ваших Бізнес-фактів (або із сайту texno.plus, якщо поле порожнє).</p>
+        <p class="text-gray-500 text-xs mt-1">→ get_business_info(hours) → відповідь тільки з ваших Бізнес-фактів. Якщо поле порожнє, бот не вигадує графік.</p>
       </div>
     </div>
   </div>

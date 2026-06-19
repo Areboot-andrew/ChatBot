@@ -29,7 +29,7 @@ from sqlalchemy import select
 
 from app.core.llm import chat
 from app.config import normalize_lmstudio_url
-from app.core.agent import (
+from app.core.route_tools import (
     _tool_list_categories,
     _tool_search_catalog,
     _tool_search_knowledge,

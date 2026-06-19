@@ -872,11 +872,12 @@ async def update_settings(
             meta_data["lean_conduct_prompt"] = lean_conduct_prompt.strip()
             meta_data["lean_warning_prompt"] = lean_warning_prompt.strip()
 
-            # drop legacy fields no engine reads anymore (moved into persona / routes)
+            # drop legacy fields no active pipeline stage reads anymore
             for _k in ("price_triggers", "capability_triggers", "business_info_triggers", "brand_words", "part_words",
                        "agent_decision_rules", "answer_style", "intake_policy", "conduct_policy", "parts_instruction",
                        "tpl_evaluation_rules", "web_research_mode", "parts_sales_mode", "external_part_price_mode",
                        "fallback_sites", "tpl_escalate_instruction",
+                       "lean_query_prompt", "lean_validator_prompt",
                        "enabled_tools", "router_json_mode"):
                 meta_data.pop(_k, None)
             settings.meta = meta_data
@@ -889,8 +890,8 @@ async def update_settings(
 
 
 # --- TENANT CONFIG EXPORT / IMPORT (all prompts & routing in one file) ---
-# Editable fields exported/imported as one JSON file. Engine mechanics (action
-# format, loop) are NOT here — they stay in code.
+# Editable fields exported/imported as one JSON file. Pipeline mechanics stay in
+# code; model behavior stays in these prompt fields and route prompt fields.
 _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "escalation_prompt", "escalation_policy", "fallback_text",
                    "llm_model", "temperature", "max_tokens",
@@ -1771,7 +1772,7 @@ async def logic_create(
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
         tool = tool_name.strip()
-        # Only fields the lean engine actually uses are stored.
+        # Only fields the active pipeline actually uses are stored.
         meta_data = {
             "target_url": target_url,
             "tool_name": tool,
@@ -1856,7 +1857,7 @@ async def logic_edit(
             meta_data["source_description"] = source_description.strip()
             meta_data["query_prompt"] = query_prompt.strip()
             meta_data["result_validation_prompt"] = result_validation_prompt.strip()
-            # drop legacy fields the lean engine never reads
+            # drop legacy route fields the active pipeline never reads
             for _dead in ("reasoning", "next_step_prompt", "no_result_prompt", "fallback_action", "target_category"):
                 meta_data.pop(_dead, None)
             logic.meta = meta_data

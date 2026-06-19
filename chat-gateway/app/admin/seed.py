@@ -188,11 +188,26 @@ async def seed_default_prompts(db):
         "lean_conduct_prompt": LEAN_CONDUCT_PROMPT,
         "lean_warning_prompt": LEAN_WARNING_PROMPT,
     }
+    legacy_keys = (
+        "price_triggers", "capability_triggers", "business_info_triggers",
+        "brand_words", "part_words", "agent_decision_rules", "answer_style",
+        "intake_policy", "conduct_policy", "parts_instruction",
+        "tpl_evaluation_rules", "web_research_mode", "parts_sales_mode",
+        "external_part_price_mode", "fallback_sites", "tpl_escalate_instruction",
+        "enabled_tools", "router_json_mode", "lean_query_prompt",
+        "lean_validator_prompt", "tpl_business_header", "tpl_marketing_header",
+        "tpl_escalation_header", "tpl_qa_header", "tpl_rag_header",
+        "tpl_footer", "tpl_router_rules",
+    )
     res = await db.execute(_select(BotSetting))
     changed = 0
     for s in res.scalars().all():
         meta = dict(s.meta or {})
         touched = False
+        for k in legacy_keys:
+            if k in meta:
+                meta.pop(k, None)
+                touched = True
         for k, v in defaults.items():
             if not (meta.get(k) or "").strip():
                 meta[k] = v

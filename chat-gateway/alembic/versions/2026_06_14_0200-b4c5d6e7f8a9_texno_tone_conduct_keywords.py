@@ -18,7 +18,7 @@ from app.core.prompt_defaults import (
     DEFAULT_PARTS_INSTRUCTION,
     ROUTE_PROMPTS,
 )
-from app.core.agent import _CATALOG_SYNONYMS
+from app.core.route_tools import _CATALOG_SYNONYMS
 
 revision: str = "b4c5d6e7f8a9"
 down_revision: Union[str, None] = "a3b4c5d6e7f8"

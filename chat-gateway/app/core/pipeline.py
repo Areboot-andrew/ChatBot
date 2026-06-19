@@ -22,7 +22,7 @@ async def process_message_pipeline(
     """
     Core pipeline to process an incoming message and return the LLM response.
 
-    Runtime engine is the prompt-driven Lean isolated-route controller.
+    Runtime is the prompt-driven isolated-route conversation pipeline.
 
     `trace` is an optional callback(step, status, details, duration) used by the
     admin sandbox to visualize every step. The same pipeline serves all channels.
