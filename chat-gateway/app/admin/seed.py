@@ -1,5 +1,4 @@
 import logging
-import yaml
 from sqlalchemy.future import select
 from app.database import async_session_maker
 from app.models.auth import User
@@ -33,66 +32,10 @@ async def seed_admin():
             await db.commit()
             await db.refresh(tenant)
 
-        # Seed Prices from YAML if empty
-        from app.models.services import ServiceCategory, ServicePrice
-        from app.models.knowledge import QaPair
-        res_c = await db.execute(select(ServiceCategory).where(ServiceCategory.tenant_id == tenant.id))
-        if not res_c.scalars().first():
-            logger.info("Database is empty. Seeding test data from knowledge_template.yaml...")
-            try:
-                with open("/app/knowledge_template.yaml", "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f)
-                from app.core.texno_price_catalog import TEXNO_SERVICE_PRICES
-                for cat_data in data.get("categories", []):
-                    expanded = TEXNO_SERVICE_PRICES.get(cat_data.get("slug"))
-                    if expanded:
-                        cat_data["services"] = [
-                            {"name": name, "price": price} for name, price in expanded
-                        ]
-                    
-                for cat_data in data.get("categories", []):
-                    cat = ServiceCategory(tenant_id=tenant.id, slug=cat_data["slug"])
-                    db.add(cat)
-                    cat.title = cat_data.get("title", "")
-                    cat.description = cat_data.get("description", "")
-                    cat.meta = {
-                        "detailed_description": cat_data.get("detailed_description", ""),
-                        "problems": cat_data.get("problems", [])
-                    }
-                    await db.commit()
-                    await db.refresh(cat)
-                    
-                    for price_data in cat_data.get("services", []):
-                        p = ServicePrice(
-                            tenant_id=tenant.id,
-                            category_id=cat.id,
-                            name=price_data.get("name", ""),
-                            price=str(price_data.get("price", ""))
-                        )
-                        db.add(p)
-                        
-                    for faq_data in cat_data.get("faqs", []):
-                        q = QaPair(
-                            tenant_id=tenant.id,
-                            question=faq_data.get("question", ""),
-                            answer=faq_data.get("answer", ""),
-                            category=f"FAQ_{cat.slug}"
-                        )
-                        db.add(q)
-                        
-                for faq_data in data.get("global_faq", []):
-                    q = QaPair(
-                        tenant_id=tenant.id,
-                        question=faq_data.get("question", ""),
-                        answer=faq_data.get("answer", ""),
-                        category="FAQ_Global"
-                    )
-                    db.add(q)
-                    
-                await db.commit()
-                logger.info("Test data seeded successfully!")
-            except Exception as e:
-                logger.error(f"Failed to seed data: {e}")
+        # Do not auto-seed tenant catalog rows here. Catalog categories,
+        # concrete product/service rows, prices, stock and notes belong to the
+        # admin panel or an explicit import. Autoloading old demo data made the
+        # route model see services the tenant did not actually configure.
 
         # Seed Intents (KnowledgeType) if empty
         from app.models.tenant import KnowledgeType, BotSetting

@@ -20,6 +20,23 @@ from app.core.llm import chat
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/admin/templates")
 
+SUPPORTED_ROUTE_TOOLS = {
+    "search_catalog",
+    "list_categories",
+    "search_knowledge",
+    "get_business_info",
+    "web_research",
+    "search_parts",
+    "open_url",
+    "escalate",
+}
+
+
+def _clean_route_tool(tool_name: str) -> str:
+    tool = (tool_name or "").strip()
+    return tool if tool in SUPPORTED_ROUTE_TOOLS else ""
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html", context={"request": request})
@@ -999,12 +1016,17 @@ async def import_config(
         route.intent_patterns = list(route_data.get("intent_patterns") or [])
         route.enabled = bool(route_data.get("enabled", True))
         imported_meta = dict(route_data.get("meta") or {})
-        route.handler = str(route_data.get("handler") or imported_meta.get("tool_name") or "route")
+        tool = _clean_route_tool(str(imported_meta.get("tool_name") or route_data.get("handler") or ""))
+        route.handler = tool or "route"
         route.meta = {
             key: imported_meta[key]
             for key in _CONFIG_ROUTE_META_KEYS
             if key in imported_meta
         }
+        if tool:
+            route.meta["tool_name"] = tool
+        elif "tool_name" in route.meta:
+            route.meta.pop("tool_name", None)
         flag_modified(route, "meta")
     await db.commit()
     return RedirectResponse(url="/admin/settings?ok=imported", status_code=303)
@@ -1816,7 +1838,7 @@ async def logic_create(
 ):
     if tenant_id:
         patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-        tool = tool_name.strip()
+        tool = _clean_route_tool(tool_name)
         # Only fields the active pipeline actually uses are stored.
         meta_data = {
             "target_url": target_url,
@@ -1893,7 +1915,7 @@ async def logic_edit(
             logic.label = label
             logic.code = code
             logic.intent_patterns = [p.strip() for p in intent_patterns.split(",")] if intent_patterns else []
-            tool = tool_name.strip()
+            tool = _clean_route_tool(tool_name)
             logic.handler = tool or "route"
             logic.enabled = enabled
             meta_data = logic.meta if logic.meta else {}

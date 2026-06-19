@@ -254,6 +254,10 @@ def _source_map(routes: dict) -> str:
 async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key, requested_fact=""):
     tool = route.get("tool_name") or ""
     q = (query or "").strip()
+    fact = (requested_fact or "").strip().lower()
+    scope_only = fact in {"availability", "scope", "scope_check", "наявність", "наличие"}
+    if tool == "search_catalog" and scope_only:
+        return await _tool_list_categories(tenant_id, db), tool
     if not q and tool != "get_business_info":
         return "", tool
     if tool == "search_catalog":
