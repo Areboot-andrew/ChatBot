@@ -95,6 +95,59 @@ def _text_blob(text: str, history: list | None = None) -> str:
     return f"{recent} {text or ''}".lower()
 
 
+def _recent_user_context(text: str, history: list | None, limit: int = 4) -> str:
+    """Compact topic memory for fallback routing only.
+
+    When the controller fails on follow-ups like "так хоч орієнтовно ціну",
+    the current sentence alone has no subject. Use only recent user words, not
+    assistant replies or route data, so the fallback still does not invent facts.
+    """
+    skip = re.compile(r"(?iu)^\s*(привіт|добрий\s+день|доброго|ок|так|ні|дякую|спасибі)\W*$")
+    chunks = []
+    for h in (history or [])[-8:]:
+        if h.get("role") != "user":
+            continue
+        content = str(h.get("content", "")).strip()
+        if content and not skip.match(content):
+            chunks.append(content)
+    current = (text or "").strip()
+    if current and (not chunks or chunks[-1] != current):
+        chunks.append(current)
+    return " ".join(chunks[-limit:])[:260]
+
+
+def _looks_like_scope_followup(text: str, history: list | None) -> bool:
+    """Catch human follow-ups such as "а телефони??".
+
+    The client often omits "ремонтуєте/робите" after the first scope question.
+    If the controller returns empty, a short noun-like question must be checked
+    in catalog instead of letting the answer model guess yes/no.
+    """
+    current = (text or "").strip().lower()
+    if not current or len(current) > 90:
+        return False
+    if re.fullmatch(r"(?iu)[\W_]*(привіт|добрий\s+день|доброго|ок|так|ні|дякую|спасибі|ага|угу)[\W_]*", current):
+        return False
+    tokens = [
+        w for w in re.findall(r"(?iu)[a-zа-щьюяіїєґ0-9]{3,}", current)
+        if w not in {"мені", "вам", "вас", "таке", "його", "вона", "вони", "ціна", "скільки"}
+    ]
+    if not tokens:
+        return False
+    if re.search(r"(?iu)\b(не\s+працю|не\s+вмика|не\s+заряд|розби|злама|впав|залив|вода|дим|іскр|шум|тече)\w*", current):
+        return True
+    if re.search(r"(?iu)\b(в|на)\s+ремонт\b|\bремонт\??\s*$", current):
+        return True
+    if "?" in current and (current.startswith(("а ", "і ", "и ", "та ", "ще ")) or len(tokens) <= 4):
+        return True
+    recent_user = " ".join(
+        str(h.get("content", "")).lower()
+        for h in (history or [])[-4:]
+        if h.get("role") == "user"
+    )
+    return bool(re.search(r"(?iu)\b(робите|ремонтуєте|берете|приймаєте|займаєтесь)\b|\?", recent_user)) and len(tokens) <= 4
+
+
 def _fallback_route_decision(text: str, history: list | None, routes: dict):
     """Structural safety net when the controller returns prose/empty output.
 
@@ -104,6 +157,7 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
     policy/process knowledge.
     """
     current = (text or "").strip()
+    current_l = current.lower()
     blob = _text_blob(text, history)
 
     def has_route(code: str) -> bool:
@@ -112,7 +166,8 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
     scope_re = (
         r"\b(ремонтуєте|ремонтуємо|робите|берете|приймаєте|займаєтесь|"
         r"обслуговуєте|чините|можна\s+принести|можна\s+привезти)\b|"
-        r"що\s+(ви\s+)?(ремонтуєте|робите|берете|обслуговуєте|приймаєте)"
+        r"що\s+(ви\s+)?(ремонтуєте|робите|берете|обслуговуєте|приймаєте)|"
+        r"\b(в|на)\s+ремонт\b"
     )
     active_scope_re = (
         r"що\s+(ви\s+)?(ремонтуєте|робите|берете|обслуговуєте|приймаєте)|"
@@ -120,12 +175,23 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
     )
     price_re = r"\b(ціна|вартість|скільки\s+коштує|по\s+чому|прайс|орієнтовно)\b"
     business_re = (
-        r"\b(адрес\w*|де\s+ви|графік|коли\s+працю|години|телефон|номер|"
+        r"\b(адрес\w*|де\s+ви|графік|коли\s+працю|години|номер|контакт\w*|"
+        r"ваш\s+телефон|телефон\s+для\s+зв'?язку|подзвон|зателефон|"
         r"оплата|заплатити|нова\s+пошта|відправити|доставка|гарантія)\b"
     )
     qa_re = r"\b(як\s+відбувається|умови|правила|процес|запчастини\s+окремо|гарантійний)\b"
 
-    if has_route("business_info") and re.search(business_re, blob):
+    if has_route("catalog") and re.search(price_re, current_l):
+        return {
+            "route": "catalog",
+            "question": current,
+            "requested_fact": "price",
+            "subject": _recent_user_context(text, history),
+            "operation": "tenant_price_lookup",
+            "identifier": "",
+            "qualifiers": {},
+        }, "price keywords"
+    if has_route("business_info") and re.search(business_re, current_l):
         return {
             "route": "business_info",
             "question": current,
@@ -135,17 +201,11 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
             "identifier": "",
             "qualifiers": {},
         }, "business field keywords"
-    if has_route("catalog") and re.search(price_re, blob):
-        return {
-            "route": "catalog",
-            "question": current,
-            "requested_fact": "price",
-            "subject": current,
-            "operation": "tenant_price_lookup",
-            "identifier": "",
-            "qualifiers": {},
-        }, "price keywords"
-    if has_route("catalog") and (re.search(scope_re, blob) or re.search(active_scope_re, blob)):
+    if has_route("catalog") and (
+        re.search(scope_re, blob)
+        or re.search(active_scope_re, blob)
+        or _looks_like_scope_followup(text, history)
+    ):
         return {
             "route": "catalog",
             "question": current,
@@ -155,7 +215,7 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
             "identifier": "",
             "qualifiers": {},
         }, "scope/availability context"
-    if has_route("qa") and re.search(qa_re, blob):
+    if has_route("qa") and re.search(qa_re, current_l):
         return {
             "route": "qa",
             "question": current,
@@ -171,6 +231,12 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
 def _fmt_msgs(messages) -> str:
     """Render the exact messages sent to the model for the live trace."""
     return "\n\n".join(f"[{m.get('role', '?').upper()}]\n{m.get('content', '')}" for m in messages)
+
+
+def _conduct_warning_fallback(warning_count: int, warning_limit: int) -> str:
+    if warning_limit <= 1:
+        return "Я не продовжуватиму розмову в такому тоні."
+    return "Я не продовжуватиму розмову в такому тоні. Наступна пряма образа — закрию чат."
 
 
 def _recent(history: list, text: str, n: int = 8) -> list:
@@ -371,15 +437,16 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             cnt = 1
         memory["_warn_count"] = str(cnt)
         memory["_conduct_warning"] = "1"
-        if cnt > warn_limit:
+        if cnt >= warn_limit:
             memory["_session_banned"] = "1"
-            emit("CONDUCT", "БАН", f"перевищено {warn_limit} попереджень")
+            emit("CONDUCT", "БАН", f"досягнуто ліміт {warn_limit}")
             return ban_msg, memory
         emit("CONDUCT", "Попередження", f"{cnt}/{warn_limit}")
         warn_sys = persona + "\n\n" + warning_prompt.replace("{warning_count}", str(cnt)).replace("{warning_limit}", str(warn_limit))
         warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
                                 model, base_url, api_key, 0.3, 80, retry=False, emit=emit, label="WARNING")
-        return (warn.strip() if warn.strip() else _ua_fallback(settings)), memory
+        fallback_warning = _conduct_warning_fallback(cnt, warn_limit)
+        return (warn.strip() if warn.strip() else fallback_warning), memory
 
     for step in range(1, max_iter + 1):
         sys = (controller_prompt +
@@ -475,7 +542,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         ans_sys += (
             "\n\n[PIPELINE STATUS — not business evidence]\n"
             + "\n".join(f"- {note}" for note in controller_status_notes)
-            + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Say the item/service is not confirmed/listed for this tenant."
+            + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Also do not claim the item is absent from the catalog merely because the controller failed; say it needs checking or ask the one detail needed to check it."
         )
     # The business's own contact card — tiny, always available so the model can
     # never invent an address/hours/phone even if routing missed this turn.
@@ -536,6 +603,26 @@ def _sanitize_query(q: str) -> str:
         if len(out) >= 8:
             break
     return " ".join(out)[:120]
+
+
+def _route_query_fallback(route: dict, request: dict) -> str:
+    """Last-resort source query when a local LLM returns empty JSON.
+
+    This does not decide the answer. It only prevents a verified route call from
+    becoming an empty tool call; the route validator still has to confirm facts.
+    """
+    tool = route.get("tool_name") or ""
+    if tool == "get_business_info":
+        return str(request.get("question") or request.get("subject") or "").strip()[:120]
+    bits = [
+        str(request.get("subject") or ""),
+        str(request.get("identifier") or ""),
+        str(request.get("operation") or ""),
+        str(request.get("question") or ""),
+    ]
+    if tool in {"search_catalog", "search_knowledge", "web_research", "search_parts", "open_url"}:
+        return _sanitize_query(" ".join(bits))
+    return ""
 
 
 def _conduct_precheck(text: str) -> bool:
@@ -602,6 +689,10 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     except Exception:
         query = ""
     query = _sanitize_query(query)
+    if not query:
+        query = _route_query_fallback(route, request)
+        if query:
+            emit(f"QUERY #{step}", "Фолбек запиту", query)
     emit(f"QUERY #{step}", route["code"], query or "[empty query]")
 
     raw_result, tool = await _run_tool(

@@ -135,7 +135,8 @@
                 <input type="checkbox" name="conduct_enabled" id="conduct_enabled" value="1" {% if conduct_on %}checked{% endif %} class="w-4 h-4 text-blue-600 bg-gray-800 border-gray-700 rounded">
                 <label for="conduct_enabled" class="ml-2 text-sm font-medium text-gray-300">Увімкнути реакцію на грубість і бан</label>
             </div>
-            <label for="conduct_warnings" class="block mb-1 text-sm font-medium text-gray-300">Скільки попереджень до бану</label>
+            <label for="conduct_warnings" class="block mb-1 text-sm font-medium text-gray-300">Скільки грубих повідомлень до бану</label>
+            <p class="text-xs text-gray-500 mb-2">Наприклад, 2 = перший раз попередження, другий раз бан цієї сесії.</p>
             <input type="number" min="1" max="5" name="conduct_warnings" id="conduct_warnings" value="{{ m.get('conduct_warnings', '2') }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-32 p-2.5">
             <label for="ban_message" class="block mb-2 mt-4 text-sm font-medium text-gray-300">Останнє повідомлення перед тишею (текст бану)</label>
             <input name="ban_message" id="ban_message" value="{{ m.get('ban_message', 'Вітаю, вас забанено.') }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">

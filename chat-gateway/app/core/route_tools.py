@@ -133,7 +133,7 @@ async def _tool_list_categories(tenant_id: uuid.UUID, db: AsyncSession) -> str:
     """Category headings plus short descriptions, without prices or item rows."""
     res = await db.execute(
         select(ServiceCategory.title, ServiceCategory.description)
-        .where(ServiceCategory.tenant_id == tenant_id)
+        .where(ServiceCategory.tenant_id == tenant_id, ServiceCategory.enabled == True)
         .order_by(ServiceCategory.title)
     )
     rows = []
