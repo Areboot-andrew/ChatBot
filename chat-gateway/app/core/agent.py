@@ -45,7 +45,7 @@ TOOL_DESCRIPTIONS = {
     "search_catalog": '"search_catalog": OUR catalog — services/products and prices. query = 2-6 keywords: operation + device type, never a sentence. Examples: ремонт електрочайника; заміна дисплея смартфона; роз\'єм зарядки ноутбука.',
     "search_parts": '"search_parts": configured EXTERNAL supplier source. query = brand + exact model + exact part, 3-7 keywords, never prose. Example: Xiaomi Redmi Note 10 LCD.',
     "search_knowledge": '"search_knowledge": approved FAQ/documents. query = 2-6 keywords: subject + condition, never the full client question.',
-    "web_research": '"web_research": identify an unknown generic item type only. query = unfamiliar identifier + device type, 2-5 tokens. Example: Q19 device type.',
+    "web_research": '"web_research": identify an unknown generic item type only. query = unfamiliar identifier + device type, 2-5 tokens. Example: unknown model code + device type.',
     "open_url": '"open_url": open one specific URL and read its content. query = the full URL.',
     "get_business_info": '"get_business_info": our address, working hours, phone, payment, delivery, warranty/terms. query = which field is needed.',
     "escalate": '"escalate": hand off to a human. Use when the client explicitly asks for a human or the conversation is stuck.',
