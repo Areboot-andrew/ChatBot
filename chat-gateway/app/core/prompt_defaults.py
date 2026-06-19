@@ -37,8 +37,8 @@ Rules:
 - Never repeat the same route in the same turn after it returned enough/unknown. If route output says unknown/not listed, answer from that absence instead of looping.
 - The controller never writes the client reply and never decides business facts by itself."""
 
-# Kept only because historical migrations import these names. Lean runtime does
-# not read them; query and validation instructions belong to each route.
+# Kept only because historical migrations import these names. The active
+# pipeline does not read them; query and validation instructions belong to each route.
 LEAN_QUERY_PROMPT = "Route-owned query prompt."
 LEAN_VALIDATOR_PROMPT = "Route-owned validation prompt."
 
@@ -64,8 +64,7 @@ A short typo or one confused message is normal. When genuinely uncertain, return
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
 
-# Legacy engine defaults remain business-neutral because agent/classic are still
-# available as rollback modes.
+# Legacy prompt names remain business-neutral for old imports and rollback code.
 DEFAULT_DECISION_RULES = """Preserve the current client goal, select only the configured route that owns the missing fact, and formulate a precise internal question before searching. Do not search unclear subjects, greetings or ordinary conversation. Use only verified route results as retrieved evidence. Never repeat an identical search, invent missing entities or turn external data into the tenant's own facts. If evidence is missing, follow the route fallback or ask one necessary clarification."""
 DEFAULT_INTAKE_POLICY = """Follow the tenant persona and business type. Understand the current goal, ask at most one necessary clarification, and act once enough context exists. Do not assume the tenant is a shop, service center or another business type unless its persona or business rules say so. Do not volunteer prices, availability, delivery or other conditions without a matching request and verified business data."""
 DEFAULT_CONDUCT_POLICY = """Judge only the current message. Complaints, disagreement, impatience and untargeted profanity are normal. Warn only for a direct personal insult or threat aimed at the worker or business. Ban only after the configured warning limit. Never provoke, discriminate, threaten or expose private data."""

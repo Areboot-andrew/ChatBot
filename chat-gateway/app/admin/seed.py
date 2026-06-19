@@ -148,7 +148,6 @@ async def seed_admin():
                 temperature="0.7",
                 max_tokens="1024",
                 meta={
-                    "engine": "lean",
                     "agent_max_iterations": "3",
                     # Temporary Serper (Google) key — replace with your own in Settings
                     "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",

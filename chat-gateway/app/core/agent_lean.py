@@ -1,5 +1,5 @@
 """
-Lean isolated-call agent (engine = "lean").
+Isolated-call conversation pipeline.
 
 Owner's design — stop dragging one fat context through every model call. Each
 stage is its OWN isolated call with only its own small prompt and only the data
@@ -14,7 +14,7 @@ the memory:
                and the controller's structured request. Its first turn builds
                the query; the tool result returns into the same local memory;
                its second turn validates and filters the result.
-  3. tool    — engine runs the real DB/web fetch selected by that route.
+  3. tool    — pipeline runs the real DB/web fetch selected by that route.
   4. result  — the route session returns clean facts/fallback, then its private
                memory is discarded.
   5. ANSWER  — persona + chat + the cleaned facts -> the client reply.
@@ -534,7 +534,7 @@ def _sanitize_query(q: str) -> str:
 
 async def _judge_conduct(text, prompt, model, base_url, api_key):
     """Isolated conduct classifier — judges ONLY the current message (the warning
-    count / ban decision is the engine's job, not this call)."""
+    count / ban decision belongs to the outer pipeline, not this call)."""
     out = await _safe_chat([{"role": "system", "content": prompt}, {"role": "user", "content": text}],
                            model, base_url, api_key, 0.0, 4, retry=False)
     return "warn" if "warn" in (out or "").lower() else "normal"

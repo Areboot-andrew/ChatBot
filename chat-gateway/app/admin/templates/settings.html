@@ -149,33 +149,45 @@
             <textarea name="escalation_prompt" id="escalation_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Напр.: Передаю розмову менеджеру, він звʼяжеться найближчим часом. Телефон для звʼязку: ...">{{ settings.escalation_prompt if settings and settings.escalation_prompt else '' }}</textarea>
         </div>
 
-        <!-- Lean Engine -->
+        <!-- Conversation Pipeline -->
         <div>
-            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Двигун бота</h3>
-            <p class="text-sm text-gray-400 mb-3">Активний режим один: <b>Lean pipeline</b>. Головна модель веде чат, а кожна база знань має окремий роут зі своїми промптами, короткою памʼяттю і перевіркою результату.</p>
+            <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Архітектура розмови</h3>
+            <p class="text-sm text-gray-400 mb-3">Єдина схема роботи: чат-модель говорить з клієнтом, controller-модель вирішує чи потрібні дані, а кожен роут читає свою базу в окремій памʼяті й повертає очищений стан.</p>
             <input type="hidden" name="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '3') if settings and settings.meta else '3' }}">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
                     <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
                         <p class="text-sm font-semibold text-gray-200">1. Чат-модель</p>
-                        <p class="text-xs text-gray-500 mt-1">Бачить головний промпт, історію діалогу і карту активних баз знань.</p>
+                        <p class="text-xs text-gray-500 mt-1">Тон, мова, стиль, відповідь клієнту.</p>
                     </div>
                 </div>
                 <div>
                     <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
-                        <p class="text-sm font-semibold text-gray-200">2. Роут бази знань</p>
-                        <p class="text-xs text-gray-500 mt-1">Окремий виклик моделі формує запит, читає своє джерело і повертає лише очищені факти.</p>
+                        <p class="text-sm font-semibold text-gray-200">2. Controller</p>
+                        <p class="text-xs text-gray-500 mt-1">Чат + стан + карта знань. Вибір: відповідати чи відкрити роут.</p>
+                    </div>
+                </div>
+                <div>
+                    <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-200">3. Роут</p>
+                        <p class="text-xs text-gray-500 mt-1">Окрема памʼять, глибокий блок, фільтр фактів/умов.</p>
+                    </div>
+                </div>
+                <div>
+                    <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">
+                        <p class="text-sm font-semibold text-gray-200">4. Стан</p>
+                        <p class="text-xs text-gray-500 mt-1">Збережені факти, умови, попередження, бан сесії.</p>
                     </div>
                 </div>
             </div>
             <div class="mt-6 space-y-5 border-t border-gray-800 pt-5">
-                <h4 class="text-base font-semibold text-gray-200">Промпти етапів Lean</h4>
-                <p class="text-xs text-gray-500">Ці поля повністю керують поведінкою LLM на кожному етапі. Код лише передає контекст, викликає джерело та перевіряє структуру JSON.</p>
+                <h4 class="text-base font-semibold text-gray-200">Промпти етапів pipeline</h4>
+                <p class="text-xs text-gray-500">Ці поля керують рішеннями LLM. Код лише передає контекст, відкриває джерело, зберігає стан і перевіряє структуру JSON.</p>
                 {% for name, label, help in [
-                    ('lean_controller_prompt', 'Controller: вибір route і внутрішнє питання', 'Бачить persona, чат, карту routes і результати цього ходу.'),
-                    ('lean_answer_prompt', 'Final answer: відповідь клієнту', 'Бачить persona, чат і очищені результати routes.'),
-                    ('lean_conduct_prompt', 'Conduct classifier: normal / warn', 'Бачить лише поточне повідомлення клієнта.'),
-                    ('lean_warning_prompt', 'Warning reply: текст попередження', 'Бачить persona та поточний чат. Можна використати {warning_count} і {warning_limit}.'),
+                    ('lean_controller_prompt', 'Controller: рішення після кожного повідомлення', 'Бачить чат, очищений стан, доступні роути і карту змісту. Не пише клієнту.'),
+                    ('lean_answer_prompt', 'Answer: відповідь клієнту', 'Бачить головний промпт, чат, очищені факти, state та інструкції роутів.'),
+                    ('lean_conduct_prompt', 'Conduct route: normal / warn', 'Бачить поточне повідомлення і вирішує, чи це нормальна емоція, чи пряма образа/погроза.'),
+                    ('lean_warning_prompt', 'Warning answer: текст попередження', 'Формує коротке попередження в тоні бізнесу. Можна використати {warning_count} і {warning_limit}.'),
                 ] %}
                 <div>
                     <label for="{{ name }}" class="block mb-1 text-sm font-medium text-gray-300">{{ label }}</label>

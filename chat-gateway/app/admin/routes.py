@@ -213,7 +213,6 @@ async def create_tenant(
         temperature="0.7",
         max_tokens="1024",
         meta={
-            "engine": "lean",
             "agent_max_iterations": "3",
             "ban_message": "Вітаю, вас забанено.",
             "conduct_enabled": "1",
@@ -854,8 +853,6 @@ async def update_settings(
             meta_data["llm_base_url"] = normalize_lmstudio_url(llm_base_url)
             meta_data["llm_api_key"] = llm_api_key
 
-            # Single active engine: prompt-driven Lean. Routes decide sources through prompts.
-            meta_data["engine"] = "lean"
             meta_data["agent_max_iterations"] = agent_max_iterations
             meta_data["serper_api_key"] = serper_api_key.strip()
             meta_data["parts_sites"] = parts_sites.strip()
@@ -898,7 +895,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "escalation_prompt", "escalation_policy", "fallback_text",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
-_CONFIG_META_KEYS = ["engine", "agent_max_iterations",
+_CONFIG_META_KEYS = ["agent_max_iterations",
                      "ban_message", "conduct_enabled", "conduct_warnings",
                      "marketing_enabled", "parts_sites", "price_search_urls",
                      "catalog_synonyms", "business_info",
@@ -1028,6 +1025,7 @@ async def knowledge_base(
     logic_schemas = []
     documents = []
     business_info = {}
+    bot_meta = {}
     if tenant_id:
         res_t = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = res_t.scalars().first()
@@ -1044,13 +1042,15 @@ async def knowledge_base(
         res_s = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
         bot_settings_row = res_s.scalars().first()
         if bot_settings_row and bot_settings_row.meta:
-            business_info = bot_settings_row.meta.get("business_info", {}) or {}
+            bot_meta = bot_settings_row.meta or {}
+            business_info = bot_meta.get("business_info", {}) or {}
 
     return templates.TemplateResponse(request=request, name="knowledge/index.html", context={
         "request": request, "user": user, "tenants": tenants,
         "current_tenant_id": tenant_id, "tenant": tenant,
         "qa_pairs": qa_pairs, "logic_schemas": logic_schemas,
-        "documents": documents, "business_info": business_info
+        "documents": documents, "business_info": business_info,
+        "bot_meta": bot_meta,
     })
 
 
