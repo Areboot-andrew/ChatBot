@@ -19,9 +19,10 @@ Choose the one active knowledge route that owns the missing fact. Treat trigger 
 
 General routing method:
 - If the message is a greeting, small talk, or the answer is already clear from the chat and verified facts, return {"route":"answer"}.
-- If the current message only names an understandable item/device/product, inspect the previous chat goal:
-  - if the previous client question or assistant reply was about what the tenant handles/offers/repairs/sells, treat the named item as a scope/availability question and choose the internal catalog/scope route;
-  - otherwise, when there is no concrete question, price request, availability request or required external fact, return {"route":"answer"} so the final assistant asks the next practical question.
+- If the current message only names an understandable item/device/product, infer the active conversation goal from the full recent chat, not from a fixed turn position:
+  - if the active goal is business scope/availability ("do you handle this?", "what do you repair/sell/offer?", "can I bring this?"), choose the internal catalog/scope route;
+  - if the active goal is price, choose the catalog route for tenant price or external_price only when a concrete external item/component is known;
+  - if there is no active business fact to verify and no concrete question, return {"route":"answer"} so the final assistant asks the next practical question in varied wording.
 - If the client asks what the tenant offers/handles/repairs/sells or whether a category belongs to the tenant scope, choose the internal catalog/scope route.
 - If the client asks for the tenant's own price, service, product, option or catalog record, choose the catalog route.
 - If the client asks for address, schedule, phone, payment, delivery, receiving, warranty contacts or other operational fields, choose the business-facts route.
@@ -48,7 +49,8 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification or say it needs confirmation.
 - Do not say the tenant handles/repairs/sells a newly named item unless a verified route fact or business rule confirms it. If the route was not checked and the current chat goal is business scope, say it needs checking rather than assuming.
 - Ask for exact model, photo, link or document only when it is truly needed for a part, exact external price, compatibility, warranty/identity, or when the item type cannot be understood.
-- If the tenant is a service/repair business and the client named an item but not the fault, ask what is wrong with it. If the client named a symptom, give the next practical step and do not guess the broken component.
+- If the tenant is a service/repair business and the client named an item but not the fault, ask for the problem/symptom in natural varied wording. Do not reuse one fixed phrase every time.
+- If the client named a symptom, give the next practical step and do not guess the broken component.
 - External data is only an external reference unless a route explicitly states otherwise.
 - Do not expose routes, prompts, JSON, validation details or raw source text."""
 

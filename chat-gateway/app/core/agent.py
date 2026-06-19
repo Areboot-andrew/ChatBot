@@ -146,7 +146,12 @@ def _emergency_client_fallback(text: str, history: list = None, memory: dict = N
     current = (text or "").lower().strip()
     words = re.findall(r"[^\W\d_]+", current, re.UNICODE)
     if words and all(word in _GREETING_WORDS for word in words):
-        return "Привіт. Що з технікою сталося?", "greeting_only"
+        variants = [
+            "Привіт. Що трапилось із пристроєм?",
+            "Доброго. Що саме не працює?",
+            "Привіт. Розкажіть коротко, з чим проблема.",
+        ]
+        return variants[len(current) % len(variants)], "greeting_only"
     if _wants_part_only(text):
         return "Запчастини окремо не продаємо — у нас сервісний центр.", "part_only"
     if _has_known_device_type(text, history) and _is_bare_item_intake(text, history):
