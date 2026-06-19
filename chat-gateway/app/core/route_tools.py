@@ -130,20 +130,16 @@ _CATALOG_STOPWORDS = {
 
 
 async def _tool_list_categories(tenant_id: uuid.UUID, db: AsyncSession) -> str:
-    """Category names + service counts, without dumping all prices."""
-    from sqlalchemy import func
-
+    """Category headings only, without counts, prices or item details."""
     res = await db.execute(
-        select(ServiceCategory.title, func.count(ServicePrice.id))
-        .join(ServicePrice, ServicePrice.category_id == ServiceCategory.id, isouter=True)
+        select(ServiceCategory.title)
         .where(ServiceCategory.tenant_id == tenant_id)
-        .group_by(ServiceCategory.title)
         .order_by(ServiceCategory.title)
     )
-    rows = [(t, n) for t, n in res.all() if t]
+    rows = [t for (t,) in res.all() if t]
     if not rows:
         return "Каталог порожній."
-    return "Категорії послуг:\n" + "\n".join([f"- {t} ({n} послуг)" for t, n in rows])
+    return "Заголовки категорій:\n" + "\n".join([f"- {t}" for t in rows])
 
 
 async def _tool_search_catalog(
@@ -151,6 +147,7 @@ async def _tool_search_catalog(
     tenant_id: uuid.UUID,
     db: AsyncSession,
     synonyms: dict | None = None,
+    requested_fact: str = "",
 ) -> str:
     """Candidate retrieval for route-side semantic validation."""
     syn = synonyms if synonyms is not None else _CATALOG_SYNONYMS
@@ -184,6 +181,8 @@ async def _tool_search_catalog(
     )
     candidates = res.all()
     if candidates:
+        fact = (requested_fact or "").strip().lower()
+        scope_only = fact in {"availability", "scope", "scope_check", "наличие", "наявність"}
         original_forms = [(tok, search_form(tok)) for tok in raw if tok not in _CATALOG_STOPWORDS]
         expanded_forms = [search_form(tok) for tok in tokens if tok not in raw]
 
@@ -196,12 +195,9 @@ async def _tool_search_catalog(
             description = " ".join([
                 category.description or "",
                 str(category_meta.get("detailed_description") or ""),
-                " ".join(str(x) for x in (category_meta.get("problems") or []) if x),
                 getattr(price, "description", "") or "",
-                str(item_meta.get("brand") or ""),
-                str(item_meta.get("availability") or ""),
-                str(item_meta.get("characteristics") or ""),
-                str(item_meta.get("composition") or ""),
+                "" if scope_only else str(item_meta.get("characteristics") or ""),
+                "" if scope_only else str(item_meta.get("composition") or ""),
             ]).lower()
             phrase = f"{category_text} {name} {description}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
@@ -219,24 +215,18 @@ async def _tool_search_catalog(
             bits = [f"- CATEGORY: {category.title or 'Каталог'}"]
             if category.description:
                 bits.append(f"category_short: {category.description}")
-            if category_meta.get("detailed_description"):
+            if not scope_only and category_meta.get("detailed_description"):
                 bits.append(f"category_deep: {category_meta.get('detailed_description')}")
-            problems = category_meta.get("problems") if isinstance(category_meta.get("problems"), list) else []
-            if problems:
-                bits.append("category_signals: " + ", ".join(str(p) for p in problems[:20]))
             bits.append(f"ITEM: {price.name}")
-            if item_meta.get("item_type"):
+            if not scope_only and item_meta.get("item_type"):
                 bits.append(f"item_type: {item_meta.get('item_type')}")
-            if item_meta.get("brand"):
-                bits.append(f"brand: {item_meta.get('brand')}")
-            bits.append(f"price_or_condition: {price.price}")
-            if item_meta.get("availability"):
-                bits.append(f"availability: {item_meta.get('availability')}")
-            if item_meta.get("characteristics"):
+            if not scope_only:
+                bits.append(f"price_or_condition: {price.price}")
+            if not scope_only and item_meta.get("characteristics"):
                 bits.append(f"characteristics: {item_meta.get('characteristics')}")
-            if item_meta.get("composition"):
+            if not scope_only and item_meta.get("composition"):
                 bits.append(f"composition: {item_meta.get('composition')}")
-            if getattr(price, "description", None):
+            if not scope_only and getattr(price, "description", None):
                 bits.append(f"item_notes_for_model: {price.description}")
             lines.append(" | ".join(bits))
         return "\n".join(lines)

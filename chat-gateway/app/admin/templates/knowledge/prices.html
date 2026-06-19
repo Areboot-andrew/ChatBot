@@ -13,7 +13,7 @@
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
             <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт Каталогу (YAML)</h2>
             <p class="text-sm text-gray-400 mb-4">
-                Тут ви можете завантажити YAML зі змістом: категорії → товари/послуги → ціни/описи/умови. Це основна карта, яку бачить controller перед глибоким читанням.
+                Тут ви можете завантажити YAML зі змістом: категорії → товари/послуги → ціни/описи/умови. Controller бачить тільки заголовки категорій; ціни й описи відкриваються вже після вибору потрібного роута.
             </p>
             <form action="/admin/knowledge/prices/import" method="POST" enctype="multipart/form-data" class="flex gap-4 items-center">
                 <input type="file" name="file" accept=".yaml,.yml" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg cursor-pointer bg-gray-800 focus:outline-none p-2">

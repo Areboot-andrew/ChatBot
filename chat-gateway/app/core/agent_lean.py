@@ -204,44 +204,26 @@ async def _load_routes(tenant_id, db):
 
 
 async def _catalog_content_map(tenant_id, db) -> str:
-    """Small hierarchical table of contents for the controller/route model.
+    """Tiny category table of contents for routing.
 
-    This is not final evidence. It lets the LLM see what categories/items exist
-    before it decides whether opening a deep catalog block is worthwhile.
+    Keep this deliberately small. The controller should see only what areas the
+    tenant handles, not prices, brands, symptoms, or item details. Deep catalog
+    rows are opened later by the selected route/tool.
     """
     try:
-        from sqlalchemy.orm import selectinload
         from app.models.services import ServiceCategory
 
         res = await db.execute(
             select(ServiceCategory)
             .where(ServiceCategory.tenant_id == tenant_id, ServiceCategory.enabled == True)
-            .options(selectinload(ServiceCategory.prices))
             .order_by(ServiceCategory.title)
         )
         lines = []
-        for cat in res.scalars().all()[:30]:
-            meta = dict(cat.meta or {})
-            bits = [f"- {cat.title}"]
-            if cat.description:
-                bits.append(f"short: {cat.description}")
-            problems = meta.get("problems") if isinstance(meta.get("problems"), list) else []
-            if problems:
-                bits.append("signals: " + ", ".join(str(p) for p in problems[:8]))
-            lines.append(" | ".join(bits))
-            for item in list(cat.prices or [])[:12]:
-                im = dict(getattr(item, "meta", None) or {})
-                item_bits = [f"  - {item.name}"]
-                if im.get("item_type"):
-                    item_bits.append(f"type: {im.get('item_type')}")
-                if im.get("brand"):
-                    item_bits.append(f"brand: {im.get('brand')}")
-                if item.price:
-                    item_bits.append(f"price: {item.price}")
-                if im.get("availability"):
-                    item_bits.append(f"availability: {im.get('availability')}")
-                lines.append(" | ".join(item_bits))
-        return "\n".join(lines)[:9000]
+        for cat in res.scalars().all()[:80]:
+            title = (cat.title or "").strip()
+            if title:
+                lines.append(f"- {title}")
+        return "\n".join(lines)[:3000]
     except Exception as e:
         logger.warning(f"catalog content map failed: {e}")
         return ""
@@ -264,13 +246,13 @@ def _source_map(routes: dict) -> str:
     return "\n".join(lines)
 
 
-async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key):
+async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key, requested_fact=""):
     tool = route.get("tool_name") or ""
     q = (query or "").strip()
     if not q and tool != "get_business_info":
         return "", tool
     if tool == "search_catalog":
-        return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map), tool
+        return await _tool_search_catalog(q, tenant_id, db, synonyms=syn_map, requested_fact=requested_fact), tool
     if tool == "list_categories":
         return await _tool_list_categories(tenant_id, db), tool
     if tool == "search_knowledge":
@@ -384,13 +366,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                                 model, base_url, api_key, 0.3, 80, retry=False, emit=emit, label="WARNING")
         return (warn.strip() if warn.strip() else _ua_fallback(settings)), memory
 
-    # The controller only routes — it does NOT need the full persona (tone, safety,
-    # catalog/price rules etc.). Sending a short identity instead of the whole
-    # persona roughly halves tokens per turn (the full persona stays in ANSWER).
-    controller_identity = persona.split("\n\n")[0][:500] if persona else ""
-
     for step in range(1, max_iter + 1):
-        sys = (controller_identity + "\n\n" + controller_prompt +
+        sys = (controller_prompt +
                "\n\n[OUTPUT JSON SCHEMA]\n" +
                json.dumps(CONTROLLER_OUTPUT_SCHEMA, ensure_ascii=False) +
                "\n\n[AVAILABLE KNOWLEDGE ROUTES]\n" + source_map)
@@ -603,7 +580,10 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     query = _sanitize_query(query)
     emit(f"QUERY #{step}", route["code"], query or "[empty query]")
 
-    raw_result, tool = await _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper_key)
+    raw_result, tool = await _run_tool(
+        route, query, text, tenant_id, db, settings, syn_map, serper_key,
+        requested_fact=str(request.get("requested_fact") or ""),
+    )
     emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
 
     route_memory.append({"role": "assistant", "content": query_raw or '{"query":""}'})

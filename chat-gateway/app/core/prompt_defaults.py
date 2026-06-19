@@ -19,20 +19,20 @@ Your job is to pause after every client message and decide whether the chat mode
 - the recent chat;
 - already verified route state/facts;
 - the AVAILABLE KNOWLEDGE ROUTES;
-- each route's CONTENT MAP, which is the table of contents of categories/items/services/products/policies.
+- each route's CONTENT MAP. For catalog this is only a short list of category headings, not prices, brands, symptoms or item rows.
 
 Core method:
 - First understand the current client goal: greeting, abuse, availability/scope, own price, external part/item price, contacts/hours/payment, policy/process, product/service details, or ordinary follow-up.
-- Compare the subject to the CONTENT MAP before opening a deep source. The map is a semantic table of contents, not a keyword trigger list.
-- If the content map clearly contains the relevant category/item/topic, choose that route and set subject to the best matching title/item. The route will open the deeper block and filter it.
-- If the map clearly does not contain the requested product/service for a scope/availability question, return {"route":"answer"} and put the missing item in subject/operation so the final assistant can say it is not listed/confirmed. Do not invent an intake flow.
+- For availability/scope questions ("do you repair/sell/handle X?"), choose the catalog route. Do not answer yes/no yourself. The catalog route must compare X against the category headings and return confirmed/unknown.
+- Use the CONTENT MAP only to choose the likely owning route/category. It is not final evidence for prices, brands, models, stock, characteristics or exact service details.
+- If the map clearly does not contain the requested product/service, still use the owning route for scope when available so it can return a clean unknown/not-listed state. Do not invent an intake flow.
 - If the current message continues an active verified route state, choose the same owning route again so it can evaluate the new detail against stored conditions/exclusions.
-- If a requested fact belongs to a different route than the active topic, choose that route: business_info for contacts/hours/payment, catalog for tenant catalog/own prices, qa for policies/process, external_price for known external item/component price, web_search only for identifying an unclear item type.
+- If a requested fact belongs to a different route than the active topic, choose that route: business_info for contacts/hours/payment, catalog for tenant scope and own prices, qa for policies/process, external_price for known external item/component price, web_search only for identifying an unclear item type.
 - A drop-off / bring / send / submit request for a concrete product or service is a compound goal. If the tenant's availability/scope for that subject is not already verified in route state/facts, choose the catalog/scope route first. Choose business_info for address/hours only after that subject is confirmed, or when the client asks for contacts/hours/address without tying it to an unverified item/service.
 
 Rules:
 - Copy subject, identifier, operation and qualifiers only from the conversation or the content map. Never invent a category, model, component, price, restriction or diagnosis.
-- Do not build long search sentences. If a route is needed, pass the selected map title/item and the exact needed fact.
+- Do not build long search sentences. Pass a compact subject plus requested fact. For scope, pass the client's item type. For price/detail, pass the selected category if known plus the concrete service/product words from the client.
 - Do not treat contact/address facts as permission to accept an unverified item/service.
 - Do not use web/external routes merely because a brand/model is unusual when the generic item type is already clear.
 - Do not route to external_price when the exact external item/component is missing; let the final assistant ask the minimum missing detail.
@@ -60,9 +60,9 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - Do not expose routes, prompts, JSON, validation details or raw source text."""
 
 LEAN_CONDUCT_PROMPT = """You are the conduct decision route. Classify only the current client message, using common sense like a human operator. Return one label: normal or warn.
-- normal: real questions, disagreement, complaints, criticism, impatience, emotional language, or profanity aimed at the situation/product/service/price.
-- warn: a direct personal insult, targeted degradation or threat aimed at the worker/business; a command to go away with obscene wording directed at the assistant; or deliberate abusive spam unrelated to the business.
-- Examples by meaning: "це дорого, блін" = normal; "ви охреніли з ціною?" = normal unless it turns into direct degradation; "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant = warn.
+- normal: real questions, disagreement, complaints, criticism or impatience without obscene abuse.
+- warn: any obscene profanity, direct personal insult, targeted degradation, threat, command to go away with obscene wording, or deliberately abusive spam.
+- Examples by meaning: "це дорого" = normal; "ви охреніли з ціною?" = warn; "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant = warn.
 A short typo or one confused message is normal. When genuinely uncertain, return normal."""
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
@@ -84,9 +84,9 @@ ROUTE_PROMPTS = {
     },
     "catalog": {
         "tool_name": "search_catalog",
-        "source_description": "Hierarchical internal catalog. The CONTENT MAP lists category headings and child items. A child item may be a product, service, complex service, repair operation, price row or condition row. This source owns tenant scope/availability, own catalog prices, product/service descriptions, brands, stock/availability, characteristics, and service composition. It does not own contacts, broad policies outside catalog notes, or third-party market offers.",
-        "query_prompt": "Do not invent a free search. First compare the request to the SOURCE CONTENT MAP. If the map contains a matching category/item, return the exact category/item words needed to open that deeper block. For broad scope use the selected category title; for price/details use the selected child item title. If the map has no semantic match, return the client's normalized subject only so validation can mark it not listed. Do not add guessed components, diagnoses, brands, variants or sentence-style questions.",
-        "result_validation_prompt": "Treat SOURCE_RESULT as a deep catalog block: category -> item -> price/availability/brand/specs/composition/notes. Validate by meaning of the selected category/item, not by shared letters. For scope/availability, confirmed requires a category or item that explicitly covers the same product/service type. For tenant price, confirmed requires a matching item/operation with a price_or_condition. For a complex service, separate work/labor, part/component, conditions and missing client data when written. Return a state object with selected_item, known_client_data, pending_checks, conditions and exclusions when the dialog should continue. If the content map/deep block does not contain the item/service, return no facts, match_status unknown or denied, and answer_instruction that the final assistant must not offer intake or say yes.",
+        "source_description": "Internal catalog. SOURCE CONTENT MAP is only category headings. Use it for scope/category selection only. Detailed item rows and prices are opened by source query after the category or concrete service/product words are chosen. This source owns tenant scope/availability and tenant catalog prices. It does not own contacts, policies outside catalog notes, or third-party market offers.",
+        "query_prompt": "Use a two-step mindset. For scope/availability, compare the client's item type only to SOURCE CONTENT MAP category headings and return the client's normalized item/category words, not prices or brands. For price/details, use the selected category when clear plus the concrete service/product words from the client. Keep 2-7 keywords. Do not add guessed components, diagnoses, brands, variants, symptoms, or sentence-style questions.",
+        "result_validation_prompt": "Validate by meaning, not shared letters. For scope/availability, confirmed requires a category heading or returned category/item that explicitly covers the same product/service type. Broad phrases like household appliances do not automatically cover an unlisted large appliance or unrelated item. If the category list/deep result does not contain the item/service, return relevant:false, sufficient:false, match_status unknown, no facts, and answer_instruction that the final assistant must say this item/service is not listed/confirmed and must not offer intake. For tenant price, confirmed requires a matching item/operation with price_or_condition. Return only the small facts needed for the client's current question.",
     },
     "web_search": {
         "tool_name": "web_research",

@@ -1,4 +1,4 @@
-"""Backfill catalog item meta for hierarchical content map.
+"""Backfill minimal catalog item type.
 
 Revision ID: 21f0a1b2c3d4
 Revises: 20f0a1b2c3d4
@@ -50,43 +50,6 @@ def _item_type(name: str) -> str:
     return "послуга"
 
 
-def _composition(name: str) -> str:
-    n = (name or "").lower()
-    if "діагност" in n:
-        return "огляд пристрою, перевірка вузлів, пояснення варіантів ремонту; остаточна ціна після діагностики"
-    if "робота, без" in n or "без деталі" in n or "без акб" in n or "без диспле" in n:
-        return "робота майстра; запчастина/деталь рахується окремо після погодження"
-    if "чистка" in n or "профілакти" in n or "обслуговування" in n:
-        return "робота з очищення/обслуговування; витратні матеріали або деталі погоджуються окремо, якщо потрібні"
-    if "ремонт" in n or "відновлення" in n:
-        return "робота з діагностики причини та ремонту вузла; деталі й складні випадки погоджуються окремо"
-    if "заміна" in n or "встановлення" in n:
-        return "робота з заміни/встановлення; сумісна деталь або комплектуюча може рахуватись окремо"
-    return "робота або умова з прайсу; точний склад дивитись у примітках і погоджувати з клієнтом"
-
-
-def _availability(category_title: str) -> str:
-    title = (category_title or "").lower()
-    if "складання" in title or "апгрейд" in title:
-        return "надаємо послугу в сервісі після погодження задачі"
-    return "приймаємо в сервісі; точна можливість і ціна після огляду/діагностики"
-
-
-def _characteristics(category: dict) -> str:
-    meta = category.get("meta") if isinstance(category.get("meta"), dict) else {}
-    parts = []
-    brands = [str(x) for x in (meta.get("brands") or []) if str(x).strip()]
-    problems = [str(x) for x in (meta.get("problems") or []) if str(x).strip()]
-    if brands:
-        parts.append("бренди/приклади: " + ", ".join(brands[:12]))
-    if problems:
-        parts.append("типові звернення: " + "; ".join(problems[:8]))
-    desc = str(meta.get("detailedDescription") or "").strip()
-    if desc:
-        parts.append(desc[:700])
-    return " | ".join(parts)
-
-
 def upgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(
@@ -107,15 +70,9 @@ def upgrade() -> None:
 
     for row in rows:
         current = dict(row["meta"] or {})
-        # Respect manually edited item meta. Fill only missing fields.
-        category = {"meta": row["category_meta"] or {}}
-        brands = [str(x) for x in ((row["category_meta"] or {}).get("brands") or []) if str(x).strip()]
+        # Respect manually edited item meta. Fill only the neutral item type.
         filled = {
             "item_type": current.get("item_type") or _item_type(row["name"]),
-            "brand": current.get("brand") or ", ".join(brands[:10]),
-            "availability": current.get("availability") or _availability(row["category_title"]),
-            "characteristics": current.get("characteristics") or _characteristics(category),
-            "composition": current.get("composition") or _composition(row["name"]),
         }
         filled = {k: v for k, v in filled.items() if str(v or "").strip()}
         current.update(filled)
@@ -129,7 +86,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(sa.select(service_prices.c.id, service_prices.c.meta)).mappings().all()
-    generated_keys = {"item_type", "brand", "availability", "characteristics", "composition"}
+    generated_keys = {"item_type"}
     for row in rows:
         meta = dict(row["meta"] or {})
         for key in generated_keys:

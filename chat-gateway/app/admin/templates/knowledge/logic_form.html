@@ -40,7 +40,7 @@
             <div>
                 <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">2. Як вибрати пункт зі змісту і відкрити глибше</label>
                 <p class="text-xs text-gray-500 mb-2">Поясніть route-моделі, як зіставляти питання клієнта з картою заголовків. Якщо пункт є — відкрити саме його; якщо нема — не вигадувати й повернути “не підтверджено”.</p>
-                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Спершу порівняй питання з SOURCE CONTENT MAP. Якщо є відповідна категорія/позиція — поверни точну назву для глибокого читання. Якщо нема — поверни нормалізований предмет і дай валідатору сказати not listed.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
+                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Для catalog: SOURCE CONTENT MAP містить лише заголовки категорій. Для scope порівняй предмет із категоріями; для ціни/деталей сформуй короткий запит по категорії + конкретній послузі.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>

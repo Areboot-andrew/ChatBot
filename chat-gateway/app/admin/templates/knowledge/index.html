@@ -94,7 +94,7 @@
             </div>
             <div class="bg-gray-950 border border-emerald-900/50 rounded-xl p-4">
                 <p class="text-emerald-300 font-semibold">3. Knowledge route</p>
-                <p class="text-xs text-gray-500 mt-1">Окрема памʼять, карта змісту, глибокий блок.</p>
+                <p class="text-xs text-gray-500 mt-1">Окрема памʼять, короткий зміст, глибокий блок за потреби.</p>
                 <p class="text-[11px] text-green-400 mt-3">{{ logic_schemas|length }} входів</p>
             </div>
             <div class="bg-gray-950 border border-violet-900/50 rounded-xl p-4">
@@ -163,7 +163,7 @@
 
             {% if meta.get('tool_name') == 'search_catalog' %}
             <div class="mt-4 bg-blue-950/20 border border-blue-900/40 rounded-lg p-3 text-xs text-blue-200">
-                Цей роут автоматично отримує CONTENT MAP із «Змісту каталогу»: категорії → товари/послуги → ціни/умови/характеристики.
+                Цей роут автоматично отримує CONTENT MAP із «Змісту каталогу»: тільки заголовки категорій. Товари/послуги, ціни й описи відкриваються глибшим запитом.
             </div>
             {% endif %}
         </div>
