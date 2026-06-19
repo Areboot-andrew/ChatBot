@@ -515,8 +515,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             serper_key, model, base_url, api_key, emit, step,
         )
         route_results.append(json.dumps({"route": route["code"], **result}, ensure_ascii=False))
-        if result["relevant"]:
-            facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
+        if result["relevant"] or result.get("facts") or result.get("missing"):
+            facts.extend(f"[{route['label']}] {fact}" for fact in result.get("facts", []))
             facts.extend(f"[{route['label']} note] {note}" for note in result.get("notes", []))
             facts.extend(f"[{route['label']} missing] {m}" for m in result.get("missing", []))
             if result.get("state"):
@@ -665,6 +665,39 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
     return out or ""
 
 
+def _salvage_validation(out: str):
+    """Tolerant rescue when the validator's JSON does not parse (FIX 2).
+
+    The validator is a small local model fed a long prompt + raw source; it
+    sometimes emits truncated or broken JSON. Instead of dropping everything as
+    validation_failed, pull the key signals (relevant / match_status / facts) by
+    regex so found facts are not lost. Returns a result dict, or None if nothing
+    usable could be recovered.
+    """
+    if not out or not out.strip():
+        return None
+    relevant = bool(re.search(r'"relevant"\s*:\s*true', out, re.I))
+    msm = re.search(r'"match_status"\s*:\s*"(confirmed|partial|denied|unknown)"', out, re.I)
+    match_status = msm.group(1).lower() if msm else ("confirmed" if relevant else "unknown")
+    facts = []
+    fm = re.search(r'"facts"\s*:\s*\[(.*?)\]', out, re.S)
+    if fm:
+        facts = [s.strip() for s in re.findall(r'"([^"]+)"', fm.group(1)) if s.strip()]
+    if not relevant and not facts and match_status in ("unknown", "denied"):
+        return None
+    return {
+        "relevant": relevant or bool(facts),
+        "sufficient": False,
+        "match_status": match_status,
+        "facts": facts,
+        "notes": [], "missing": [],
+        "reply_hint": "Validator JSON partially recovered; treat facts as candidates.",
+        "state": None,
+        "answer_instruction": None,
+        "fallback": None,
+    }
+
+
 async def _run_route_session(route, request, text, tenant_id, db, settings, syn_map,
                              serper_key, model, base_url, api_key, emit, step):
     """Run one route-owned LLM session with short-lived private memory."""
@@ -715,7 +748,9 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         '"fallback":"..."|null}'
     )})
     emit(f"CLEAN #{step}", "Вхід у модель", _fmt_msgs(route_memory))
-    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 450, retry=True)
+    # FIX 2: 800 (was 450) so the validator JSON is not truncated mid-object,
+    # which previously caused validation_failed and lost all found facts.
+    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 800, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)
@@ -726,24 +761,46 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         missing = parsed.get("missing") if isinstance(parsed.get("missing"), list) else []
         missing = [str(f).strip() for f in missing if str(f).strip()]
         relevant = parsed.get("relevant") is True
+        match_status = str(parsed.get("match_status") or ("confirmed" if relevant else "unknown"))
+        # FIX 1: do not discard facts merely because the model set relevant:false.
+        # A cautious validator still extracts useful facts; match_status carries the
+        # confidence. Only a truly empty or explicitly denied result keeps no facts.
+        keep = relevant or (bool(facts) and match_status != "denied")
         result = {
-            "relevant": relevant,
+            "relevant": keep,
             "sufficient": relevant and parsed.get("sufficient") is True,
-            "match_status": str(parsed.get("match_status") or ("confirmed" if relevant else "unknown")),
-            "facts": facts if relevant else [],
-            "notes": notes if relevant else [],
-            "missing": missing if relevant else [],
+            "match_status": match_status,
+            "facts": facts if keep else [],
+            "notes": notes if keep else [],
+            "missing": missing,
             "reply_hint": str(parsed.get("reply_hint")).strip() if parsed.get("reply_hint") else None,
             "state": parsed.get("state") if isinstance(parsed.get("state"), dict) else None,
             "answer_instruction": str(parsed.get("answer_instruction")).strip() if parsed.get("answer_instruction") else None,
             "fallback": str(parsed.get("fallback")).strip() if parsed.get("fallback") else None,
         }
     except Exception:
-        result = {
-            "relevant": False, "sufficient": False, "match_status": "unknown",
-            "facts": [], "notes": [], "missing": [], "reply_hint": None,
-            "state": None, "answer_instruction": None,
-            "fallback": "validation_failed",
-        }
+        # FIX 1+2: tolerant salvage instead of dropping everything found.
+        result = _salvage_validation(out)
+        if result is None:
+            # Internal sources returned structured data we can still surface as an
+            # unvalidated candidate (e.g. a real catalog price) instead of telling
+            # the client nothing exists. Web text is too noisy to surface unchecked.
+            if tool in ("search_catalog", "search_knowledge", "get_business_info") and str(raw_result or "").strip():
+                result = {
+                    "relevant": True, "sufficient": False, "match_status": "unvalidated",
+                    "facts": [str(raw_result)[:1200]],
+                    "notes": [], "missing": [],
+                    "reply_hint": "Validator failed; treat as unconfirmed candidate, do not over-promise.",
+                    "state": None,
+                    "answer_instruction": "Source returned data but validation did not finish; use cautiously as orientation.",
+                    "fallback": None,
+                }
+            else:
+                result = {
+                    "relevant": False, "sufficient": False, "match_status": "unknown",
+                    "facts": [], "notes": [], "missing": [], "reply_hint": None,
+                    "state": None, "answer_instruction": None,
+                    "fallback": "validation_failed",
+                }
     emit(f"CLEAN #{step}", "Очищено", json.dumps(result, ensure_ascii=False))
     return result
