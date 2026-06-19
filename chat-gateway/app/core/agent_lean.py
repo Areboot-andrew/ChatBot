@@ -64,9 +64,24 @@ def _ua_fallback(settings) -> str:
     """A real Ukrainian fallback that never returns the literal 'None' even if the
     tenant's fallback_text got corrupted in the DB."""
     ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
-    if ft.lower() in ("none", "null", "undefined", "nil", "-"):
+    stale_defaults = {
+        "вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом.",
+        "вибачте, сталася технічна помилка.",
+        "технічна заминка, спробуйте ще раз.",
+        "service temporarily unavailable.",
+    }
+    if ft.lower() in ("none", "null", "undefined", "nil", "-") or ft.lower() in stale_defaults:
         ft = ""
-    return ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+    if ft:
+        return ft
+
+    meta = (settings.meta or {}) if settings else {}
+    business_info = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else {}
+    phone = str((business_info or {}).get("phone") or "").strip()
+    msg = "Зараз технічна заминка з відповіддю. Напишіть ще раз за хвилину"
+    if phone:
+        msg += f" або подзвоніть: {phone}"
+    return msg + "."
 
 
 def _decision_from_raw(raw: str):

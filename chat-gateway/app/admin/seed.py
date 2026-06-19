@@ -87,6 +87,7 @@ async def seed_admin():
             default_settings = BotSetting(
                 tenant_id=tenant.id,
                 system_prompt=default_prompt,
+                fallback_text="Зараз технічна заминка з відповіддю. Напишіть ще раз за хвилину.",
                 llm_model="gemma-4",
                 temperature="0.7",
                 max_tokens="1024",

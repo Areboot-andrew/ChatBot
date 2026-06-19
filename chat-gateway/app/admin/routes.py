@@ -114,7 +114,8 @@ async def dashboard(
                 if models:
                     loaded_models = ", ".join(models)
                 else:
-                    loaded_models = "Моделі не завантажені"
+                    lmstudio_status = "ERROR"
+                    loaded_models = "Моделі не завантажені — відкрийте LM Studio і натисніть Load model"
     except Exception:
         loaded_models = "Недоступно (Check URL/Network)"
 
@@ -226,6 +227,7 @@ async def create_tenant(
     default_settings = BotSetting(
         tenant_id=new_tenant.id,
         system_prompt=DEFAULT_UNIVERSAL_PERSONA,
+        fallback_text="Зараз технічна заминка з відповіддю. Напишіть ще раз за хвилину.",
         llm_model="gemma-4",
         temperature="0.7",
         max_tokens="1024",
@@ -1957,7 +1959,10 @@ async def test_llm_connection_api(
         response = await chat(messages, model=model, temperature=0.1, max_tokens=10, base_url=base_url, api_key=api_key, raise_error=True)
         return {"status": "success", "message": f"Успішне підключення! Відповідь моделі: {response}"}
     except Exception as e:
-        return {"status": "error", "message": f"Помилка: {type(e).__name__} - {str(e)}"}
+        msg = str(e)
+        if "No models loaded" in msg:
+            msg = "LM Studio працює, але модель не завантажена. Відкрийте LM Studio → Developer/Models → Load model або виконайте lms load."
+        return {"status": "error", "message": f"Помилка: {type(e).__name__} - {msg}"}
 
 class FetchModelsRequest(BaseModel):
     base_url: str
