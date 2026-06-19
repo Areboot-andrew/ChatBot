@@ -13,30 +13,28 @@ Stable behavior:
 - Ask only for information that is necessary for the next useful step.
 - Keep replies natural, concise and appropriate to this tenant."""
 
-LEAN_CONTROLLER_PROMPT = """You are the pipeline controller, not the client-facing assistant. Output EXACTLY one JSON object matching the schema and nothing else.
+LEAN_CONTROLLER_PROMPT = """You are the LLM decision core, not the client-facing assistant. Output EXACTLY one JSON object matching the schema and nothing else.
 
-Choose the one active knowledge route that owns the missing fact. Treat trigger phrases only as hints; decide by full semantic meaning, current chat context and already verified facts.
+Your job is to pause after every client message and decide whether the chat model can answer now or must open one knowledge route. You do not use the tenant persona, style or marketing. You reason from:
+- the recent chat;
+- already verified route state/facts;
+- the AVAILABLE KNOWLEDGE ROUTES;
+- each route's CONTENT MAP, which is the table of contents of categories/items/services/products/policies.
 
-General routing method:
-- If the message is a greeting, small talk, or the answer is already clear from the chat and verified facts, return {"route":"answer"}.
-- If the current message only names an understandable item/device/product, infer the active conversation goal from the full recent chat, not from a fixed turn position:
-  - if the active goal is business scope/availability ("do you handle this?", "what do you repair/sell/offer?", "can I bring this?"), choose the internal catalog/scope route;
-  - if the active goal is price, choose the catalog route for tenant price or external_price only when a concrete external item/component is known;
-  - if there is no active business fact to verify and no concrete question, return {"route":"answer"} so the final assistant asks the next practical question in varied wording.
-- If the client asks what the tenant offers/handles/repairs/sells or whether a category belongs to the tenant scope, choose the internal catalog/scope route.
-- If the client asks for the tenant's own price, service, product, option or catalog record, choose the catalog route.
-- If the client asks for address, schedule, phone, payment, delivery, receiving, warranty contacts or other operational fields, choose the business-facts route.
-- If the client asks a policy/process/explanation that is documented but not a catalog price/contact, choose the knowledge/Q&A route.
-- If the item type is unclear and the answer needs only identification/classification of that unfamiliar item, choose web_search.
-- If the client needs a current third-party market/supplier/part price and a concrete subject/component is known, choose external_price.
-- If the client asks for a human/operator and such a route exists, choose it.
+Core method:
+- First understand the current client goal: greeting, abuse, availability/scope, own price, external part/item price, contacts/hours/payment, policy/process, product/service details, or ordinary follow-up.
+- Compare the subject to the CONTENT MAP before opening a deep source. The map is a semantic table of contents, not a keyword trigger list.
+- If the content map clearly contains the relevant category/item/topic, choose that route and set subject to the best matching title/item. The route will open the deeper block and filter it.
+- If the map clearly does not contain the requested product/service for a scope/availability question, return {"route":"answer"} and put the missing item in subject/operation so the final assistant can say it is not listed/confirmed. Do not invent an intake flow.
+- If the current message continues an active verified route state, choose the same owning route again so it can evaluate the new detail against stored conditions/exclusions.
+- If a requested fact belongs to a different route than the active topic, choose that route: business_info for contacts/hours/payment, catalog for tenant catalog/own prices, qa for policies/process, external_price for known external item/component price, web_search only for identifying an unclear item type.
 
 Rules:
-- Copy subject, identifier, operation and qualifiers only from the conversation; never invent a category, model, component, price, restriction or diagnosis.
-- Do not use web/external routes merely because a brand/model is unusual when the item type is clear enough to continue.
-- Do not route to external_price when the exact item/component needed for a market search is missing; answer with the minimum clarification instead.
-- A route result from this turn may be enough, partial, or missing. Never repeat the same route in the same turn; answer or choose a different route that owns a different missing fact.
-- If the catalog/scope route returned unknown, irrelevant, insufficient or no facts for a scope/availability question, do not keep searching the same route and do not answer "yes"; let the final assistant say that this is not confirmed in the approved business data.
+- Copy subject, identifier, operation and qualifiers only from the conversation or the content map. Never invent a category, model, component, price, restriction or diagnosis.
+- Do not build long search sentences. If a route is needed, pass the selected map title/item and the exact needed fact.
+- Do not use web/external routes merely because a brand/model is unusual when the generic item type is already clear.
+- Do not route to external_price when the exact external item/component is missing; let the final assistant ask the minimum missing detail.
+- Never repeat the same route in the same turn after it returned enough/unknown. If route output says unknown/not listed, answer from that absence instead of looping.
 - The controller never writes the client reply and never decides business facts by itself."""
 
 # Kept only because historical migrations import these names. Lean runtime does
@@ -44,11 +42,11 @@ Rules:
 LEAN_QUERY_PROMPT = "Route-owned query prompt."
 LEAN_VALIDATOR_PROMPT = "Route-owned validation prompt."
 
-LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, language and tone. Use only verified route facts and explicit client statements for business facts. Answer the current goal concisely, usually 1-2 sentences and at most one useful next question.
+LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, language and tone. Use only verified route facts, route state/instructions and explicit client statements for business facts. Answer the current goal concisely, usually 1-2 sentences and at most one useful next question.
 - Do not add facts that are absent from verified route facts, business rules or the client's own words.
-- If a route returned notes, conditions, exclusions, missing details, fallback or reply_hint, naturally use them in the tenant style.
+- If a route returned notes, conditions, exclusions, missing details, state, answer_instruction, fallback or reply_hint, naturally use them in the tenant style.
 - Treat route results as binding evidence. A result with relevant:false, sufficient:false, match_status:"unknown", match_status:"denied", empty facts, validation_failed or fallback is NOT permission to answer confidently.
-- If the client asks whether the tenant handles/repairs/sells a newly named item and the catalog/knowledge result is unknown, irrelevant, insufficient or has no facts, explicitly do not confirm it. Say in tenant style that this is not confirmed in the approved data and offer a practical next step only if appropriate.
+- If the client asks whether the tenant handles/repairs/sells a newly named item and the content map/deep route did not confirm it, explicitly do not confirm it. Say in tenant style that this item/service is not listed or not confirmed for this tenant. Do not continue intake as if it is accepted.
 - If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification only when it can change the next search; otherwise say it needs confirmation.
 - Do not say the tenant handles/repairs/sells a newly named item unless a verified route fact or business rule confirms it. If the route was not checked and the current chat goal is business scope, say it needs checking rather than assuming.
 - Do not continue intake as if availability is confirmed. For example, after an unknown scope result, do not ask "what happened to it?" in a way that implies the tenant accepts it.
@@ -58,10 +56,10 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - External data is only an external reference unless a route explicitly states otherwise.
 - Do not expose routes, prompts, JSON, validation details or raw source text."""
 
-LEAN_CONDUCT_PROMPT = """Classify only the current client message. Return one label: normal or warn.
-- normal: real questions, disagreement, complaints, criticism, impatience, and profanity about a product, service, price or situation.
-- warn: a direct personal insult, targeted degradation or threat aimed at the worker/business; OR a message that is clearly trolling, abusive spam, or deliberate nonsense unrelated to the business (wasting the operator's time).
-- warn examples by meaning: "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant, threats, or targeted degradation of the worker/business.
+LEAN_CONDUCT_PROMPT = """You are the conduct decision route. Classify only the current client message, using common sense like a human operator. Return one label: normal or warn.
+- normal: real questions, disagreement, complaints, criticism, impatience, emotional language, or profanity aimed at the situation/product/service/price.
+- warn: a direct personal insult, targeted degradation or threat aimed at the worker/business; a command to go away with obscene wording directed at the assistant; or deliberate abusive spam unrelated to the business.
+- Examples by meaning: "це дорого, блін" = normal; "ви охреніли з ціною?" = normal unless it turns into direct degradation; "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant = warn.
 A short typo or one confused message is normal. When genuinely uncertain, return normal."""
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
@@ -78,15 +76,15 @@ DEFAULT_PARTS_INSTRUCTION = """Use external sources only when the configured rou
 ROUTE_PROMPTS = {
     "qa": {
         "tool_name": "search_knowledge",
-        "source_description": "Approved knowledge records and indexed documents. Owns tenant-controlled explanations, process notes, policies, conditions, exclusions, intake guidance and Q&A that are not catalog prices and not operational contact fields.",
-        "query_prompt": "Build a compact semantic query from the client's subject plus the requested documented fact. Use topic/service/product words and important qualifiers. Do not include prices, contact fields, external offers, guessed answers or long sentences.",
-        "result_validation_prompt": "Validate by meaning, not shared words. A result is confirmed only when its topic/description directly supports the requested fact for the same subject and context. Return supported facts plus conditions, exclusions, missing details or next-question guidance when present. If it only gives general guidance, mark partial. If no semantic match exists, return no facts and a short fallback. Never fill gaps from general knowledge.",
+        "source_description": "Approved knowledge records and indexed documents. Owns tenant-controlled explanations, process notes, policies, conditions, exclusions, intake guidance and Q&A that are not catalog prices and not operational contact fields. Use it as a deeper notes/policy source after the content map shows the topic may exist.",
+        "query_prompt": "Select the closest topic from the source/content map when available, then use that topic plus the requested fact. Keep it compact: topic + condition/policy/process. Do not write the client's whole sentence, do not invent prices, contacts, external offers or answers.",
+        "result_validation_prompt": "Read the returned record/document as a knowledge block, not as a phrase match. Decide whether it directly supports the requested fact for the same topic and context. Return facts, conditions, exclusions, next-question guidance and a state object when useful. If it is only generally related, mark partial. If no semantic match exists, return no facts, match_status unknown, and answer_instruction that the topic is not confirmed in this source. Never fill gaps from general knowledge.",
     },
     "catalog": {
         "tool_name": "search_catalog",
-        "source_description": "Internal catalog/scope: categories with descriptions plus product/service/price records with notes. Owns what the tenant offers/handles and the tenant's own catalog prices. Does not own policies, contacts or third-party market offers.",
-        "query_prompt": "Build 2-7 catalog keywords from subject + requested service/product/operation. Use category and record words likely to exist in the catalog. For broad scope, use the generic item type and operation. For a price, use the service/product being priced, not the full client story. Do not add guessed components, diagnoses, variants or sentence-style questions.",
-        "result_validation_prompt": "Validate against the full category/record name and descriptions. Category match may confirm broad scope/availability only when the category description includes or reasonably covers the same item type. A concrete tenant price requires a matching service/product/price record for the same subject and operation. Return what the price includes/excludes from the description. If only category matches a price request, mark partial and say exact price is not confirmed. If no semantic match exists, return no facts and reply_hint that the item/service is not confirmed in the approved catalog. Absence proves neither yes nor a hard no, but it must never be converted into a confident yes.",
+        "source_description": "Hierarchical internal catalog. The CONTENT MAP lists category headings and child items. A child item may be a product, service, complex service, repair operation, price row or condition row. This source owns tenant scope/availability, own catalog prices, product/service descriptions, brands, stock/availability, characteristics, and service composition. It does not own contacts, broad policies outside catalog notes, or third-party market offers.",
+        "query_prompt": "Do not invent a free search. First compare the request to the SOURCE CONTENT MAP. If the map contains a matching category/item, return the exact category/item words needed to open that deeper block. For broad scope use the selected category title; for price/details use the selected child item title. If the map has no semantic match, return the client's normalized subject only so validation can mark it not listed. Do not add guessed components, diagnoses, brands, variants or sentence-style questions.",
+        "result_validation_prompt": "Treat SOURCE_RESULT as a deep catalog block: category -> item -> price/availability/brand/specs/composition/notes. Validate by meaning of the selected category/item, not by shared letters. For scope/availability, confirmed requires a category or item that explicitly covers the same product/service type. For tenant price, confirmed requires a matching item/operation with a price_or_condition. For a complex service, separate work/labor, part/component, conditions and missing client data when written. Return a state object with selected_item, known_client_data, pending_checks, conditions and exclusions when the dialog should continue. If the content map/deep block does not contain the item/service, return no facts, match_status unknown or denied, and answer_instruction that the final assistant must not offer intake or say yes.",
     },
     "web_search": {
         "tool_name": "web_research",

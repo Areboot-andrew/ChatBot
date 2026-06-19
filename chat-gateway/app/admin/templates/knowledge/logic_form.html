@@ -27,26 +27,26 @@
 
         <div class="p-4 bg-blue-950/20 border border-blue-900/50 rounded-lg space-y-5">
             <div>
-                <h4 class="text-sm font-semibold text-blue-300">Промпти роута (3 кроки)</h4>
-                <p class="mt-1 text-xs text-gray-400">Кожен крок — окремий виклик моделі зі своїм промптом. Сирі дані з бази в чат не потрапляють — спершу очищуються. Мова й тон фінальної відповіді — у головній персоні, тут лише пошук і відбір.</p>
+                <h4 class="text-sm font-semibold text-blue-300">Промпти роута (зміст → глибина → очищений стан)</h4>
+                <p class="mt-1 text-xs text-gray-400">Controller бачить короткий зміст джерела, а роут окремою LLM-сесією відкриває глибший блок і повертає лише очищені факти/умови/наступний крок. Мова й тон фінальної відповіді — у головній персоні.</p>
             </div>
 
             <div>
-                <label for="source_description" class="block mb-2 text-sm font-medium text-gray-300">1. Що це за джерело (для вибору роута)</label>
-                <p class="text-xs text-gray-500 mb-2">Опишіть, які факти належать цьому джерелу, а які не належать. Саме за цією межею головна модель обирає роут. Напр.: «Внутрішній каталог товарів, послуг і наших цін; не містить контактів та ринкових пропозицій».</p>
+                <label for="source_description" class="block mb-2 text-sm font-medium text-gray-300">1. Що це за база і які факти їй належать</label>
+                <p class="text-xs text-gray-500 mb-2">Опишіть межі джерела: що воно підтверджує, а що ні. Для каталогу зміст категорій/позицій підтягується автоматично й показується controller-моделі.</p>
                 <textarea name="source_description" id="source_description" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Внутрішній каталог товарів, послуг, варіантів і наших цін. Не містить політик, контактів або зовнішніх пропозицій.">{{ logic.meta.get('source_description', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
-                <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">2. Як сформувати пошуковий запит</label>
-                <p class="text-xs text-gray-500 mb-2">Поясніть окремій моделі роута, як перетворити структурований запит на коротку фразу для цього джерела. Вкажіть потрібні складові та що заборонено додумувати.</p>
-                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Склади короткий запит: предмет + потрібна властивість або дія + точний ідентифікатор, якщо він заданий. Не додавай невідомі характеристики, числа чи відповідь.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
+                <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">2. Як вибрати пункт зі змісту і відкрити глибше</label>
+                <p class="text-xs text-gray-500 mb-2">Поясніть route-моделі, як зіставляти питання клієнта з картою заголовків. Якщо пункт є — відкрити саме його; якщо нема — не вигадувати й повернути “не підтверджено”.</p>
+                <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Спершу порівняй питання з SOURCE CONTENT MAP. Якщо є відповідна категорія/позиція — поверни точну назву для глибокого читання. Якщо нема — поверни нормалізований предмет і дай валідатору сказати not listed.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
-                <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">3. Що лишити зі знайденого (очищення)</label>
-                <p class="text-xs text-gray-500 mb-2">Задайте критерії повного збігу предмета, потрібного факту та уточнень. Сирий результат не потрапляє в чат: далі передаються лише підтверджені факти або короткий fallback. Ізольована модель не бачить persona, маркетинг чи інші routes.</p>
-                <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Звір повний зміст: той самий предмет, ідентифікатор, потрібний факт і суттєві уточнення. Спільних окремих слів недостатньо. Лиши лише явно підтверджені факти й числа; нічого не домислюй.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
+                <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">3. Як очистити глибокий блок для чат-моделі</label>
+                <p class="text-xs text-gray-500 mb-2">Route-модель має повернути не готову відповідь, а структурований висновок: підтверджено/частково/не підтверджено, умови, винятки, ціни, що ще спитати, коли відмовити, і стан теми для наступного повідомлення.</p>
+                <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Прочитай блок як знання: що підтверджено, які умови/винятки, ціна/наявність/характеристики, що ще треба спитати. Поверни facts, notes, missing, state і answer_instruction. Не пиши готову фразу клієнту.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
         </div>
 

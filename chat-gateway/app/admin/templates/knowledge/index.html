@@ -16,6 +16,9 @@
             <button class="inline-block p-4 border-b-2 border-blue-500 text-blue-500 rounded-t-lg active-tab" data-tab="qa">Записи знань</button>
         </li>
         <li class="mr-2">
+            <a href="/admin/knowledge/prices" class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg">Зміст каталогу</a>
+        </li>
+        <li class="mr-2">
             <button class="inline-block p-4 border-b-2 border-transparent hover:text-gray-300 hover:border-gray-300 rounded-t-lg" data-tab="logic">Логіка pipeline</button>
         </li>
         <li class="mr-2">
@@ -30,7 +33,7 @@
 <!-- Tab Content: Knowledge Records -->
 <div id="tab-qa" class="tab-pane">
     <div class="flex justify-between items-center mb-4">
-        <p class="text-sm text-gray-400">Універсальні знання: тема / послуга / товар + опис для бота. Приклади фраз лише допомагають пошуку; остаточне рішення робить LLM роута.</p>
+        <p class="text-sm text-gray-400">Додаткові пояснення, правила й Q&A. Основний ієрархічний зміст товарів/послуг редагується в «Зміст каталогу».</p>
         <a href="/admin/knowledge/qa/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати запис</a>
     </div>
     
@@ -61,7 +64,7 @@
 <!-- Tab Content: Pipeline Logic -->
 <div id="tab-logic" class="tab-pane hidden">
     <div class="flex justify-between items-center mb-6">
-        <p class="text-sm text-gray-400">Pipeline показує, які бази знань підключені до чат-моделі. Код лише запускає етапи; що шукати і як фільтрувати — задають промпти кожного роута.</p>
+        <p class="text-sm text-gray-400">Pipeline показує входи в бази знань. Controller бачить карту змісту, обирає роут, а роут відкриває глибший блок і повертає очищений стан для чат-моделі.</p>
         <a href="/admin/knowledge/logic/create" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium transition">+ Додати базу</a>
     </div>
     
@@ -138,14 +141,14 @@
 
                 <div class="relative">
                     <div class="absolute -left-[29px] top-1 w-3 h-3 rounded-full bg-blue-500 ring-4 ring-gray-900"></div>
-                    <p class="font-bold text-gray-200">1. Рішення чат-моделі</p>
-                    <p class="text-xs text-gray-400 mt-1">LLM читає персону, чат і карту роутів нижче й вирішує: відповісти зараз чи звернутись до роута за потрібним фактом. Тригери — підказка, не жорстке правило.</p>
+                    <p class="font-bold text-gray-200">1. Рішення controller-моделі</p>
+                    <p class="text-xs text-gray-400 mt-1">Окремий LLM без тону й маркетингу читає чат, очищений стан і карту змісту: чи є такий товар/послуга, який пункт відкрити, чи відповідати без глибокого читання.</p>
                 </div>
 
                 <div class="relative">
                     <div class="absolute -left-[29px] top-1 w-3 h-3 rounded-full bg-green-500 ring-4 ring-gray-900"></div>
-                    <p class="font-bold text-gray-200">2. Роут бази знань</p>
-                    <p class="text-xs text-gray-400 mt-1">Обраний роут у власній ізольованій сесії: формує запит → шукає у своєму джерелі (записи знань/документи, каталог, бізнес-факти, web або постачальники) → перевіряє й чистить результат.</p>
+                    <p class="font-bold text-gray-200">2. Глибокий блок роута</p>
+                    <p class="text-xs text-gray-400 mt-1">Обраний роут у власній ізольованій сесії відкриває конкретний блок: категорію, товар, послугу, ціну, умови, винятки, наявність або характеристики, і повертає лише очищений висновок.</p>
                 </div>
 
                 <div class="relative">

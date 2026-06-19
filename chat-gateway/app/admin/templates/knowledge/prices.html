@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="flex items-center justify-between mb-8">
-    <h1 class="text-2xl font-bold text-gray-100">Каталог і прайси</h1>
+    <h1 class="text-2xl font-bold text-gray-100">Зміст каталогу: товари, послуги, ціни</h1>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -13,7 +13,7 @@
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6">
             <h2 class="text-lg font-semibold text-gray-200 mb-2">Імпорт Каталогу (YAML)</h2>
             <p class="text-sm text-gray-400 mb-4">
-                Тут ви можете завантажити ваш файл `knowledge_template.yaml`. Він автоматично оновить всі прайси, категорії та питання-відповіді.
+                Тут ви можете завантажити YAML зі змістом: категорії → товари/послуги → ціни/описи/умови. Це основна карта, яку бачить controller перед глибоким читанням.
             </p>
             <form action="/admin/knowledge/prices/import" method="POST" enctype="multipart/form-data" class="flex gap-4 items-center">
                 <input type="file" name="file" accept=".yaml,.yml" class="block w-full text-sm text-gray-300 border border-gray-700 rounded-lg cursor-pointer bg-gray-800 focus:outline-none p-2">
@@ -95,7 +95,7 @@
 
         <!-- Таблиця категорій та прайсів -->
         <div class="bg-gray-900 border border-gray-800 rounded-xl shadow-sm p-6 overflow-hidden">
-            <h2 class="text-lg font-semibold text-gray-200 mb-4">Поточний Каталог</h2>
+            <h2 class="text-lg font-semibold text-gray-200 mb-4">Поточний зміст</h2>
             
             {% if not categories %}
                 <div class="text-center py-8 text-gray-500">
@@ -116,17 +116,30 @@
                             <table class="w-full text-sm text-left text-gray-400">
                                 <thead class="text-xs text-gray-500 uppercase bg-gray-900">
                                     <tr>
-                                        <th class="px-4 py-2">Послуга</th>
-                                        <th class="px-4 py-2">Ціна</th>
-                                        <th class="px-4 py-2">Опис</th>
+                                        <th class="px-4 py-2">Позиція</th>
+                                        <th class="px-4 py-2">Тип / бренд</th>
+                                        <th class="px-4 py-2">Ціна / наявність</th>
+                                        <th class="px-4 py-2">Опис для моделі</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for price in cat.prices %}
+                                    {% set pm = price.meta or {} %}
                                     <tr class="border-b border-gray-800 hover:bg-gray-900/50">
                                         <td class="px-4 py-2">{{ price.name }}</td>
-                                        <td class="px-4 py-2 text-blue-400 font-medium">{{ price.price }}</td>
-                                        <td class="px-4 py-2 text-xs text-gray-500">{{ price.description or '' }}</td>
+                                        <td class="px-4 py-2 text-xs text-gray-400">
+                                            {{ pm.get('item_type', '-') }}
+                                            {% if pm.get('brand') %}<br><span class="text-gray-500">{{ pm.get('brand') }}</span>{% endif %}
+                                        </td>
+                                        <td class="px-4 py-2 text-xs">
+                                            <span class="text-blue-400 font-medium">{{ price.price }}</span>
+                                            {% if pm.get('availability') %}<br><span class="text-emerald-400">{{ pm.get('availability') }}</span>{% endif %}
+                                        </td>
+                                        <td class="px-4 py-2 text-xs text-gray-500">
+                                            {% if pm.get('characteristics') %}<div><b>Хар.:</b> {{ pm.get('characteristics') }}</div>{% endif %}
+                                            {% if pm.get('composition') %}<div><b>Склад:</b> {{ pm.get('composition') }}</div>{% endif %}
+                                            {% if price.description %}<div><b>Прим.:</b> {{ price.description }}</div>{% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>

@@ -551,9 +551,11 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
             search_tokens.append(form)
 
     name_conds = [ServicePrice.name.ilike(f"%{tok}%") for tok in search_tokens]
+    name_conds += [ServicePrice.description.ilike(f"%{tok}%") for tok in search_tokens]
     cat_conds = [ServiceCategory.title.ilike(f"%{tok}%") for tok in search_tokens]
+    cat_conds += [ServiceCategory.description.ilike(f"%{tok}%") for tok in search_tokens]
     res = await db.execute(
-        select(ServicePrice, ServiceCategory.title, ServiceCategory.description)
+        select(ServicePrice, ServiceCategory)
         .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
         .where(
             ServicePrice.tenant_id == tenant_id,
@@ -568,10 +570,21 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
         expanded_forms = [search_form(tok) for tok in tokens if tok not in raw]
 
         def score(row) -> tuple:
-            price, category, category_description = row
+            price, category = row
             name = (price.name or "").lower()
-            category_text = (category or "").lower()
-            description = f"{category_description or ''} {getattr(price, 'description', '') or ''}".lower()
+            category_text = (category.title or "").lower()
+            category_meta = category.meta or {}
+            item_meta = getattr(price, "meta", None) or {}
+            description = " ".join([
+                category.description or "",
+                str(category_meta.get("detailed_description") or ""),
+                " ".join(str(x) for x in (category_meta.get("problems") or []) if x),
+                getattr(price, "description", "") or "",
+                str(item_meta.get("brand") or ""),
+                str(item_meta.get("availability") or ""),
+                str(item_meta.get("characteristics") or ""),
+                str(item_meta.get("composition") or ""),
+            ]).lower()
             phrase = f"{category_text} {name} {description}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
             name_hits = sum(1 for _, form in original_forms if form in name)
@@ -582,12 +595,31 @@ async def _tool_search_catalog(query: str, tenant_id: uuid.UUID, db: AsyncSessio
 
         ranked = sorted(candidates, key=score, reverse=True)[:12]
         lines = []
-        for price, category, category_description in ranked:
-            bits = [f"- {category or 'Каталог'}: {price.name} — {price.price}"]
-            if category_description:
-                bits.append(f"Опис категорії: {category_description}")
+        for price, category in ranked:
+            category_meta = category.meta or {}
+            item_meta = getattr(price, "meta", None) or {}
+            bits = [f"- CATEGORY: {category.title or 'Каталог'}"]
+            if category.description:
+                bits.append(f"category_short: {category.description}")
+            if category_meta.get("detailed_description"):
+                bits.append(f"category_deep: {category_meta.get('detailed_description')}")
+            problems = category_meta.get("problems") if isinstance(category_meta.get("problems"), list) else []
+            if problems:
+                bits.append("category_signals: " + ", ".join(str(p) for p in problems[:20]))
+            bits.append(f"ITEM: {price.name}")
+            if item_meta.get("item_type"):
+                bits.append(f"item_type: {item_meta.get('item_type')}")
+            if item_meta.get("brand"):
+                bits.append(f"brand: {item_meta.get('brand')}")
+            bits.append(f"price_or_condition: {price.price}")
+            if item_meta.get("availability"):
+                bits.append(f"availability: {item_meta.get('availability')}")
+            if item_meta.get("characteristics"):
+                bits.append(f"characteristics: {item_meta.get('characteristics')}")
+            if item_meta.get("composition"):
+                bits.append(f"composition: {item_meta.get('composition')}")
             if getattr(price, "description", None):
-                bits.append(f"Опис позиції: {price.description}")
+                bits.append(f"item_notes_for_model: {price.description}")
             lines.append(" | ".join(bits))
         return "\n".join(lines)
 

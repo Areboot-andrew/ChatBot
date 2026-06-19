@@ -32,25 +32,62 @@
             </div>
 
             <h2 class="text-lg font-semibold text-gray-200 mb-4 flex justify-between items-center">
-                <span>Позиції каталогу: товари / послуги / роботи</span>
+                <span>Нижчий рівень змісту: товари / послуги / складні послуги</span>
                 <button type="button" onclick="addPriceRow()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition">+ Додати позицію</button>
             </h2>
+            <p class="text-xs text-gray-500 mb-3">Кожна позиція — це глибший блок, який route-модель відкриває після вибору зі змісту. Для магазину заповнюйте тип/бренд/наявність/характеристики; для сервісу — тип послуги, ціну, склад роботи й примітки.</p>
             
             <div id="prices-container" class="space-y-3 mb-8">
                 {% for price in cat.prices %}
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start price-row bg-gray-800 p-3 rounded-lg border border-gray-700">
-                    <div class="md:col-span-5">
-                        <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                {% set pm = price.meta or {} %}
+                <div class="price-row bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                        <div class="md:col-span-4">
+                            <label class="block mb-1 text-[11px] text-gray-500">Заголовок позиції</label>
+                            <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block mb-1 text-[11px] text-gray-500">Тип</label>
+                            <select name="price_item_type[]" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                                {% set typ = pm.get('item_type', '') %}
+                                <option value="" {% if not typ %}selected{% endif %}>не вказано</option>
+                                <option value="товар" {% if typ == 'товар' %}selected{% endif %}>товар</option>
+                                <option value="послуга" {% if typ == 'послуга' %}selected{% endif %}>послуга</option>
+                                <option value="складна послуга" {% if typ == 'складна послуга' %}selected{% endif %}>складна послуга</option>
+                                <option value="запчастина" {% if typ == 'запчастина' %}selected{% endif %}>запчастина</option>
+                                <option value="умова" {% if typ == 'умова' %}selected{% endif %}>умова</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block mb-1 text-[11px] text-gray-500">Бренд / група</label>
+                            <input type="text" name="price_brand[]" value="{{ pm.get('brand', '') }}" placeholder="Apple, Bose, Philips..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова</label>
+                            <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="1500 грн / після діагностики" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                        </div>
+                        <div class="md:col-span-1">
+                            <label class="block mb-1 text-[11px] text-gray-500">Наявність</label>
+                            <input type="text" name="price_availability[]" value="{{ pm.get('availability', '') }}" placeholder="є / під замовлення" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                        </div>
+                        <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
                     </div>
-                    <div class="md:col-span-3">
-                        <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block mb-1 text-[11px] text-gray-500">Характеристики / параметри</label>
+                            <textarea name="price_characteristics[]" rows="2" placeholder="Для товару: розмір, колір, модель, сумісність. Для послуги: тип пристроїв, важливі параметри." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('characteristics', '') }}</textarea>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-[11px] text-gray-500">Склад / комплект</label>
+                            <textarea name="price_composition[]" rows="2" placeholder="Що входить: робота + запчастина, діагностика, доставка, гарантія..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('composition', '') }}</textarea>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-[11px] text-gray-500">Примітки для моделі</label>
+                            <textarea name="price_description[]" rows="2" placeholder="Умови, винятки, що уточнити, коли відмовити або погодити ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
+                        </div>
                     </div>
-                    <div class="md:col-span-3">
-                        <textarea name="price_description[]" rows="2" placeholder="Опис / примітки: умови, винятки, що уточнити, що входить у ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
-                    </div>
-                    <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
                 </div>
                 {% endfor %}
             </div>
@@ -75,20 +112,54 @@
 function addPriceRow() {
     const container = document.getElementById('prices-container');
     const row = document.createElement('div');
-    row.className = 'grid grid-cols-1 md:grid-cols-12 gap-3 items-start price-row bg-gray-800 p-3 rounded-lg border border-gray-700';
+    row.className = 'price-row bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-3';
     row.innerHTML = `
-        <div class="md:col-span-5">
-            <input type="text" name="price_name[]" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+            <div class="md:col-span-4">
+                <label class="block mb-1 text-[11px] text-gray-500">Заголовок позиції</label>
+                <input type="text" name="price_name[]" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-[11px] text-gray-500">Тип</label>
+                <select name="price_item_type[]" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                    <option value="">не вказано</option>
+                    <option value="товар">товар</option>
+                    <option value="послуга">послуга</option>
+                    <option value="складна послуга">складна послуга</option>
+                    <option value="запчастина">запчастина</option>
+                    <option value="умова">умова</option>
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-[11px] text-gray-500">Бренд / група</label>
+                <input type="text" name="price_brand[]" placeholder="Apple, Bose, Philips..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова</label>
+                <input type="text" name="price_value[]" placeholder="1500 грн / після діагностики" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+            </div>
+            <div class="md:col-span-1">
+                <label class="block mb-1 text-[11px] text-gray-500">Наявність</label>
+                <input type="text" name="price_availability[]" placeholder="є / під замовлення" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+            </div>
+            <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
         </div>
-        <div class="md:col-span-3">
-            <input type="text" name="price_value[]" placeholder="Ціна (напр. 1500 грн)" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+                <label class="block mb-1 text-[11px] text-gray-500">Характеристики / параметри</label>
+                <textarea name="price_characteristics[]" rows="2" placeholder="Розмір, колір, модель, сумісність або тип пристроїв" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] text-gray-500">Склад / комплект</label>
+                <textarea name="price_composition[]" rows="2" placeholder="Робота + запчастина, гарантія, діагностика..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+            </div>
+            <div>
+                <label class="block mb-1 text-[11px] text-gray-500">Примітки для моделі</label>
+                <textarea name="price_description[]" rows="2" placeholder="Умови, винятки, що уточнити, коли відмовити" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+            </div>
         </div>
-        <div class="md:col-span-3">
-            <textarea name="price_description[]" rows="2" placeholder="Опис / примітки: умови, винятки, що уточнити, що входить у ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
-        </div>
-        <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-        </button>
     `;
     container.appendChild(row);
 }

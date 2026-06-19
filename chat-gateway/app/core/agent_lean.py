@@ -195,8 +195,56 @@ async def _load_routes(tenant_id, db):
             "source_description": (m.get("source_description") or "").strip(),
             "result_validation_prompt": (m.get("result_validation_prompt") or "").strip(),
             "target_url": (m.get("target_url") or "").strip(),
+            "content_map": "",
         }
+    for route in routes.values():
+        if route.get("tool_name") == "search_catalog":
+            route["content_map"] = await _catalog_content_map(tenant_id, db)
     return routes
+
+
+async def _catalog_content_map(tenant_id, db) -> str:
+    """Small hierarchical table of contents for the controller/route model.
+
+    This is not final evidence. It lets the LLM see what categories/items exist
+    before it decides whether opening a deep catalog block is worthwhile.
+    """
+    try:
+        from sqlalchemy.orm import selectinload
+        from app.models.services import ServiceCategory
+
+        res = await db.execute(
+            select(ServiceCategory)
+            .where(ServiceCategory.tenant_id == tenant_id, ServiceCategory.enabled == True)
+            .options(selectinload(ServiceCategory.prices))
+            .order_by(ServiceCategory.title)
+        )
+        lines = []
+        for cat in res.scalars().all()[:30]:
+            meta = dict(cat.meta or {})
+            bits = [f"- {cat.title}"]
+            if cat.description:
+                bits.append(f"short: {cat.description}")
+            problems = meta.get("problems") if isinstance(meta.get("problems"), list) else []
+            if problems:
+                bits.append("signals: " + ", ".join(str(p) for p in problems[:8]))
+            lines.append(" | ".join(bits))
+            for item in list(cat.prices or [])[:12]:
+                im = dict(getattr(item, "meta", None) or {})
+                item_bits = [f"  - {item.name}"]
+                if im.get("item_type"):
+                    item_bits.append(f"type: {im.get('item_type')}")
+                if im.get("brand"):
+                    item_bits.append(f"brand: {im.get('brand')}")
+                if item.price:
+                    item_bits.append(f"price: {item.price}")
+                if im.get("availability"):
+                    item_bits.append(f"availability: {im.get('availability')}")
+                lines.append(" | ".join(item_bits))
+        return "\n".join(lines)[:9000]
+    except Exception as e:
+        logger.warning(f"catalog content map failed: {e}")
+        return ""
 
 
 def _source_map(routes: dict) -> str:
@@ -210,6 +258,8 @@ def _source_map(routes: dict) -> str:
             line += f" Provides: {desc}."
         if trig:
             line += f" Triggers: {trig}."
+        if r.get("content_map"):
+            line += f"\n  CONTENT MAP:\n{r['content_map']}"
         lines.append(line)
     return "\n".join(lines)
 
@@ -359,15 +409,17 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         elif not str(raw or "").strip():
             emit(f"DECIDE #{step}", "Порожньо", "Контролер нічого не повернув (див. помилку LLM вище).")
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
-        fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
-        if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
-            decision = fallback_decision
-            pick = str(decision.get("route") or "answer").strip()
-            emit(
-                f"DECIDE #{step}",
-                "Аварійний route",
-                f"controller output unusable/unsafe for factual request → {pick} ({fallback_reason})",
-            )
+        fallback_on = str(meta.get("controller_structural_fallback", "0")).strip().lower() in ("1", "true", "on", "yes")
+        if fallback_on:
+            fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
+            if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
+                decision = fallback_decision
+                pick = str(decision.get("route") or "answer").strip()
+                emit(
+                    f"DECIDE #{step}",
+                    "Аварійний route",
+                    f"controller output unusable/unsafe for factual request → {pick} ({fallback_reason})",
+                )
         if pick in ("answer", "") or pick not in routes:
             emit(f"DECIDE #{step}", "Рішення: відповідь", f"route/answer = '{pick or 'answer'}'")
             break
@@ -400,6 +452,13 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             facts.extend(f"[{route['label']}] {fact}" for fact in result["facts"])
             facts.extend(f"[{route['label']} note] {note}" for note in result.get("notes", []))
             facts.extend(f"[{route['label']} missing] {m}" for m in result.get("missing", []))
+            if result.get("state"):
+                facts.append(
+                    f"[{route['label']} state] "
+                    + json.dumps(result["state"], ensure_ascii=False)
+                )
+            if result.get("answer_instruction"):
+                facts.append(f"[{route['label']} instruction] {result['answer_instruction']}")
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
@@ -509,6 +568,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     """Run one route-owned LLM session with short-lived private memory."""
     system = (
         f"[ROUTE SOURCE]\n{route.get('source_description') or ''}\n\n"
+        f"[SOURCE CONTENT MAP]\n{route.get('content_map') or 'No content map configured for this source.'}\n\n"
         f"[HOW THIS ROUTE BUILDS ITS SOURCE QUERY]\n{route.get('query_prompt') or ''}\n\n"
         f"[HOW THIS ROUTE VALIDATES AND FILTERS RESULTS]\n{route.get('result_validation_prompt') or ''}"
     )
@@ -541,6 +601,8 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         '"match_status":"confirmed|partial|denied|unknown",'
         '"facts":["..."],"notes":["conditions/exclusions/important context"],'
         '"missing":["needed client detail"],"reply_hint":"short guidance for final assistant"|null,'
+        '"state":{"topic":"...","selected_item":"...","known_client_data":{},"pending_checks":[],"conditions":[],"exclusions":[]}|null,'
+        '"answer_instruction":"what the final chat model should do next"|null,'
         '"fallback":"..."|null}'
     )})
     emit(f"CLEAN #{step}", "Вхід у модель", _fmt_msgs(route_memory))
@@ -563,12 +625,15 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
             "notes": notes if relevant else [],
             "missing": missing if relevant else [],
             "reply_hint": str(parsed.get("reply_hint")).strip() if parsed.get("reply_hint") else None,
+            "state": parsed.get("state") if isinstance(parsed.get("state"), dict) else None,
+            "answer_instruction": str(parsed.get("answer_instruction")).strip() if parsed.get("answer_instruction") else None,
             "fallback": str(parsed.get("fallback")).strip() if parsed.get("fallback") else None,
         }
     except Exception:
         result = {
             "relevant": False, "sufficient": False, "match_status": "unknown",
             "facts": [], "notes": [], "missing": [], "reply_hint": None,
+            "state": None, "answer_instruction": None,
             "fallback": "validation_failed",
         }
     emit(f"CLEAN #{step}", "Очищено", json.dumps(result, ensure_ascii=False))
