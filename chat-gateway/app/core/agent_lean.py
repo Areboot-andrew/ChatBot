@@ -72,22 +72,25 @@ def _ua_fallback(settings) -> str:
 def _decision_from_raw(raw: str):
     """Parse the controller decision tolerantly. Small models (llama) sometimes
     emit slightly broken JSON (stray comma, extra quote). Returns (decision,
-    recovered): if strict JSON fails we still pull the route code + key fields by
-    regex instead of dropping the whole routing decision."""
+    recovered, usable): if strict JSON fails we still pull the route code + key
+    fields by regex instead of dropping the whole routing decision. If neither
+    JSON nor a route field exists, the controller output is unusable and a
+    structural fallback may rescue the turn."""
     raw = raw or ""
     try:
-        return _extract_json(raw), False
+        parsed = _extract_json(raw)
+        return parsed, False, bool(str(parsed.get("route") or parsed.get("action") or "").strip())
     except Exception:
         pass
     m = re.search(r'"route"\s*:\s*"?([a-zA-Z_][\w]*)"?', raw)
     if not m:
-        return {"route": "answer"}, False
+        return {"route": "answer"}, False, False
     d = {"route": m.group(1)}
     for k in ("question", "requested_fact", "subject", "identifier", "operation"):
         mm = re.search(r'"%s"\s*:\s*"([^"]*)"' % k, raw)
         if mm:
             d[k] = mm.group(1)
-    return d, True
+    return d, True, bool(str(d.get("route") or "").strip())
 
 
 def _text_blob(text: str, history: list | None = None) -> str:
@@ -397,10 +400,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
     syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), {})
     serper_key = meta.get("serper_api_key")
-    try:
-        max_iter = min(3, max(1, int(meta.get("agent_max_iterations", 3))))
-    except (ValueError, TypeError):
-        max_iter = 3
+    # One client message should open at most one knowledge source. Multi-route
+    # planning caused the assistant to dig through unrelated bases; the next
+    # client turn can request the next missing fact naturally.
+    max_iter = 1
 
     routes = await _load_routes(tenant_id, db)
     source_map = _source_map(routes)
@@ -463,7 +466,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
-        decision, recovered = _decision_from_raw(raw)
+        decision, recovered, controller_usable = _decision_from_raw(raw)
         if recovered:
             emit(f"DECIDE #{step}", "JSON виправлено", "Контролер дав кривий JSON — route витягнуто толерантним парсером.")
         elif not str(raw or "").strip():
@@ -471,11 +474,17 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             controller_status_notes.append(
                 "The controller returned no usable decision this turn, so no new business fact was verified by a route."
             )
+        elif not controller_usable:
+            emit(f"DECIDE #{step}", "Непридатне рішення", "Контролер не повернув JSON route/action, тому можна застосувати структурний fallback.")
+            controller_status_notes.append(
+                "The controller returned prose or malformed output without a usable route/action, so no new business fact was verified by that controller decision."
+            )
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
         fallback_on = str(meta.get("controller_structural_fallback", "1")).strip().lower() in ("1", "true", "on", "yes")
         if fallback_on:
             fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
-            if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
+            invalid_pick = pick not in routes and pick not in ("answer", "")
+            if fallback_decision and (not controller_usable or invalid_pick):
                 decision = fallback_decision
                 pick = str(decision.get("route") or "answer").strip()
                 emit(

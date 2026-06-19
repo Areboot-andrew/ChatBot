@@ -48,6 +48,7 @@ def upgrade() -> None:
         meta["lean_conduct_prompt"] = LEAN_CONDUCT_PROMPT
         meta["lean_warning_prompt"] = LEAN_WARNING_PROMPT
         meta["controller_structural_fallback"] = "1"
+        meta["agent_max_iterations"] = "1"
         meta["conduct_enabled"] = str(meta.get("conduct_enabled") or "1")
         meta["conduct_warnings"] = str(meta.get("conduct_warnings") or "2")
 

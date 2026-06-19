@@ -154,7 +154,7 @@
         <div>
             <h3 class="text-lg font-semibold text-gray-200 mb-4 border-b border-gray-800 pb-2">Архітектура розмови</h3>
             <p class="text-sm text-gray-400 mb-3">Єдина схема роботи: чат-модель говорить з клієнтом, controller-модель вирішує чи потрібні дані, а кожен роут читає свою базу в окремій памʼяті й повертає очищений стан.</p>
-            <input type="hidden" name="agent_max_iterations" value="{{ settings.meta.get('agent_max_iterations', '3') if settings and settings.meta else '3' }}">
+            <input type="hidden" name="agent_max_iterations" value="1">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div>
                     <div class="bg-gray-950 border border-gray-800 rounded-lg p-4">

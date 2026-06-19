@@ -230,7 +230,7 @@ async def create_tenant(
         temperature="0.7",
         max_tokens="1024",
         meta={
-            "agent_max_iterations": "3",
+            "agent_max_iterations": "1",
             "controller_structural_fallback": "1",
             "ban_message": "Вітаю, вас забанено.",
             "conduct_enabled": "1",
@@ -834,7 +834,7 @@ async def update_settings(
     escalation_policy: str = Form("handoff"),
     escalation_prompt: str = Form(""),
     fallback_text: str = Form(""),
-    agent_max_iterations: str = Form("3"),
+    agent_max_iterations: str = Form("1"),
     serper_api_key: str = Form(""),
     parts_sites: str = Form(""),
     price_search_urls: str = Form(""),

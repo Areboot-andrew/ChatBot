@@ -91,7 +91,7 @@ async def seed_admin():
                 temperature="0.7",
                 max_tokens="1024",
                 meta={
-                    "agent_max_iterations": "3",
+                    "agent_max_iterations": "1",
                     "controller_structural_fallback": "1",
                     # Temporary Serper (Google) key — replace with your own in Settings
                     "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",
@@ -123,6 +123,7 @@ async def seed_default_prompts(db):
 
     defaults = {
         "ban_message": "Вітаю, вас забанено.",
+        "agent_max_iterations": "1",
         "catalog_synonyms": "",
         "conduct_enabled": "1",
         "conduct_warnings": "2",
