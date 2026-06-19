@@ -257,6 +257,23 @@ def _conduct_warning_fallback(warning_count: int, warning_limit: int) -> str:
     return "Я не продовжуватиму розмову в такому тоні. Наступна пряма образа — закрию чат."
 
 
+def _needs_business_contacts(text: str, route_results: list[str], facts: list[str]) -> bool:
+    """Only attach the tenant contact card when the current turn needs it."""
+    current = (text or "").lower()
+    if re.search(
+        r"(?iu)\b(адрес\w*|де\s+ви|куди|графік|коли\s+працю|години|"
+        r"номер|контакт\w*|ваш\s+телефон|телефон\s+для\s+зв'?язку|"
+        r"подзвон|зателефон|оплата|заплатити|нова\s+пошта|відправити|"
+        r"доставка|гарантія)\b",
+        current,
+    ):
+        return True
+    joined_routes = "\n".join(route_results).lower()
+    if '"route": "business_info"' in joined_routes:
+        return True
+    return any("бізнес-інфо" in f.lower() or "business_info" in f.lower() for f in facts)
+
+
 def _recent(history: list, text: str, n: int = 8) -> list:
     msgs = []
     for h in (history or [])[-n:]:
@@ -568,10 +585,8 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             + "\n".join(f"- {note}" for note in controller_status_notes)
             + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Also do not claim the item is absent from the catalog merely because the controller failed; say it needs checking or ask the one detail needed to check it."
         )
-    # The business's own contact card — tiny, always available so the model can
-    # never invent an address/hours/phone even if routing missed this turn.
     biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
-    if biz:
+    if biz and _needs_business_contacts(text, route_results, facts):
         biz_lines = "\n".join(f"- {k}: {v}" for k, v in biz.items() if str(v).strip())
         if biz_lines:
             ans_sys += ("\n\n[BUSINESS CONTACTS — the ONLY source for address, hours, phone, payment, "
