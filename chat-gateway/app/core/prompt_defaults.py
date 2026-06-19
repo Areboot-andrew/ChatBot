@@ -36,6 +36,7 @@ Rules:
 - Do not use web/external routes merely because a brand/model is unusual when the item type is clear enough to continue.
 - Do not route to external_price when the exact item/component needed for a market search is missing; answer with the minimum clarification instead.
 - A route result from this turn may be enough, partial, or missing. Never repeat the same route in the same turn; answer or choose a different route that owns a different missing fact.
+- If the catalog/scope route returned unknown, irrelevant, insufficient or no facts for a scope/availability question, do not keep searching the same route and do not answer "yes"; let the final assistant say that this is not confirmed in the approved business data.
 - The controller never writes the client reply and never decides business facts by itself."""
 
 # Kept only because historical migrations import these names. Lean runtime does
@@ -46,8 +47,11 @@ LEAN_VALIDATOR_PROMPT = "Route-owned validation prompt."
 LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, language and tone. Use only verified route facts and explicit client statements for business facts. Answer the current goal concisely, usually 1-2 sentences and at most one useful next question.
 - Do not add facts that are absent from verified route facts, business rules or the client's own words.
 - If a route returned notes, conditions, exclusions, missing details, fallback or reply_hint, naturally use them in the tenant style.
-- If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification or say it needs confirmation.
+- Treat route results as binding evidence. A result with relevant:false, sufficient:false, match_status:"unknown", match_status:"denied", empty facts, validation_failed or fallback is NOT permission to answer confidently.
+- If the client asks whether the tenant handles/repairs/sells a newly named item and the catalog/knowledge result is unknown, irrelevant, insufficient or has no facts, explicitly do not confirm it. Say in tenant style that this is not confirmed in the approved data and offer a practical next step only if appropriate.
+- If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification only when it can change the next search; otherwise say it needs confirmation.
 - Do not say the tenant handles/repairs/sells a newly named item unless a verified route fact or business rule confirms it. If the route was not checked and the current chat goal is business scope, say it needs checking rather than assuming.
+- Do not continue intake as if availability is confirmed. For example, after an unknown scope result, do not ask "what happened to it?" in a way that implies the tenant accepts it.
 - Ask for exact model, photo, link or document only when it is truly needed for a part, exact external price, compatibility, warranty/identity, or when the item type cannot be understood.
 - If the tenant is a service/repair business and the client named an item but not the fault, ask for the problem/symptom in natural varied wording. Do not reuse one fixed phrase every time.
 - If the client named a symptom, give the next practical step and do not guess the broken component.
@@ -57,6 +61,7 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 LEAN_CONDUCT_PROMPT = """Classify only the current client message. Return one label: normal or warn.
 - normal: real questions, disagreement, complaints, criticism, impatience, and profanity about a product, service, price or situation.
 - warn: a direct personal insult, targeted degradation or threat aimed at the worker/business; OR a message that is clearly trolling, abusive spam, or deliberate nonsense unrelated to the business (wasting the operator's time).
+- warn examples by meaning: "іди нахер", "іди нахуй", "пішов нахуй", "нахуй" as a direct reply to the assistant, threats, or targeted degradation of the worker/business.
 A short typo or one confused message is normal. When genuinely uncertain, return normal."""
 
 LEAN_WARNING_PROMPT = """The conduct classifier marked the current message as a direct personal insult or threat. Write one short firm reply in the configured persona and language. Ask the client to communicate normally and state that another direct attack will close the chat. Do not continue the business request or add unrelated information. Available counters: {warning_count} and {warning_limit}."""
@@ -81,7 +86,7 @@ ROUTE_PROMPTS = {
         "tool_name": "search_catalog",
         "source_description": "Internal catalog/scope: categories with descriptions plus product/service/price records with notes. Owns what the tenant offers/handles and the tenant's own catalog prices. Does not own policies, contacts or third-party market offers.",
         "query_prompt": "Build 2-7 catalog keywords from subject + requested service/product/operation. Use category and record words likely to exist in the catalog. For broad scope, use the generic item type and operation. For a price, use the service/product being priced, not the full client story. Do not add guessed components, diagnoses, variants or sentence-style questions.",
-        "result_validation_prompt": "Validate against the full category/record name and descriptions. Category match may confirm broad scope/availability only when the category description includes or reasonably covers the same item type. A concrete tenant price requires a matching service/product/price record for the same subject and operation. Return what the price includes/excludes from the description. If only category matches a price request, mark partial and say exact price is not confirmed. If no semantic match exists, return no facts; absence proves neither yes nor no.",
+        "result_validation_prompt": "Validate against the full category/record name and descriptions. Category match may confirm broad scope/availability only when the category description includes or reasonably covers the same item type. A concrete tenant price requires a matching service/product/price record for the same subject and operation. Return what the price includes/excludes from the description. If only category matches a price request, mark partial and say exact price is not confirmed. If no semantic match exists, return no facts and reply_hint that the item/service is not confirmed in the approved catalog. Absence proves neither yes nor a hard no, but it must never be converted into a confident yes.",
     },
     "web_search": {
         "tool_name": "web_research",
