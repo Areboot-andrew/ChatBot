@@ -82,6 +82,84 @@ def _decision_from_raw(raw: str):
     return d, True
 
 
+def _text_blob(text: str, history: list | None = None) -> str:
+    recent = " ".join(str(h.get("content", "")) for h in (history or [])[-6:])
+    return f"{recent} {text or ''}".lower()
+
+
+def _fallback_route_decision(text: str, history: list | None, routes: dict):
+    """Structural safety net when the controller returns prose/empty output.
+
+    This is not business logic and does not decide facts. It only prevents a
+    failed controller from falling into free-form ANSWER for requests whose fact
+    owner is obvious from route roles: scope/catalog, price, business fields, or
+    policy/process knowledge.
+    """
+    current = (text or "").strip()
+    blob = _text_blob(text, history)
+
+    def has_route(code: str) -> bool:
+        return code in routes and bool(routes[code].get("tool_name"))
+
+    scope_re = (
+        r"\b(ремонтуєте|ремонтуємо|робите|берете|приймаєте|займаєтесь|"
+        r"обслуговуєте|чините|можна\s+принести|можна\s+привезти)\b|"
+        r"що\s+(ви\s+)?(ремонтуєте|робите|берете|обслуговуєте|приймаєте)"
+    )
+    active_scope_re = (
+        r"що\s+(ви\s+)?(ремонтуєте|робите|берете|обслуговуєте|приймаєте)|"
+        r"яку\s+техніку|які\s+пристрої|чим\s+займаєтесь"
+    )
+    price_re = r"\b(ціна|вартість|скільки\s+коштує|по\s+чому|прайс|орієнтовно)\b"
+    business_re = (
+        r"\b(адрес\w*|де\s+ви|графік|коли\s+працю|години|телефон|номер|"
+        r"оплата|заплатити|нова\s+пошта|відправити|доставка|гарантія)\b"
+    )
+    qa_re = r"\b(як\s+відбувається|умови|правила|процес|запчастини\s+окремо|гарантійний)\b"
+
+    if has_route("business_info") and re.search(business_re, blob):
+        return {
+            "route": "business_info",
+            "question": current,
+            "requested_fact": "business_info",
+            "subject": current,
+            "operation": "lookup_business_field",
+            "identifier": "",
+            "qualifiers": {},
+        }, "business field keywords"
+    if has_route("catalog") and re.search(price_re, blob):
+        return {
+            "route": "catalog",
+            "question": current,
+            "requested_fact": "price",
+            "subject": current,
+            "operation": "tenant_price_lookup",
+            "identifier": "",
+            "qualifiers": {},
+        }, "price keywords"
+    if has_route("catalog") and (re.search(scope_re, blob) or re.search(active_scope_re, blob)):
+        return {
+            "route": "catalog",
+            "question": current,
+            "requested_fact": "availability",
+            "subject": current,
+            "operation": "scope_check",
+            "identifier": "",
+            "qualifiers": {},
+        }, "scope/availability context"
+    if has_route("qa") and re.search(qa_re, blob):
+        return {
+            "route": "qa",
+            "question": current,
+            "requested_fact": "policy_or_process",
+            "subject": current,
+            "operation": "knowledge_lookup",
+            "identifier": "",
+            "qualifiers": {},
+        }, "knowledge/policy keywords"
+    return None, ""
+
+
 def _fmt_msgs(messages) -> str:
     """Render the exact messages sent to the model for the live trace."""
     return "\n\n".join(f"[{m.get('role', '?').upper()}]\n{m.get('content', '')}" for m in messages)
@@ -279,8 +357,17 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         if recovered:
             emit(f"DECIDE #{step}", "JSON виправлено", "Контролер дав кривий JSON — route витягнуто толерантним парсером.")
         elif not str(raw or "").strip():
-            emit(f"DECIDE #{step}", "Порожньо → відповідаю", "Контролер нічого не повернув (див. помилку LLM вище).")
+            emit(f"DECIDE #{step}", "Порожньо", "Контролер нічого не повернув (див. помилку LLM вище).")
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
+        fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
+        if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
+            decision = fallback_decision
+            pick = str(decision.get("route") or "answer").strip()
+            emit(
+                f"DECIDE #{step}",
+                "Аварійний route",
+                f"controller output unusable/unsafe for factual request → {pick} ({fallback_reason})",
+            )
         if pick in ("answer", "") or pick not in routes:
             emit(f"DECIDE #{step}", "Рішення: відповідь", f"route/answer = '{pick or 'answer'}'")
             break
