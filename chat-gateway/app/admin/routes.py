@@ -214,6 +214,7 @@ async def create_tenant(
         max_tokens="1024",
         meta={
             "agent_max_iterations": "3",
+            "controller_structural_fallback": "1",
             "ban_message": "Вітаю, вас забанено.",
             "conduct_enabled": "1",
             "conduct_warnings": "2",
@@ -896,7 +897,7 @@ _CONFIG_COLUMNS = ["system_prompt", "business_rules", "marketing_rules",
                    "escalation_prompt", "escalation_policy", "fallback_text",
                    "llm_model", "temperature", "max_tokens",
                    "rag_top_k", "rag_score_threshold"]
-_CONFIG_META_KEYS = ["agent_max_iterations",
+_CONFIG_META_KEYS = ["agent_max_iterations", "controller_structural_fallback",
                      "ban_message", "conduct_enabled", "conduct_warnings",
                      "marketing_enabled", "parts_sites", "price_search_urls",
                      "catalog_synonyms", "business_info",

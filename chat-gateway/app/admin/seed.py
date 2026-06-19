@@ -149,6 +149,7 @@ async def seed_admin():
                 max_tokens="1024",
                 meta={
                     "agent_max_iterations": "3",
+                    "controller_structural_fallback": "1",
                     # Temporary Serper (Google) key — replace with your own in Settings
                     "serper_api_key": "2d030163fbd463059411ab1c1f7ba67220a8510d",
                     "business_info": {},

@@ -19,7 +19,7 @@ Your job is to pause after every client message and decide whether the chat mode
 - the recent chat;
 - already verified route state/facts;
 - the AVAILABLE KNOWLEDGE ROUTES;
-- each route's CONTENT MAP. For catalog this is only a short list of category headings with short descriptions, not prices, brands, symptoms or item rows.
+- each route's CONTENT MAP. For catalog this is only a short list of category headings, not descriptions, prices, brands, symptoms or item rows.
 
 Core method:
 - First understand the current client goal: greeting, abuse, availability/scope, own price, external part/item price, contacts/hours/payment, policy/process, product/service details, or ordinary follow-up.
@@ -51,6 +51,7 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - Do not add facts that are absent from verified route facts, business rules or the client's own words.
 - If a route returned notes, conditions, exclusions, missing details, state, answer_instruction, fallback or reply_hint, naturally use them in the tenant style.
 - Treat route results as binding evidence. A result with relevant:false, sufficient:false, match_status:"unknown", match_status:"denied", empty facts, validation_failed or fallback is NOT permission to answer confidently.
+- A broad tenant persona phrase or business type label is not scope evidence. For a concrete newly named item/service, only verified route facts/state can confirm that the tenant handles it.
 - If the client asks whether the tenant handles/repairs/sells a newly named item and the content map/deep route did not confirm it, explicitly do not confirm it. Say in tenant style that this item/service is not listed or not confirmed for this tenant. Do not continue intake as if it is accepted.
 - If the route says the item wording is unclear, noisy or possibly mistyped, ask one short clarification about what exact item/device the client means. Do not ask for photo/link unless a route specifically says that is needed.
 - If the client asks where/when/how to bring, send or submit a named item/service, contacts are not enough. Before giving address/hours as an intake instruction, availability/scope for that named item/service must be verified in route facts or state. If not verified, say that this item/service is not confirmed/listed for this tenant and do not provide drop-off instructions as if accepted.

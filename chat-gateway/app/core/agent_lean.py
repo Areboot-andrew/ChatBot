@@ -214,9 +214,9 @@ async def _load_routes(tenant_id, db):
 async def _catalog_content_map(tenant_id, db) -> str:
     """Tiny category table of contents for routing.
 
-    Keep this deliberately small. The controller should see only category
-    headings plus short descriptions, not prices, brands, symptoms, or item
-    details. Deep catalog rows are opened later by the selected route/tool.
+    Keep this deliberately tiny. The controller should see only category
+    headings, not prices, descriptions, brands, symptoms, or item details. Deep
+    catalog rows are opened later by the selected route/tool.
     """
     try:
         from app.models.services import ServiceCategory
@@ -230,10 +230,8 @@ async def _catalog_content_map(tenant_id, db) -> str:
         for cat in res.scalars().all()[:80]:
             title = (cat.title or "").strip()
             if title:
-                description = " ".join((cat.description or "").strip().split())[:160]
-                suffix = f": {description}" if description else ""
-                lines.append(f"- {title}{suffix}")
-        return "\n".join(lines)[:3000]
+                lines.append(f"- {title}")
+        return "\n".join(lines)[:2000]
     except Exception as e:
         logger.warning(f"catalog content map failed: {e}")
         return ""
@@ -244,10 +242,7 @@ def _source_map(routes: dict) -> str:
     lines = []
     for r in routes.values():
         trig = ", ".join(r["triggers"][:12])
-        desc = (r.get("source_description") or "").strip()[:700]
         line = f'- "{r["code"]}" — {r["label"]}.'
-        if desc:
-            line += f" Provides: {desc}."
         if trig:
             line += f" Triggers: {trig}."
         if r.get("content_map"):
@@ -406,7 +401,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                 "The controller returned no usable decision this turn, so no new business fact was verified by a route."
             )
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
-        fallback_on = str(meta.get("controller_structural_fallback", "0")).strip().lower() in ("1", "true", "on", "yes")
+        fallback_on = str(meta.get("controller_structural_fallback", "1")).strip().lower() in ("1", "true", "on", "yes")
         if fallback_on:
             fallback_decision, fallback_reason = _fallback_route_decision(text, history, routes)
             if fallback_decision and (not str(raw or "").strip() or pick in ("answer", "") or pick not in routes):
