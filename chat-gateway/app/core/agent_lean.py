@@ -28,6 +28,7 @@ import re
 from sqlalchemy import select
 
 from app.core.llm import chat
+from app.config import normalize_lmstudio_url
 from app.core.agent import (
     _tool_list_categories,
     _tool_search_catalog,
@@ -202,7 +203,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if business_rules:
         persona += "\n\n[BUSINESS RULES]\n" + business_rules
 
-    base_url = meta.get("llm_base_url")
+    base_url = normalize_lmstudio_url(meta.get("llm_base_url"))
     api_key = meta.get("llm_api_key")
     model = settings.llm_model if settings and settings.llm_model else "gemma-4"
     controller_prompt = str(meta.get("lean_controller_prompt") or "").strip()

@@ -1,7 +1,7 @@
 import httpx
 from openai import AsyncOpenAI
 import re
-from app.config import settings
+from app.config import normalize_lmstudio_url, settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ async def chat(
     if json_mode:
         extra["response_format"] = {"type": "json_object"}
     try:
+        base_url = normalize_lmstudio_url(base_url)
         if base_url:
             extra_headers = {}
             if "openrouter.ai" in base_url:
@@ -98,6 +99,7 @@ async def chat_stream(
 ):
     """Sends a streaming chat completion request and yields tokens."""
     try:
+        base_url = normalize_lmstudio_url(base_url)
         if base_url:
             extra_headers = {}
             if "openrouter.ai" in base_url:

@@ -4,6 +4,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.llm import chat
+from app.config import normalize_lmstudio_url
 from app.models.tenant import KnowledgeType, BotSetting
 
 logger = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ Available intents:
     messages.append({"role": "user", "content": text})
 
     try:
-        base_url = settings.meta.get("llm_base_url") if settings and settings.meta else None
+        base_url = normalize_lmstudio_url(settings.meta.get("llm_base_url")) if settings and settings.meta else None
         api_key = settings.meta.get("llm_api_key") if settings and settings.meta else None
         model_name = settings.llm_model if settings and settings.llm_model else "gemma-4"
 

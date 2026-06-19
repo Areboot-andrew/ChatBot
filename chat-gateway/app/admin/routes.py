@@ -76,7 +76,7 @@ async def dashboard(
     db: AsyncSession = Depends(get_db)
 ):
     import httpx
-    from app.config import settings
+    from app.config import normalize_lmstudio_url, settings
     from sqlalchemy import text
     from datetime import date
     
@@ -85,7 +85,8 @@ async def dashboard(
     # 1. Real LM Studio Check
     lmstudio_status = "ERROR"
     loaded_models = "Немає підключення"
-    url = settings.LMSTUDIO_URL.replace('/v1', '') if settings.LMSTUDIO_URL.endswith('/v1') else settings.LMSTUDIO_URL
+    lmstudio_url = normalize_lmstudio_url(settings.LMSTUDIO_URL)
+    url = lmstudio_url.replace('/v1', '') if lmstudio_url.endswith('/v1') else lmstudio_url
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(f"{url}/v1/models")
@@ -152,7 +153,7 @@ async def dashboard(
         "redis": redis_status, 
         "qdrant": qdrant_status,
         "lmstudio_models": loaded_models,
-        "lmstudio_url": settings.LMSTUDIO_URL,
+        "lmstudio_url": lmstudio_url,
         "channels_count": channels_count,
         "messages_today": messages_today
     }
@@ -849,7 +850,8 @@ async def update_settings(
             settings.fallback_text = fallback_text
             
             meta_data = settings.meta if settings.meta else {}
-            meta_data["llm_base_url"] = llm_base_url
+            from app.config import normalize_lmstudio_url
+            meta_data["llm_base_url"] = normalize_lmstudio_url(llm_base_url)
             meta_data["llm_api_key"] = llm_api_key
 
             # Single active engine: prompt-driven Lean. Routes decide sources through prompts.
@@ -1824,7 +1826,8 @@ async def test_llm_connection_api(
     from app.core.llm import chat
     messages = [{"role": "user", "content": "Ping. Reply only with 'Pong'."}]
     try:
-        base_url = data.base_url.strip() if data.base_url and data.base_url.strip() else None
+        from app.config import normalize_lmstudio_url
+        base_url = normalize_lmstudio_url(data.base_url.strip()) if data.base_url and data.base_url.strip() else None
         api_key = data.api_key.strip() if data.api_key and data.api_key.strip() else None
         model = data.model.strip() if data.model and data.model.strip() else "gemma-4"
         
@@ -1844,10 +1847,11 @@ async def fetch_models_api(
 ):
     import httpx
     try:
-        base_url = data.base_url.strip() if data.base_url else ""
+        from app.config import normalize_lmstudio_url
+        base_url = normalize_lmstudio_url(data.base_url.strip()) if data.base_url else ""
         if not base_url:
             from app.config import settings
-            base_url = settings.LMSTUDIO_URL
+            base_url = normalize_lmstudio_url(settings.LMSTUDIO_URL)
             
         # Ensure it ends with /v1 if missing (standard for OpenAI compatible APIs)
         if base_url.endswith("/"):
@@ -1936,7 +1940,8 @@ async def test_chat_api(
                     from app.config import settings as global_settings
                     res = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
                     settings = res.scalars().first()
-                    raw_base = settings.meta.get("llm_base_url") if settings and settings.meta else ""
+                    from app.config import normalize_lmstudio_url
+                    raw_base = normalize_lmstudio_url(settings.meta.get("llm_base_url")) if settings and settings.meta else ""
                     base_url_info = raw_base if raw_base else f"{global_settings.LMSTUDIO_URL} (Локальна мережа/Дефолт)"
                     model_info = settings.llm_model if settings and settings.llm_model else "gemma-4"
                     trace("СИСТЕМА (КОНФІГ)", "Ініціалізація", f"Сервер LLM: {base_url_info}\nМодель LLM: {model_info}")

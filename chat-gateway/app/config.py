@@ -1,6 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from typing import Optional
+
+OLD_LMSTUDIO_HOST = "192.168.1.84"
+NEW_LMSTUDIO_HOST = "192.168.1.85"
+
+
+def normalize_lmstudio_url(url: str | None) -> str | None:
+    if not url:
+        return url
+    return str(url).replace(OLD_LMSTUDIO_HOST, NEW_LMSTUDIO_HOST)
+
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
@@ -29,6 +39,11 @@ class Settings(BaseSettings):
 
     # Web search (Google via Serper). Global fallback if a tenant has no own key.
     SERPER_API_KEY: str = "2d030163fbd463059411ab1c1f7ba67220a8510d"
+
+    @field_validator("LMSTUDIO_URL", mode="before")
+    @classmethod
+    def _normalize_lmstudio_url(cls, value):
+        return normalize_lmstudio_url(value)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
