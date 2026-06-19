@@ -43,18 +43,31 @@
                 <tr>
                     <th class="px-6 py-3">Тема / послуга / товар</th>
                     <th class="px-6 py-3">Опис для бота</th>
+                    <th class="px-6 py-3">Статус</th>
                     <th class="px-6 py-3">Дії</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
                 {% for qa in qa_pairs %}
-                <tr class="hover:bg-gray-800/30 transition">
+                <tr class="hover:bg-gray-800/30 transition {% if not qa.enabled %}opacity-50{% endif %}">
                     <td class="px-6 py-4 font-medium text-gray-200">{{ qa.question }}</td>
                     <td class="px-6 py-4 truncate max-w-xs">{{ qa.answer }}</td>
-                    <td class="px-6 py-4"><a href="/admin/knowledge/qa/{{ qa.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a></td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if qa.enabled %}<span class="text-green-400 text-xs">● активний</span>
+                        {% else %}<span class="text-gray-500 text-xs">○ вимкнений</span>{% endif %}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <form method="POST" action="/admin/knowledge/qa/{{ qa.id }}/toggle" class="inline">
+                            <button class="text-xs {% if qa.enabled %}text-red-400{% else %}text-green-400{% endif %} hover:underline mr-3">{% if qa.enabled %}Вимкнути{% else %}Увімкнути{% endif %}</button>
+                        </form>
+                        <a href="/admin/knowledge/qa/{{ qa.id }}/edit" class="text-blue-500 hover:underline">Редагувати</a>
+                        <form method="POST" action="/admin/knowledge/qa/{{ qa.id }}/delete" class="inline" onsubmit="return confirm('Видалити цей запис назавжди?');">
+                            <button class="text-xs text-red-500 hover:underline ml-3">Видалити</button>
+                        </form>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" class="px-6 py-8 text-center text-gray-500">Немає збережених відповідей.</td></tr>
+                <tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">Немає збережених відповідей.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

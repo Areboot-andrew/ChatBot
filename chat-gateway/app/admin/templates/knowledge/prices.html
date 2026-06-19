@@ -141,12 +141,26 @@
             {% else %}
                 <div class="space-y-6">
                     {% for cat in categories %}
-                        <div class="border border-gray-800 rounded-lg bg-gray-950 p-4 relative group">
-                            <div class="flex justify-between items-start mb-1">
-                                <h3 class="text-md font-bold text-gray-200">{{ cat.title }} <span class="text-xs text-gray-500 font-normal">({{ cat.slug }})</span></h3>
-                                <a href="/admin/knowledge/prices/{{ cat.id }}/edit" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition opacity-0 group-hover:opacity-100">
-                                    Редагувати
-                                </a>
+                        <div class="border {% if cat.enabled %}border-gray-800{% else %}border-yellow-900/50{% endif %} rounded-lg bg-gray-950 p-4 relative {% if not cat.enabled %}opacity-60{% endif %}">
+                            <div class="flex justify-between items-start mb-1 gap-3">
+                                <h3 class="text-md font-bold text-gray-200 flex items-center flex-wrap gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full {% if cat.enabled %}bg-green-500{% else %}bg-gray-600{% endif %}"></span>
+                                    {{ cat.title }} <span class="text-xs text-gray-500 font-normal">({{ cat.slug }})</span>
+                                    {% if not cat.enabled %}<span class="text-[10px] bg-yellow-900/40 text-yellow-300 px-2 py-0.5 rounded">вимкнена — бот не бачить</span>{% endif %}
+                                </h3>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <form method="POST" action="/admin/knowledge/prices/{{ cat.id }}/toggle">
+                                        <button class="text-xs px-2 py-1 rounded {% if cat.enabled %}bg-red-900/40 text-red-300 hover:bg-red-900/70{% else %}bg-green-900/40 text-green-300 hover:bg-green-900/70{% endif %} transition">
+                                            {% if cat.enabled %}Вимкнути{% else %}Увімкнути{% endif %}
+                                        </button>
+                                    </form>
+                                    <a href="/admin/knowledge/prices/{{ cat.id }}/edit" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition">
+                                        Редагувати
+                                    </a>
+                                    <form method="POST" action="/admin/knowledge/prices/{{ cat.id }}/delete" onsubmit="return confirm('Видалити категорію «{{ cat.title }}» разом з усіма її цінами? Це назавжди.');">
+                                        <button class="text-xs bg-gray-800 hover:bg-red-900/60 text-red-400 px-2 py-1 rounded transition">Видалити</button>
+                                    </form>
+                                </div>
                             </div>
                             <p class="text-xs text-gray-400 mb-4">{{ cat.description }}</p>
                             

@@ -1735,6 +1735,47 @@ async def price_edit_submit(
         
     return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
 
+@router.post("/knowledge/prices/{cat_id}/toggle")
+async def category_toggle(
+    cat_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enable/disable a catalog category. Disabled categories are invisible to the
+    pipeline — search_catalog and the controller CONTENT MAP both filter
+    enabled==True — so this is how the operator turns a price base on/off from the
+    panel without a DB migration."""
+    from app.models.services import ServiceCategory
+    if tenant_id:
+        res = await db.execute(select(ServiceCategory).where(
+            ServiceCategory.id == cat_id, ServiceCategory.tenant_id == tenant_id))
+        cat = res.scalars().first()
+        if cat:
+            cat.enabled = not bool(cat.enabled)
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
+
+
+@router.post("/knowledge/prices/{cat_id}/delete")
+async def category_delete(
+    cat_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a category and its price rows (cascade)."""
+    from app.models.services import ServiceCategory
+    if tenant_id:
+        res = await db.execute(select(ServiceCategory).where(
+            ServiceCategory.id == cat_id, ServiceCategory.tenant_id == tenant_id))
+        cat = res.scalars().first()
+        if cat:
+            await db.delete(cat)
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
+
+
 # --- KNOWLEDGE: RECORDS ---
 @router.get("/knowledge/qa/create", response_class=HTMLResponse)
 async def qa_create_form(
@@ -1805,6 +1846,44 @@ async def qa_edit(
             qa.category = category
             await db.commit()
     return RedirectResponse(url="/admin/knowledge", status_code=303)
+
+@router.post("/knowledge/qa/{qa_id}/toggle")
+async def qa_toggle(
+    qa_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enable/disable a Q&A record. Disabled records are skipped by
+    search_knowledge (filters enabled==True)."""
+    if tenant_id:
+        res = await db.execute(select(QaPair).where(
+            QaPair.id == qa_id, QaPair.tenant_id == tenant_id))
+        qa = res.scalars().first()
+        if qa:
+            qa.enabled = not bool(qa.enabled)
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge", status_code=303)
+
+
+@router.post("/knowledge/qa/{qa_id}/delete")
+async def qa_delete(
+    qa_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a Q&A record (operator cleanup of wrong/contradictory
+    entries that could mislead the model)."""
+    if tenant_id:
+        res = await db.execute(select(QaPair).where(
+            QaPair.id == qa_id, QaPair.tenant_id == tenant_id))
+        qa = res.scalars().first()
+        if qa:
+            await db.delete(qa)
+            await db.commit()
+    return RedirectResponse(url="/admin/knowledge", status_code=303)
+
 
 # --- KNOWLEDGE: LOGIC (Intents) ---
 @router.get("/knowledge/logic/create", response_class=HTMLResponse)
