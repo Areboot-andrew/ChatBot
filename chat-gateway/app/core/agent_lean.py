@@ -228,9 +228,42 @@ def _fallback_route_decision(text: str, history: list | None, routes: dict):
     return None, ""
 
 
+def _section_sizes(text: str) -> str:
+    """Break a system prompt into its named [SECTION] blocks; report sizes only,
+    not the full text (keeps the trace readable)."""
+    parts = re.split(r"\n\n(?=\[[^\]]{1,48}\])", text or "")
+    chunks = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        m = re.match(r"\[([^\]]{1,48})\]", p)
+        label = m.group(1) if m else "persona/base"
+        chunks.append(f"{label}·{len(p)}")
+    return " + ".join(chunks) if chunks else "—"
+
+
 def _fmt_msgs(messages) -> str:
-    """Render the exact messages sent to the model for the live trace."""
-    return "\n\n".join(f"[{m.get('role', '?').upper()}]\n{m.get('content', '')}" for m in messages)
+    """Compact diagnostic view of what the model RECEIVED (for the live trace).
+
+    Instead of dumping full system prompts on every call, show the structure:
+    message count + total size, the system prompt split into its named sections
+    (sizes only), and the verbatim latest user message. This keeps traces about
+    HOW the model was called and WHAT went wrong, not walls of prompt text.
+    """
+    total = sum(len(m.get("content", "") or "") for m in messages)
+    out = [f"📥 {len(messages)} повідомл. · ~{total} симв."]
+    for m in messages:
+        role = (m.get("role") or "?").upper()
+        content = m.get("content", "") or ""
+        if role == "SYSTEM":
+            out.append(f"[SYSTEM {len(content)}] {_section_sizes(content)}")
+        else:
+            out.append(f"[{role} {len(content)}]")
+    last_user = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+    if last_user:
+        out.append(f"❓ {last_user.strip()[:300]}")
+    return "\n".join(out)
 
 
 def _conduct_warning_fallback(warning_count: int, warning_limit: int) -> str:
@@ -658,10 +691,16 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
             err, out = e, ""
     if err:
         logger.warning(f"lean chat failed (model={model}): {err}")
-        # Surface the real reason (wrong model, bad key, rate limit) into the trace
-        # instead of a silent empty completion.
+        # Surface the real reason (wrong model, bad key, rate limit, context
+        # overflow) into the trace. Distinguish a recovered retry from a hard
+        # failure so the diagnostics show what actually happened.
         if emit:
-            emit(label, "Помилка виклику LLM", f"model={model}\n{type(err).__name__}: {err}")
+            if str(out or "").strip():
+                emit(label, "LLM: відновлено після retry",
+                     f"model={model}\nперша спроба впала → {type(err).__name__}: {err}")
+            else:
+                emit(label, "Помилка LLM (порожня відповідь)",
+                     f"model={model}\n{type(err).__name__}: {err}")
     return out or ""
 
 
