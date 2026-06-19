@@ -1,91 +1,82 @@
 {% extends "base.html" %}
 {% block content %}
-    <div class="mb-6">
+<div class="mb-6">
     <a href="/admin/knowledge/prices" class="text-sm text-gray-400 hover:text-white mb-2 inline-block">← Назад до каталогу</a>
-    <h1 class="text-2xl font-bold text-gray-100">Редагування категорії: {{ cat.slug }}</h1>
+    <h1 class="text-2xl font-bold text-gray-100">Категорія: {{ cat.title }}</h1>
+    <p class="text-sm text-gray-500 mt-1">Верхній рівень бачить controller як короткий зміст. Конкретні записи нижче відкриває route-модель, коли потрібна ціна, наявність, характеристики або примітки.</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
     <div class="lg:col-span-2">
         <form action="/admin/knowledge/prices/{{ cat.id }}/edit" method="POST" class="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
-            <h2 class="text-lg font-semibold text-gray-200 mb-4">Основна інформація</h2>
+            <h2 class="text-lg font-semibold text-gray-200 mb-4">1. Категорія</h2>
             <div class="space-y-4 mb-8">
                 <div>
                     <label class="block mb-2 text-sm font-medium text-gray-300">Назва категорії</label>
-                    <input type="text" name="title" value="{{ cat.title }}" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
+                    <input type="text" name="title" value="{{ cat.title }}" placeholder="Наприклад: Ремонт навушників" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" required>
+                    <p class="text-xs text-gray-500 mt-1">Це короткий заголовок для первинного порівняння: “чи це взагалі наша категорія”.</p>
                 </div>
                 <div>
                     <label class="block mb-2 text-sm font-medium text-gray-300">Короткий опис категорії</label>
-                    <p class="text-xs text-gray-500 mb-2">Це загальна примітка до групи товарів/послуг. Роут може використати її як контекст, але точні умови краще писати в описі конкретної позиції нижче.</p>
-                    <textarea name="description" rows="2" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.description }}</textarea>
+                    <textarea name="description" rows="2" placeholder="Коротко: що входить у цю категорію або важливе обмеження." class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.description }}</textarea>
                 </div>
                 <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Детальний опис категорії</label>
-                    <p class="text-xs text-gray-500 mb-2">Додатковий контекст для моделі: що входить у категорію, які є обмеження, коли треба уточнювати деталі.</p>
-                    <textarea name="detailed_description" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.meta.get('detailed_description', '') if cat.meta else '' }}</textarea>
-                </div>
-                <div>
-                    <label class="block mb-2 text-sm font-medium text-gray-300">Типові запити / симптоми / ситуації (по одному на рядок)</label>
-                    <p class="text-xs text-gray-500 mb-2">Не жорсткі правила, а підказки для пошуку й порівняння. Для магазину це можуть бути “потрібен подарунок”, для сервісу — “не заряджається”.</p>
-                    <textarea name="problems" rows="4" class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5" placeholder="Не вмикається&#10;Потрібна доставка&#10;Погодити ціну наперед">{% if cat.meta and cat.meta.get('problems') %}{{ cat.meta.get('problems') | join('\n') }}{% endif %}</textarea>
+                    <label class="block mb-2 text-sm font-medium text-gray-300">Додаткові інструкції для route-моделі (опційно)</label>
+                    <textarea name="detailed_description" rows="3" placeholder="Наприклад: приймаємо тільки в сервісі; великогабаритне не беремо; ціну погодити перед роботою." class="bg-gray-800 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2.5">{{ cat.meta.get('detailed_description', '') if cat.meta else '' }}</textarea>
+                    <p class="text-xs text-gray-500 mt-1">Не пишіть сюди кілометрові списки. Це коротка службова примітка, якщо категорія має умови або винятки.</p>
                 </div>
             </div>
 
-            <h2 class="text-lg font-semibold text-gray-200 mb-4 flex justify-between items-center">
-                <span>Нижчий рівень змісту: товари / послуги / складні послуги</span>
+            <h2 class="text-lg font-semibold text-gray-200 mb-2 flex justify-between items-center">
+                <span>2. Товари / послуги всередині категорії</span>
                 <button type="button" onclick="addPriceRow()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded transition">+ Додати позицію</button>
             </h2>
-            <p class="text-xs text-gray-500 mb-3">Кожна позиція — це глибший блок, який route-модель відкриває після вибору зі змісту. Для магазину заповнюйте тип/бренд/наявність/характеристики; для сервісу — тип послуги, ціну, склад роботи й примітки.</p>
-            
-            <div id="prices-container" class="space-y-3 mb-8">
+            <p class="text-xs text-gray-500 mb-4">Одна позиція = один конкретний товар, послуга, складна послуга або умова. Для товару заповнюйте наявність/характеристики/опис. Для послуги — ціну/умову, опис роботи, примітку для моделі.</p>
+
+            <div id="prices-container" class="space-y-4 mb-8">
                 {% for price in cat.prices %}
                 {% set pm = price.meta or {} %}
                 <div class="price-row bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-3">
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                        <div class="md:col-span-4">
-                            <label class="block mb-1 text-[11px] text-gray-500">Заголовок позиції</label>
-                            <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                        <div class="md:col-span-5">
+                            <label class="block mb-1 text-[11px] text-gray-500">Назва товару / послуги *</label>
+                            <input type="text" name="price_name[]" value="{{ price.name }}" placeholder="Наприклад: Заміна дисплея / Marshall Major 4" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
                         </div>
                         <div class="md:col-span-2">
                             <label class="block mb-1 text-[11px] text-gray-500">Тип</label>
+                            {% set typ = pm.get('item_type', '') %}
                             <select name="price_item_type[]" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
-                                {% set typ = pm.get('item_type', '') %}
                                 <option value="" {% if not typ %}selected{% endif %}>не вказано</option>
                                 <option value="товар" {% if typ == 'товар' %}selected{% endif %}>товар</option>
                                 <option value="послуга" {% if typ == 'послуга' %}selected{% endif %}>послуга</option>
                                 <option value="складна послуга" {% if typ == 'складна послуга' %}selected{% endif %}>складна послуга</option>
-                                <option value="запчастина" {% if typ == 'запчастина' %}selected{% endif %}>запчастина</option>
                                 <option value="умова" {% if typ == 'умова' %}selected{% endif %}>умова</option>
                             </select>
                         </div>
-                        <div class="md:col-span-2">
-                            <label class="block mb-1 text-[11px] text-gray-500">Бренд / група</label>
-                            <input type="text" name="price_brand[]" value="{{ pm.get('brand', '') }}" placeholder="Apple, Bose, Philips..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
-                        </div>
-                        <div class="md:col-span-2">
-                            <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова</label>
-                            <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="1500 грн / після діагностики" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+                        <div class="md:col-span-3">
+                            <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова *</label>
+                            <input type="text" name="price_value[]" value="{{ price.price }}" placeholder="1500 грн / після діагностики / уточнити" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
                         </div>
                         <div class="md:col-span-1">
-                            <label class="block mb-1 text-[11px] text-gray-500">Наявність</label>
-                            <input type="text" name="price_availability[]" value="{{ pm.get('availability', '') }}" placeholder="є / під замовлення" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                            <label class="block mb-1 text-[11px] text-gray-500">Статус</label>
+                            <input type="text" name="price_availability[]" value="{{ pm.get('availability', '') }}" placeholder="є" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
                         </div>
-                        <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7">
+                        <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7" title="Видалити позицію">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
                             <label class="block mb-1 text-[11px] text-gray-500">Характеристики / параметри</label>
-                            <textarea name="price_characteristics[]" rows="2" placeholder="Для товару: розмір, колір, модель, сумісність. Для послуги: тип пристроїв, важливі параметри." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('characteristics', '') }}</textarea>
+                            <textarea name="price_characteristics[]" rows="2" placeholder="Для товару: модель, колір, сумісність. Для послуги: тип пристроїв або важливі параметри." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('characteristics', '') }}</textarea>
                         </div>
                         <div>
-                            <label class="block mb-1 text-[11px] text-gray-500">Склад / комплект</label>
-                            <textarea name="price_composition[]" rows="2" placeholder="Що входить: робота + запчастина, діагностика, доставка, гарантія..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('composition', '') }}</textarea>
+                            <label class="block mb-1 text-[11px] text-gray-500">Опис роботи / комплект</label>
+                            <textarea name="price_work_scope[]" rows="2" placeholder="Що входить: робота + деталь, діагностика, гарантія, комплект." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ pm.get('work_scope', pm.get('composition', '')) }}</textarea>
                         </div>
                         <div>
-                            <label class="block mb-1 text-[11px] text-gray-500">Примітки для моделі</label>
-                            <textarea name="price_description[]" rows="2" placeholder="Умови, винятки, що уточнити, коли відмовити або погодити ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
+                            <label class="block mb-1 text-[11px] text-gray-500">Примітка для моделі</label>
+                            <textarea name="price_description[]" rows="2" placeholder="Що уточнити, коли не обіцяти, коли погодити ціну." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">{{ price.description or '' }}</textarea>
                         </div>
                     </div>
                 </div>
@@ -94,16 +85,19 @@
 
             <div class="pt-4 border-t border-gray-800 flex justify-end gap-3">
                 <a href="/admin/knowledge/prices" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition">Скасувати</a>
-                <button type="submit" class="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition shadow-lg shadow-green-900/20">Зберегти Зміни</button>
+                <button type="submit" class="px-5 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition shadow-lg shadow-green-900/20">Зберегти</button>
             </div>
         </form>
     </div>
-    
+
     <div class="space-y-6">
         <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h3 class="text-sm font-semibold text-gray-300 mb-3">Де писати знання без ціни?</h3>
-            <p class="text-sm text-gray-400">Якщо це не позиція з ціною, а пояснення “що робимо / що не робимо / як питати далі”, додавайте це у «Записи знань». Каталог лишаємо для категорій, товарів, послуг, робіт, цін і приміток до них.</p>
-            <a href="/admin/knowledge" class="mt-4 inline-block text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2 rounded transition">Перейти до записів знань →</a>
+            <h3 class="text-sm font-semibold text-gray-300 mb-3">Логіка цієї форми</h3>
+            <div class="space-y-3 text-sm text-gray-400">
+                <p><span class="text-blue-300">Категорія</span> відповідає на грубе питання: “чи є така група товарів/послуг”.</p>
+                <p><span class="text-green-300">Позиція</span> відповідає на конкретику: ціна, наявність, характеристики, що входить, які умови.</p>
+                <p><span class="text-orange-300">Примітка</span> не показується як готовий текст клієнту. Модель читає її як інструкцію, що можна сказати, що уточнити або де не обіцяти.</p>
+            </div>
         </div>
     </div>
 </div>
@@ -115,9 +109,9 @@ function addPriceRow() {
     row.className = 'price-row bg-gray-800 p-4 rounded-lg border border-gray-700 space-y-3';
     row.innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-            <div class="md:col-span-4">
-                <label class="block mb-1 text-[11px] text-gray-500">Заголовок позиції</label>
-                <input type="text" name="price_name[]" placeholder="Назва товару / послуги / роботи" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+            <div class="md:col-span-5">
+                <label class="block mb-1 text-[11px] text-gray-500">Назва товару / послуги *</label>
+                <input type="text" name="price_name[]" placeholder="Наприклад: Заміна дисплея / Marshall Major 4" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
             </div>
             <div class="md:col-span-2">
                 <label class="block mb-1 text-[11px] text-gray-500">Тип</label>
@@ -126,38 +120,33 @@ function addPriceRow() {
                     <option value="товар">товар</option>
                     <option value="послуга">послуга</option>
                     <option value="складна послуга">складна послуга</option>
-                    <option value="запчастина">запчастина</option>
                     <option value="умова">умова</option>
                 </select>
             </div>
-            <div class="md:col-span-2">
-                <label class="block mb-1 text-[11px] text-gray-500">Бренд / група</label>
-                <input type="text" name="price_brand[]" placeholder="Apple, Bose, Philips..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
-            </div>
-            <div class="md:col-span-2">
-                <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова</label>
-                <input type="text" name="price_value[]" placeholder="1500 грн / після діагностики" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-[11px] text-gray-500">Ціна / умова *</label>
+                <input type="text" name="price_value[]" placeholder="1500 грн / після діагностики / уточнити" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2" required>
             </div>
             <div class="md:col-span-1">
-                <label class="block mb-1 text-[11px] text-gray-500">Наявність</label>
-                <input type="text" name="price_availability[]" placeholder="є / під замовлення" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
+                <label class="block mb-1 text-[11px] text-gray-500">Статус</label>
+                <input type="text" name="price_availability[]" placeholder="є" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2">
             </div>
-            <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7">
+            <button type="button" onclick="this.closest('.price-row').remove()" class="text-red-400 hover:text-red-300 px-2 py-7" title="Видалити позицію">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
             </button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
                 <label class="block mb-1 text-[11px] text-gray-500">Характеристики / параметри</label>
-                <textarea name="price_characteristics[]" rows="2" placeholder="Розмір, колір, модель, сумісність або тип пристроїв" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+                <textarea name="price_characteristics[]" rows="2" placeholder="Модель, сумісність, параметри або тип пристроїв" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
             </div>
             <div>
-                <label class="block mb-1 text-[11px] text-gray-500">Склад / комплект</label>
-                <textarea name="price_composition[]" rows="2" placeholder="Робота + запчастина, гарантія, діагностика..." class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+                <label class="block mb-1 text-[11px] text-gray-500">Опис роботи / комплект</label>
+                <textarea name="price_work_scope[]" rows="2" placeholder="Робота + деталь, гарантія, діагностика, комплект" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
             </div>
             <div>
-                <label class="block mb-1 text-[11px] text-gray-500">Примітки для моделі</label>
-                <textarea name="price_description[]" rows="2" placeholder="Умови, винятки, що уточнити, коли відмовити" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
+                <label class="block mb-1 text-[11px] text-gray-500">Примітка для моделі</label>
+                <textarea name="price_description[]" rows="2" placeholder="Що уточнити, коли не обіцяти, коли погодити ціну" class="bg-gray-900 border border-gray-700 text-gray-200 text-sm rounded-lg block w-full p-2"></textarea>
             </div>
         </div>
     `;

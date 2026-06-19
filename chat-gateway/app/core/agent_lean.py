@@ -214,9 +214,9 @@ async def _load_routes(tenant_id, db):
 async def _catalog_content_map(tenant_id, db) -> str:
     """Tiny category table of contents for routing.
 
-    Keep this deliberately small. The controller should see only what areas the
-    tenant handles, not prices, brands, symptoms, or item details. Deep catalog
-    rows are opened later by the selected route/tool.
+    Keep this deliberately small. The controller should see only category
+    headings plus short descriptions, not prices, brands, symptoms, or item
+    details. Deep catalog rows are opened later by the selected route/tool.
     """
     try:
         from app.models.services import ServiceCategory
@@ -230,7 +230,9 @@ async def _catalog_content_map(tenant_id, db) -> str:
         for cat in res.scalars().all()[:80]:
             title = (cat.title or "").strip()
             if title:
-                lines.append(f"- {title}")
+                description = " ".join((cat.description or "").strip().split())[:160]
+                suffix = f": {description}" if description else ""
+                lines.append(f"- {title}{suffix}")
         return "\n".join(lines)[:3000]
     except Exception as e:
         logger.warning(f"catalog content map failed: {e}")

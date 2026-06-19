@@ -130,16 +130,22 @@ _CATALOG_STOPWORDS = {
 
 
 async def _tool_list_categories(tenant_id: uuid.UUID, db: AsyncSession) -> str:
-    """Category headings only, without counts, prices or item details."""
+    """Category headings plus short descriptions, without prices or item rows."""
     res = await db.execute(
-        select(ServiceCategory.title)
+        select(ServiceCategory.title, ServiceCategory.description)
         .where(ServiceCategory.tenant_id == tenant_id)
         .order_by(ServiceCategory.title)
     )
-    rows = [t for (t,) in res.all() if t]
+    rows = []
+    for title, description in res.all():
+        title = (title or "").strip()
+        if not title:
+            continue
+        desc = " ".join((description or "").strip().split())[:160]
+        rows.append(f"{title}: {desc}" if desc else title)
     if not rows:
         return "Каталог порожній."
-    return "Заголовки категорій:\n" + "\n".join([f"- {t}" for t in rows])
+    return "Заголовки категорій:\n" + "\n".join([f"- {row}" for row in rows])
 
 
 async def _tool_search_catalog(
@@ -197,7 +203,7 @@ async def _tool_search_catalog(
                 str(category_meta.get("detailed_description") or ""),
                 getattr(price, "description", "") or "",
                 "" if scope_only else str(item_meta.get("characteristics") or ""),
-                "" if scope_only else str(item_meta.get("composition") or ""),
+                "" if scope_only else str(item_meta.get("work_scope") or item_meta.get("composition") or ""),
             ]).lower()
             phrase = f"{category_text} {name} {description}"
             original_hits = sum(1 for _, form in original_forms if form in phrase)
@@ -222,12 +228,15 @@ async def _tool_search_catalog(
                 bits.append(f"item_type: {item_meta.get('item_type')}")
             if not scope_only:
                 bits.append(f"price_or_condition: {price.price}")
+            if not scope_only and item_meta.get("availability"):
+                bits.append(f"availability_or_status: {item_meta.get('availability')}")
             if not scope_only and item_meta.get("characteristics"):
                 bits.append(f"characteristics: {item_meta.get('characteristics')}")
-            if not scope_only and item_meta.get("composition"):
-                bits.append(f"composition: {item_meta.get('composition')}")
+            work_scope = item_meta.get("work_scope") or item_meta.get("composition")
+            if not scope_only and work_scope:
+                bits.append(f"work_scope_or_contents: {work_scope}")
             if not scope_only and getattr(price, "description", None):
-                bits.append(f"item_notes_for_model: {price.description}")
+                bits.append(f"item_note_for_model: {price.description}")
             lines.append(" | ".join(bits))
         return "\n".join(lines)
 

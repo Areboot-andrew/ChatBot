@@ -1165,6 +1165,43 @@ async def prices_page(
         "tenant_meta": tenant.meta if tenant else {}
     })
 
+
+@router.post("/knowledge/prices/category")
+async def create_catalog_category(
+    title: str = Form(...),
+    description: str = Form(""),
+    user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    db: AsyncSession = Depends(get_db),
+):
+    if tenant_id and title.strip():
+        from app.models.services import ServiceCategory
+
+        slug = _slugify(title)
+        base_slug = slug
+        suffix = 2
+        while True:
+            res = await db.execute(
+                select(ServiceCategory).where(
+                    ServiceCategory.tenant_id == tenant_id,
+                    ServiceCategory.slug == slug,
+                )
+            )
+            if not res.scalars().first():
+                break
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
+        db.add(ServiceCategory(
+            tenant_id=tenant_id,
+            title=title.strip(),
+            slug=slug,
+            description=description.strip(),
+            meta={},
+        ))
+        await db.commit()
+    return RedirectResponse(url="/admin/knowledge/prices", status_code=303)
+
+
 import yaml
 @router.post("/knowledge/prices/import")
 async def import_prices_yaml(
@@ -1206,17 +1243,21 @@ async def import_prices_yaml(
             
             # Add new prices
             for price_data in cat_data.get("services", []):
+                item_meta = {
+                    k: str(price_data.get(k) or "").strip()
+                    for k in ("item_type", "availability", "characteristics")
+                    if str(price_data.get(k) or "").strip()
+                }
+                work_scope = str(price_data.get("work_scope") or price_data.get("composition") or "").strip()
+                if work_scope:
+                    item_meta["work_scope"] = work_scope
                 p = ServicePrice(
                     tenant_id=tenant_id,
                     category_id=cat.id,
                     name=price_data.get("name", ""),
                     price=str(price_data.get("price", "")),
                     description=str(price_data.get("description", "") or ""),
-                    meta={
-                        k: str(price_data.get(k) or "").strip()
-                        for k in ("item_type", "brand", "availability", "characteristics", "composition")
-                        if str(price_data.get(k) or "").strip()
-                    },
+                    meta=item_meta,
                 )
                 db.add(p)
                 
@@ -1250,9 +1291,9 @@ async def import_prices_yaml(
 # --- Price table tooling: template / export / tabular import with column mapping ---
 
 PRICE_TEMPLATE_ROWS = [
-    {"category": "Категорія", "name": "Назва товару або послуги", "item_type": "товар/послуга/складна послуга", "brand": "бренд або група", "price": "ціна або умова", "availability": "наявність", "characteristics": "характеристики", "composition": "склад послуги/комплект", "description": "примітки для моделі: що входить, що уточнити, коли погодити ціну"},
-    {"category": "Навушники", "name": "Ремонт навушників", "item_type": "послуга", "brand": "Bose, Marshall, JBL", "price": "після діагностики", "availability": "приймаємо в сервісі", "characteristics": "TWS, накладні, дротові", "composition": "діагностика + ремонт/заміна вузла після погодження", "description": "Якщо модель незрозуміла, не просити фото одразу; спершу спитати симптом."},
-    {"category": "Смартфони", "name": "Заміна дисплея", "item_type": "складна послуга", "brand": "Apple, Xiaomi, Samsung", "price": "робота + деталь", "availability": "деталь залежить від моделі", "characteristics": "потрібна точна модель для ціни деталі", "composition": "вартість дисплея + робота майстра", "description": "Якщо точну ціну деталі не знаємо — шукати зовнішню ціну комплектуючої."},
+    {"category": "Категорія", "category_description": "Короткий опис категорії", "name": "Назва товару або послуги", "item_type": "товар/послуга/складна послуга", "price": "ціна або умова", "availability": "наявність/статус", "characteristics": "характеристики/параметри", "work_scope": "опис роботи/комплект/що входить", "description": "примітка для моделі: що уточнити, коли погодити ціну"},
+    {"category": "Навушники", "category_description": "Ремонт навушників і гарнітур", "name": "Ремонт навушників", "item_type": "послуга", "price": "після діагностики", "availability": "приймаємо в сервісі", "characteristics": "TWS, накладні, дротові", "work_scope": "діагностика + ремонт або заміна вузла після погодження", "description": "Якщо модель незрозуміла, спершу спитати що саме не працює."},
+    {"category": "Смартфони", "category_description": "Ремонт смартфонів та смарт-гаджетів", "name": "Заміна дисплея", "item_type": "складна послуга", "price": "робота + деталь", "availability": "деталь залежить від моделі", "characteristics": "потрібна точна модель для ціни деталі", "work_scope": "вартість дисплея + робота майстра", "description": "Якщо точну ціну деталі не знаємо — шукати зовнішню ціну комплектуючої."},
 ]
 
 
@@ -1271,27 +1312,29 @@ def _rows_to_file(rows: list, fmt: str, filename_base: str):
         import csv as _csv
         buf = io.StringIO()
         writer = _csv.writer(buf)
-        writer.writerow(["category", "name", "item_type", "brand", "price", "availability", "characteristics", "composition", "description"])
+        writer.writerow(["category", "category_description", "name", "item_type", "price", "availability", "characteristics", "work_scope", "description"])
         for r in rows:
-            writer.writerow([r.get("category", ""), r.get("name", ""), r.get("item_type", ""), r.get("brand", ""), r.get("price", ""), r.get("availability", ""), r.get("characteristics", ""), r.get("composition", ""), r.get("description", "")])
+            writer.writerow([r.get("category", ""), r.get("category_description", ""), r.get("name", ""), r.get("item_type", ""), r.get("price", ""), r.get("availability", ""), r.get("characteristics", ""), r.get("work_scope", ""), r.get("description", "")])
         data = buf.getvalue().encode("utf-8-sig")
         media, ext = "text/csv", "csv"
     elif fmt == "yaml":
         cats = {}
         for r in rows:
-            cats.setdefault(r["category"], []).append({
+            bucket = cats.setdefault(r["category"], {"description": r.get("category_description", ""), "services": []})
+            if r.get("category_description") and not bucket.get("description"):
+                bucket["description"] = r.get("category_description", "")
+            bucket["services"].append({
                 "name": r["name"],
                 "item_type": r.get("item_type", ""),
-                "brand": r.get("brand", ""),
                 "price": r["price"],
                 "availability": r.get("availability", ""),
                 "characteristics": r.get("characteristics", ""),
-                "composition": r.get("composition", ""),
+                "work_scope": r.get("work_scope", ""),
                 "description": r.get("description", ""),
             })
         doc = {"categories": [
-            {"slug": _slugify(title), "title": title, "services": services}
-            for title, services in cats.items()
+            {"slug": _slugify(title), "title": title, "description": data.get("description", ""), "services": data.get("services", [])}
+            for title, data in cats.items()
         ]}
         data = yaml.safe_dump(doc, allow_unicode=True, sort_keys=False).encode("utf-8")
         media, ext = "application/x-yaml", "yaml"
@@ -1300,9 +1343,9 @@ def _rows_to_file(rows: list, fmt: str, filename_base: str):
         wb = Workbook()
         ws = wb.active
         ws.title = "Прайс"
-        ws.append(["category", "name", "item_type", "brand", "price", "availability", "characteristics", "composition", "description"])
+        ws.append(["category", "category_description", "name", "item_type", "price", "availability", "characteristics", "work_scope", "description"])
         for r in rows:
-            ws.append([r.get("category", ""), r.get("name", ""), r.get("item_type", ""), r.get("brand", ""), r.get("price", ""), r.get("availability", ""), r.get("characteristics", ""), r.get("composition", ""), r.get("description", "")])
+            ws.append([r.get("category", ""), r.get("category_description", ""), r.get("name", ""), r.get("item_type", ""), r.get("price", ""), r.get("availability", ""), r.get("characteristics", ""), r.get("work_scope", ""), r.get("description", "")])
         bio = io.BytesIO()
         wb.save(bio)
         data = bio.getvalue()
@@ -1335,22 +1378,22 @@ async def export_prices(
     rows = []
     if tenant_id:
         res = await db.execute(
-            select(ServicePrice, ServiceCategory.title)
+            select(ServicePrice, ServiceCategory.title, ServiceCategory.description)
             .join(ServiceCategory, ServicePrice.category_id == ServiceCategory.id)
             .where(ServicePrice.tenant_id == tenant_id)
             .order_by(ServiceCategory.title, ServicePrice.name)
         )
-        for price, cat_title in res.all():
+        for price, cat_title, cat_description in res.all():
             pm = getattr(price, "meta", None) or {}
             rows.append({
                 "category": cat_title or "",
+                "category_description": cat_description or "",
                 "name": price.name,
                 "item_type": pm.get("item_type", ""),
-                "brand": pm.get("brand", ""),
                 "price": price.price,
                 "availability": pm.get("availability", ""),
                 "characteristics": pm.get("characteristics", ""),
-                "composition": pm.get("composition", ""),
+                "work_scope": pm.get("work_scope", "") or pm.get("composition", ""),
                 "description": getattr(price, "description", "") or "",
             })
     return _rows_to_file(rows, fmt, "prices_export")
@@ -1377,12 +1420,12 @@ async def import_prices_table(
     name_col: str = Form(None),
     price_col: str = Form(None),
     category_col: str = Form(None),
+    category_description_col: str = Form(None),
     description_col: str = Form(None),
     item_type_col: str = Form(None),
-    brand_col: str = Form(None),
     availability_col: str = Form(None),
     characteristics_col: str = Form(None),
-    composition_col: str = Form(None),
+    work_scope_col: str = Form(None),
     user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     db: AsyncSession = Depends(get_db)
@@ -1414,10 +1457,9 @@ async def import_prices_table(
             description = str(rec.get(description_col, "")).strip() if description_col else ""
             item_meta = {
                 "item_type": str(rec.get(item_type_col, "")).strip() if item_type_col else "",
-                "brand": str(rec.get(brand_col, "")).strip() if brand_col else "",
                 "availability": str(rec.get(availability_col, "")).strip() if availability_col else "",
                 "characteristics": str(rec.get(characteristics_col, "")).strip() if characteristics_col else "",
-                "composition": str(rec.get(composition_col, "")).strip() if composition_col else "",
+                "work_scope": str(rec.get(work_scope_col, "")).strip() if work_scope_col else "",
             }
             item_meta = {k: v for k, v in item_meta.items() if v}
             if not name or not price:
@@ -1436,6 +1478,10 @@ async def import_prices_table(
                     cat = ServiceCategory(tenant_id=tenant_id, slug=slug, title=cat_title)
                     db.add(cat)
                     await db.flush()
+                if category_description_col:
+                    cat_desc = str(rec.get(category_description_col, "")).strip()
+                    if cat_desc:
+                        cat.description = cat_desc
                 cat_cache[cat_title] = cat
             cat = cat_cache[cat_title]
 
@@ -1548,17 +1594,21 @@ async def sync_prices_feed(
                 s_price = str(s.get("price"))
                 s_description = str(s.get("description") or "")
                 if not s_name: continue
+                item_meta = {
+                    k: str(s.get(k) or "").strip()
+                    for k in ("item_type", "availability", "characteristics")
+                    if str(s.get(k) or "").strip()
+                }
+                work_scope = str(s.get("work_scope") or s.get("composition") or "").strip()
+                if work_scope:
+                    item_meta["work_scope"] = work_scope
                 
                 res_p = await db.execute(select(ServicePrice).where(ServicePrice.category_id == cat.id, ServicePrice.name == s_name))
                 price_obj = res_p.scalars().first()
                 if price_obj:
                     price_obj.price = s_price
                     price_obj.description = s_description
-                    price_obj.meta = {
-                        k: str(s.get(k) or "").strip()
-                        for k in ("item_type", "brand", "availability", "characteristics", "composition")
-                        if str(s.get(k) or "").strip()
-                    }
+                    price_obj.meta = item_meta
                 else:
                     price_obj = ServicePrice(
                         tenant_id=tenant_id,
@@ -1566,11 +1616,7 @@ async def sync_prices_feed(
                         name=s_name,
                         price=s_price,
                         description=s_description,
-                        meta={
-                            k: str(s.get(k) or "").strip()
-                            for k in ("item_type", "brand", "availability", "characteristics", "composition")
-                            if str(s.get(k) or "").strip()
-                        },
+                        meta=item_meta,
                     )
                     db.add(price_obj)
                 count += 1
@@ -1638,10 +1684,9 @@ async def price_edit_submit(
         prices = form_data.getlist("price_value[]")
         descriptions = form_data.getlist("price_description[]")
         item_types = form_data.getlist("price_item_type[]")
-        brands = form_data.getlist("price_brand[]")
         availabilities = form_data.getlist("price_availability[]")
         characteristics = form_data.getlist("price_characteristics[]")
-        compositions = form_data.getlist("price_composition[]")
+        work_scopes = form_data.getlist("price_work_scope[]")
         
         await db.execute(ServicePrice.__table__.delete().where(ServicePrice.category_id == cat.id))
         
@@ -1649,10 +1694,9 @@ async def price_edit_submit(
             if name and price:
                 item_meta = {
                     "item_type": item_types[idx].strip() if idx < len(item_types) else "",
-                    "brand": brands[idx].strip() if idx < len(brands) else "",
                     "availability": availabilities[idx].strip() if idx < len(availabilities) else "",
                     "characteristics": characteristics[idx].strip() if idx < len(characteristics) else "",
-                    "composition": compositions[idx].strip() if idx < len(compositions) else "",
+                    "work_scope": work_scopes[idx].strip() if idx < len(work_scopes) else "",
                 }
                 item_meta = {k: v for k, v in item_meta.items() if v}
                 db.add(ServicePrice(
