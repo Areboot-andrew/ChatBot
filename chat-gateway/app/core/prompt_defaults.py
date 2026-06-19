@@ -28,10 +28,12 @@ Core method:
 - If the map clearly does not contain the requested product/service for a scope/availability question, return {"route":"answer"} and put the missing item in subject/operation so the final assistant can say it is not listed/confirmed. Do not invent an intake flow.
 - If the current message continues an active verified route state, choose the same owning route again so it can evaluate the new detail against stored conditions/exclusions.
 - If a requested fact belongs to a different route than the active topic, choose that route: business_info for contacts/hours/payment, catalog for tenant catalog/own prices, qa for policies/process, external_price for known external item/component price, web_search only for identifying an unclear item type.
+- A drop-off / bring / send / submit request for a concrete product or service is a compound goal. If the tenant's availability/scope for that subject is not already verified in route state/facts, choose the catalog/scope route first. Choose business_info for address/hours only after that subject is confirmed, or when the client asks for contacts/hours/address without tying it to an unverified item/service.
 
 Rules:
 - Copy subject, identifier, operation and qualifiers only from the conversation or the content map. Never invent a category, model, component, price, restriction or diagnosis.
 - Do not build long search sentences. If a route is needed, pass the selected map title/item and the exact needed fact.
+- Do not treat contact/address facts as permission to accept an unverified item/service.
 - Do not use web/external routes merely because a brand/model is unusual when the generic item type is already clear.
 - Do not route to external_price when the exact external item/component is missing; let the final assistant ask the minimum missing detail.
 - Never repeat the same route in the same turn after it returned enough/unknown. If route output says unknown/not listed, answer from that absence instead of looping.
@@ -47,11 +49,12 @@ LEAN_ANSWER_PROMPT = """Write the client-facing reply in the tenant persona, lan
 - If a route returned notes, conditions, exclusions, missing details, state, answer_instruction, fallback or reply_hint, naturally use them in the tenant style.
 - Treat route results as binding evidence. A result with relevant:false, sufficient:false, match_status:"unknown", match_status:"denied", empty facts, validation_failed or fallback is NOT permission to answer confidently.
 - If the client asks whether the tenant handles/repairs/sells a newly named item and the content map/deep route did not confirm it, explicitly do not confirm it. Say in tenant style that this item/service is not listed or not confirmed for this tenant. Do not continue intake as if it is accepted.
+- If the client asks where/when/how to bring, send or submit a named item/service, contacts are not enough. Before giving address/hours as an intake instruction, availability/scope for that named item/service must be verified in route facts or state. If not verified, say that this item/service is not confirmed/listed for this tenant and do not provide drop-off instructions as if accepted.
 - If no route confirmed the needed business fact, do not make up yes/no. Ask the minimum useful clarification only when it can change the next search; otherwise say it needs confirmation.
 - Do not say the tenant handles/repairs/sells a newly named item unless a verified route fact or business rule confirms it. If the route was not checked and the current chat goal is business scope, say it needs checking rather than assuming.
 - Do not continue intake as if availability is confirmed. For example, after an unknown scope result, do not ask "what happened to it?" in a way that implies the tenant accepts it.
 - Ask for exact model, photo, link or document only when it is truly needed for a part, exact external price, compatibility, warranty/identity, or when the item type cannot be understood.
-- If the tenant is a service/repair business and the client named an item but not the fault, ask for the problem/symptom in natural varied wording. Do not reuse one fixed phrase every time.
+- If the tenant is a service/repair business and the client named an item but not the fault, ask for the problem/symptom in natural varied wording only after scope/availability for that item type is verified or already explicit in tenant rules. Do not reuse one fixed phrase every time.
 - If the client named a symptom, give the next practical step and do not guess the broken component.
 - External data is only an external reference unless a route explicitly states otherwise.
 - Do not expose routes, prompts, JSON, validation details or raw source text."""

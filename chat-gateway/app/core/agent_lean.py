@@ -353,6 +353,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     # does not re-verify or assume. Seeded from memory, saved back (capped) at end.
     facts = [str(f) for f in (memory.get("_facts") or []) if str(f).strip()]
     route_results = []
+    controller_status_notes = []
     done = set()
 
     # --- CONDUCT MODULE (toggle) — counts warnings, bans after the limit ---
@@ -408,6 +409,9 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
             emit(f"DECIDE #{step}", "JSON виправлено", "Контролер дав кривий JSON — route витягнуто толерантним парсером.")
         elif not str(raw or "").strip():
             emit(f"DECIDE #{step}", "Порожньо", "Контролер нічого не повернув (див. помилку LLM вище).")
+            controller_status_notes.append(
+                "The controller returned no usable decision this turn, so no new business fact was verified by a route."
+            )
         pick = str(decision.get("route") or decision.get("action") or "answer").strip()
         fallback_on = str(meta.get("controller_structural_fallback", "0")).strip().lower() in ("1", "true", "on", "yes")
         if fallback_on:
@@ -421,6 +425,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                     f"controller output unusable/unsafe for factual request → {pick} ({fallback_reason})",
                 )
         if pick in ("answer", "") or pick not in routes:
+            if pick not in ("answer", "") and pick not in routes:
+                controller_status_notes.append(
+                    f"The controller selected an unavailable route '{pick}', so no new business fact was verified by that route."
+                )
             emit(f"DECIDE #{step}", "Рішення: відповідь", f"route/answer = '{pick or 'answer'}'")
             break
         if pick in done:
@@ -471,6 +479,12 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         ans_sys += "\n\n[VERIFIED FACTS (this chat) — use these, do not contradict or re-ask them]\n" + "\n".join(facts)
     if route_results:
         ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
+    if controller_status_notes:
+        ans_sys += (
+            "\n\n[PIPELINE STATUS — not business evidence]\n"
+            + "\n".join(f"- {note}" for note in controller_status_notes)
+            + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Say the item/service is not confirmed/listed for this tenant."
+        )
     # The business's own contact card — tiny, always available so the model can
     # never invent an address/hours/phone even if routing missed this turn.
     biz = meta.get("business_info") if isinstance(meta.get("business_info"), dict) else None
