@@ -480,7 +480,7 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         emit("CONDUCT", "Попередження", f"{cnt}/{warn_limit}")
         warn_sys = persona + "\n\n" + warning_prompt.replace("{warning_count}", str(cnt)).replace("{warning_limit}", str(warn_limit))
         warn = await _safe_chat([{"role": "system", "content": warn_sys}] + _recent(history, text),
-                                model, base_url, api_key, 0.3, 80, retry=False, emit=emit, label="WARNING")
+                                model, base_url, api_key, 0.3, 400, retry=False, emit=emit, label="WARNING")
         fallback_warning = _conduct_warning_fallback(cnt, warn_limit)
         return (warn.strip() if warn.strip() else fallback_warning), memory
 
@@ -496,7 +496,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
         emit(f"DECIDE #{step}", "Вхід у модель", _fmt_msgs(dmsgs))
-        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 180, retry=True,
+        # 700 (was 180): reasoning models spend tokens on a <think> block that
+        # strip_think() removes; with a small budget the JSON after it never gets
+        # generated and DECIDE comes back empty. Give room for think + JSON.
+        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 700, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
         decision, recovered = _decision_from_raw(raw)
@@ -673,8 +676,11 @@ def _conduct_precheck(text: str) -> bool:
 async def _judge_conduct(text, prompt, model, base_url, api_key):
     """Isolated conduct classifier — judges ONLY the current message (the warning
     count / ban decision belongs to the outer pipeline, not this call)."""
+    # 500 (was 4): a reasoning model needs room for its <think> block before the
+    # label; with 4 tokens strip_think() left "" and conduct always fell back to
+    # "normal" (never warned/banned). The pipeline still reads only warn/normal.
     out = await _safe_chat([{"role": "system", "content": prompt}, {"role": "user", "content": text}],
-                           model, base_url, api_key, 0.0, 4, retry=False)
+                           model, base_url, api_key, 0.0, 500, retry=False)
     return "warn" if "warn" in (out or "").lower() else "normal"
 
 
@@ -758,7 +764,9 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         )},
     ]
     emit(f"QUERY #{step}", "Вхід у модель", _fmt_msgs(route_memory))
-    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 80, retry=True)
+    # 400 (was 80): same reasoning-model issue — <think> ate the whole budget so
+    # the query JSON was empty and every route fell back to the raw-text query.
+    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 400, retry=True)
     try:
         query = str(_extract_json(query_raw).get("query") or "").strip()
     except Exception:
