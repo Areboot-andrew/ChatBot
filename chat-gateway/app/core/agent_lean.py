@@ -496,10 +496,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # one-shot nudge so the small model returns JSON, not a prose answer
         dmsgs = [{"role": "system", "content": sys}] + _recent(history, text)
         emit(f"DECIDE #{step}", "Вхід у модель", _fmt_msgs(dmsgs))
-        # 700 (was 180): reasoning models spend tokens on a <think> block that
+        # 1000 (was 180): reasoning models spend tokens on a <think> block that
         # strip_think() removes; with a small budget the JSON after it never gets
-        # generated and DECIDE comes back empty. Give room for think + JSON.
-        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 700, retry=True,
+        # generated and DECIDE comes back empty. Generous budget is safe (32k ctx).
+        raw = await _safe_chat(dmsgs, model, base_url, api_key, 0.0, 1000, retry=True,
                                emit=emit, label=f"DECIDE #{step}")
         emit(f"DECIDE #{step}", "Сире рішення", str(raw) or "[порожньо]")
         decision, recovered = _decision_from_raw(raw)
@@ -565,6 +565,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
                 )
             if result.get("answer_instruction"):
                 facts.append(f"[{route['label']} instruction] {result['answer_instruction']}")
+            if result.get("reply_hint"):
+                facts.append(f"[{route['label']} hint] {result['reply_hint']}")
+            if result.get("match_status"):
+                facts.append(f"[{route['label']} match] {result['match_status']}")
 
     # 5) ANSWER — persona + chat + cleaned facts only
     ans_sys = persona
@@ -574,14 +578,15 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if marketing:
         ans_sys += "\n\n[MARKETING PROMPT]\n" + marketing
     if facts:
+        # facts already carry the cleaned route output (facts/notes/missing/state/
+        # instruction/hint/match). The full route JSON is NOT re-added here — it
+        # duplicated the whole catalog in the answer context (e.g. ~6.5k chars twice).
         ans_sys += "\n\n[VERIFIED FACTS (this chat) — use these, do not contradict or re-ask them]\n" + "\n".join(facts)
-    if route_results:
-        ans_sys += "\n\n[ROUTE RESULTS THIS TURN]\n" + "\n".join(route_results)
     if controller_status_notes:
         ans_sys += (
             "\n\n[PIPELINE STATUS — not business evidence]\n"
             + "\n".join(f"- {note}" for note in controller_status_notes)
-            + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS or ROUTE RESULTS, do not give drop-off/contact instructions as acceptance. Also do not claim the item is absent from the catalog merely because the controller failed; say it needs checking or ask the one detail needed to check it."
+            + "\nIf the client is asking to bring/send/repair/buy a concrete item or service and scope/availability for that subject is not already present in VERIFIED FACTS, do not give drop-off/contact instructions as acceptance. Also do not claim the item is absent from the catalog merely because the controller failed; say it needs checking or ask the one detail needed to check it."
         )
     # The business's own contact card — tiny, always available so the model can
     # never invent an address/hours/phone even if routing missed this turn.
@@ -599,7 +604,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     except (ValueError, TypeError):
         temp = 0.3
     try:
-        answer_tokens = min(1200, max(120, int(settings.max_tokens or 700))) if settings else 700
+        # cap 2000 (was 1200): reasoning <think> needs headroom before the reply;
+        # 32k server context makes this safe. Actual value still comes from the
+        # tenant's "Максимум токенів" setting, just no longer clamped down to 1200.
+        answer_tokens = min(2000, max(120, int(settings.max_tokens or 900))) if settings else 900
     except (ValueError, TypeError):
         answer_tokens = 700
     raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True,
@@ -764,9 +772,9 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         )},
     ]
     emit(f"QUERY #{step}", "Вхід у модель", _fmt_msgs(route_memory))
-    # 400 (was 80): same reasoning-model issue — <think> ate the whole budget so
+    # 700 (was 80): same reasoning-model issue — <think> ate the whole budget so
     # the query JSON was empty and every route fell back to the raw-text query.
-    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 400, retry=True)
+    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 700, retry=True)
     try:
         query = str(_extract_json(query_raw).get("query") or "").strip()
     except Exception:
@@ -798,9 +806,10 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         '"fallback":"..."|null}'
     )})
     emit(f"CLEAN #{step}", "Вхід у модель", _fmt_msgs(route_memory))
-    # FIX 2: 800 (was 450) so the validator JSON is not truncated mid-object,
-    # which previously caused validation_failed and lost all found facts.
-    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 800, retry=True)
+    # FIX 2: 1400 (was 450) so the validator JSON is not truncated mid-object on
+    # large catalogs (reasoning <think> + full result) — that caused
+    # validation_failed and the salvage path. Server context is 32k, so safe.
+    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 1400, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)
