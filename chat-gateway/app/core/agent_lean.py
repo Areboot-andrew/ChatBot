@@ -28,7 +28,7 @@ import re
 from sqlalchemy import select
 
 from app.core.llm import chat
-from app.config import normalize_lmstudio_url
+from app.config import normalize_lmstudio_url, settings as app_settings
 from app.core.route_tools import (
     _tool_list_categories,
     _tool_search_catalog,
@@ -432,7 +432,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     conduct_prompt = str(meta.get("lean_conduct_prompt") or "").strip()
     warning_prompt = str(meta.get("lean_warning_prompt") or "").strip()
     syn_map = _parse_synonyms_map(meta.get("catalog_synonyms"), {})
-    serper_key = meta.get("serper_api_key")
+    # Empty tenant field => use the built-in shared Serper key (what the panel
+    # promises: "Порожньо = спільний вшитий ключ"). Without this fallback search
+    # silently dropped to DuckDuckGo (blocked).
+    serper_key = (meta.get("serper_api_key") or "").strip() or app_settings.SERPER_API_KEY
     try:
         max_iter = min(3, max(1, int(meta.get("agent_max_iterations", 3))))
     except (ValueError, TypeError):
