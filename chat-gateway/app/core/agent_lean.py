@@ -626,6 +626,12 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     seen, kept = set(), []
     for f in facts:
         key = f.strip().lower()
+        # Do NOT persist raw scope dumps or oversized unvalidated blobs across turns
+        # — the category-headings list piled up in memory and bloated every later
+        # turn (BUSINESS RULES grew 5k->8k). It is fine in this turn's answer, but
+        # it is not a durable verified fact.
+        if "заголовки категорій" in key or len(f) > 320:
+            continue
         if key and key not in seen:
             seen.add(key)
             kept.append(f.strip())
