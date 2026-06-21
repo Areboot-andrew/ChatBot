@@ -201,26 +201,112 @@ def web_research(query: str, max_pages: int = 3, page_chars: int = 4000, serper_
         return f"Search error: {e}"
 
 
+def _extract_structured_prices(html: str) -> list:
+    """Pull structured product prices from a page's markup instead of guessing
+    from text: JSON-LD Product/Offer, og:product:price, microdata itemprop.
+    Returns a list of {name, price, currency, availability}. Reliable because the
+    price is bound to the product in the page's own structured data."""
+    import re, json
+    out = []
+    seen = set()
+
+    def add(name, price, currency="", avail=""):
+        price = str(price or "").strip()
+        if not price or not re.search(r"\d", price):
+            return
+        key = (str(name)[:80].lower(), price)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append({"name": str(name or "").strip()[:140], "price": price,
+                    "currency": str(currency or "").strip(), "availability": str(avail or "").strip()})
+
+    # 1) JSON-LD (Product / Offer / @graph)
+    for block in re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.S | re.I):
+        try:
+            data = json.loads(block.strip())
+        except Exception:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for it in list(items):
+            if isinstance(it, dict) and isinstance(it.get("@graph"), list):
+                items.extend(it["@graph"])
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            if it.get("@type") not in ("Product", "Offer") and "offers" not in it:
+                continue
+            name = it.get("name") or it.get("title") or ""
+            offers = it.get("offers") or it
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            if isinstance(offers, dict):
+                add(name, offers.get("price") or offers.get("lowPrice"),
+                    offers.get("priceCurrency"),
+                    (offers.get("availability") or "").split("/")[-1])
+
+    # 2) OpenGraph / microdata fallback (single product page)
+    if not out:
+        og = (re.search(r'property=["\']product:price:amount["\']\s+content=["\']([\d.,]+)["\']', html, re.I)
+              or re.search(r'itemprop=["\']price["\'][^>]*content=["\']([\d.,]+)["\']', html, re.I))
+        if og:
+            title = re.search(r'<title>(.*?)</title>', html, re.S | re.I)
+            cur = re.search(r'property=["\']product:price:currency["\']\s+content=["\']([^"\']+)["\']', html, re.I)
+            add(title.group(1).strip() if title else "", og.group(1), cur.group(1) if cur else "")
+
+    # 3) data-price (Bitrix and similar). On a single product page the main
+    # data-price is the product's price and <title> is its name. Used last, only
+    # when no JSON-LD/og price was found.
+    if not out:
+        dp = re.search(r'data-price=["\']?(\d[\d\s.,]*)["\']?', html)
+        if dp:
+            title = re.search(r'<title>(.*?)</title>', html, re.S | re.I)
+            add(title.group(1).strip() if title else "", dp.group(1).strip())
+
+    return out[:8]
+
+
 def fetch_and_parse_url(url: str, max_chars: int = 4000) -> str:
     """
-    Fetches an HTML page and extracts plain text.
+    Fetches an HTML page. Returns the page's STRUCTURED product prices first
+    (JSON-LD / og:price / microdata — bound to the product, not guessed), then the
+    readable text. Falls back to plain text when no structured price is present.
     """
     import httpx
     import trafilatura
     logger.info(f"Fetching URL: {url}")
     try:
+        html = None
+        headers = {"User-Agent": _UAS[0], "Accept-Language": "uk,en;q=0.9"}
+        with httpx.Client(timeout=12.0, follow_redirects=True, headers=headers) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            html = resp.text
+
+        parts = []
+        structured = _extract_structured_prices(html) if html else []
+        if structured:
+            lines = []
+            for p in structured:
+                tail = []
+                if p["currency"]:
+                    tail.append(p["currency"])
+                if p["availability"]:
+                    tail.append(p["availability"])
+                suffix = f" ({', '.join(tail)})" if tail else ""
+                lines.append(f"- {p['name'] or 'товар'}: {p['price']} грн{suffix}")
+            parts.append("СТРУКТУРОВАНІ ЦІНИ (з розмітки сторінки — товар↔ціна):\n" + "\n".join(lines))
+
+        text = trafilatura.extract(html, include_links=True) if html else None
+        if text:
+            parts.append(text[:max_chars])
+        if parts:
+            return "\n\n".join(parts)
+
+        # Last resort: trafilatura's own downloader (some sites block httpx)
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
             text = trafilatura.extract(downloaded, include_links=True)
-            if text:
-                return text[:max_chars]
-
-        # Fallback to httpx if trafilatura fails to download
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        with httpx.Client(timeout=10.0, follow_redirects=True, headers=headers) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            text = trafilatura.extract(resp.text, include_links=True)
             if text:
                 return text[:max_chars]
         return "Could not extract text from page."
