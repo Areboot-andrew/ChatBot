@@ -81,7 +81,8 @@ _CATALOG_SYNONYMS = {
     "батарея": ["акумулятор", "акб"], "батарею": ["акумулятор", "акб"],
     "акб": ["акумулятор"], "зарядка": ["роз'єм", "живлення"],
     "зарядки": ["роз'єм", "живлення"], "кнопка": ["шлейф"], "кнопки": ["шлейф"],
-    "айфон": ["iphone"], "айфону": ["iphone"], "айфона": ["iphone"],
+    "айфон": ["iphone", "смартфон"], "айфону": ["iphone", "смартфон"], "айфона": ["iphone", "смартфон"],
+    "iphone": ["смартфон"], "андроїд": ["смартфон"],
     "телефон": ["смартфон", "мобільний"], "телефона": ["смартфон", "мобільний"],
     "телефону": ["смартфон", "мобільний"],
     "самсунг": ["samsung"], "ксіомі": ["xiaomi"], "сяомі": ["xiaomi"],
@@ -213,18 +214,18 @@ async def _tool_search_catalog(
             value = original_hits * 10 + name_hits * 12 + category_hits * 6 + synonym_hits
             return value, name_hits, category_hits
 
-        # Dominant-category filter: keep only rows of the category the BEST match
-        # belongs to, so "чистка кавоварки" returns coffee-machine rows only — not
-        # phone "чистка роз'єму" or laptop "чистка блока" that merely share a word.
-        # Works for any item (TV, phone, coffee). Falls back to mixed top-6 when the
-        # best category has just one row (rare/unique item).
+        # Category filter — SAFE version. Collapse to one category ONLY when the
+        # whole top is already that single category (a clean hit, e.g. кавоварка).
+        # On a MIXED top, keep the mixed top-6 and let the validator pick — never let
+        # a noisy top-1 from the wrong category crush the correct rows (e.g. an
+        # iPhone-display query where "про" matched "проектор" pushed TVs to the top).
         ranked_all = sorted(candidates, key=score, reverse=True)
-        if ranked_all:
-            top_cat_id = ranked_all[0][1].id
-            same_cat = [r for r in ranked_all if r[1].id == top_cat_id]
-            ranked = same_cat[:8] if len(same_cat) >= 2 else ranked_all[:6]
+        top6 = ranked_all[:6]
+        cat_ids = {r[1].id for r in top6}
+        if len(cat_ids) == 1 and top6:
+            ranked = [r for r in ranked_all if r[1].id == top6[0][1].id][:8]
         else:
-            ranked = []
+            ranked = top6
         lines = []
         for price, category in ranked:
             category_meta = category.meta or {}
