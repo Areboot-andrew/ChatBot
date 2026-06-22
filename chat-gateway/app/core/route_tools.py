@@ -213,10 +213,18 @@ async def _tool_search_catalog(
             value = original_hits * 10 + name_hits * 12 + category_hits * 6 + synonym_hits
             return value, name_hits, category_hits
 
-        # Top 6 (was 12): keep the validator input small and on-topic. 12 rows
-        # dragged cross-category noise (e.g. phone "чистка роз'єму" into a
-        # coffee-machine query) and bloated the validator until its JSON broke.
-        ranked = sorted(candidates, key=score, reverse=True)[:6]
+        # Dominant-category filter: keep only rows of the category the BEST match
+        # belongs to, so "чистка кавоварки" returns coffee-machine rows only — not
+        # phone "чистка роз'єму" or laptop "чистка блока" that merely share a word.
+        # Works for any item (TV, phone, coffee). Falls back to mixed top-6 when the
+        # best category has just one row (rare/unique item).
+        ranked_all = sorted(candidates, key=score, reverse=True)
+        if ranked_all:
+            top_cat_id = ranked_all[0][1].id
+            same_cat = [r for r in ranked_all if r[1].id == top_cat_id]
+            ranked = same_cat[:8] if len(same_cat) >= 2 else ranked_all[:6]
+        else:
+            ranked = []
         lines = []
         for price, category in ranked:
             category_meta = category.meta or {}
