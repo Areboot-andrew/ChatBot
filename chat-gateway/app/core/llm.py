@@ -138,18 +138,46 @@ async def chat_stream(
         logger.error(f"LLM Chat Stream Error: {e}")
         yield fallback_text or "Service temporarily unavailable."
 
+_resolved_embed_model = None
+
+
+async def _auto_embed_model() -> str:
+    """Find an embedding model actually loaded in LM Studio (cached).
+
+    So the operator does NOT have to type the exact model id: if both a chat model
+    (gemma) and an embedding model are loaded, we auto-pick the embedding one by its
+    id pattern. Falls back to the configured EMBED_MODEL if nothing matches.
+    """
+    global _resolved_embed_model
+    if _resolved_embed_model:
+        return _resolved_embed_model
+    try:
+        models = await client.models.list()
+        ids = [m.id for m in models.data]
+        for mid in ids:
+            low = mid.lower()
+            if any(k in low for k in ("embed", "bge", "e5", "gte", "nomic")):
+                _resolved_embed_model = mid
+                logger.info(f"Auto-selected embed model: {mid}")
+                return mid
+    except Exception as e:
+        logger.warning(f"embed model autodetect failed: {e}")
+    return settings.EMBED_MODEL
+
+
 async def embed(text: str, model: str = None) -> list[float]:
-    """Generates embeddings using LM Studio. The model name defaults to
-    settings.EMBED_MODEL but can be overridden per tenant (panel field
-    meta.embed_model), so the exact LM Studio model id can be set without code."""
-    model = (model or "").strip() or settings.EMBED_MODEL
+    """Generates embeddings using LM Studio. If no model is given, auto-detect the
+    embedding model loaded in LM Studio (panel field meta.embed_model overrides)."""
+    name = (model or "").strip()
+    if not name:
+        name = await _auto_embed_model()
     try:
         response = await client.embeddings.with_options(max_retries=0).create(
             input=text,
-            model=model,
+            model=name,
             timeout=15.0
         )
         return response.data[0].embedding
     except Exception as e:
-        logger.error(f"LLM Embed Error (model={model}): {e}")
+        logger.error(f"LLM Embed Error (model={name}): {e}")
         return []
