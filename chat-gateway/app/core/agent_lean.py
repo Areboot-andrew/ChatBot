@@ -614,7 +614,10 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # cap 2000 (was 1200): reasoning <think> needs headroom before the reply;
         # 32k server context makes this safe. Actual value still comes from the
         # tenant's "Максимум токенів" setting, just no longer clamped down to 1200.
-        answer_tokens = min(2000, max(120, int(settings.max_tokens or 900))) if settings else 900
+        # cap 700 (was 2000): a reasoning model fills the whole budget with <think>,
+        # so a big cap made a 1-2 sentence reply take 85s. The reply is short; 700 is
+        # enough for think + answer and keeps it fast.
+        answer_tokens = min(700, max(120, int(settings.max_tokens or 700))) if settings else 700
     except (ValueError, TypeError):
         answer_tokens = 700
     raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True,
@@ -835,7 +838,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     # FIX 2: 1400 (was 450) so the validator JSON is not truncated mid-object on
     # large catalogs (reasoning <think> + full result) — that caused
     # validation_failed and the salvage path. Server context is 32k, so safe.
-    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 2000, retry=True)
+    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 1200, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)
