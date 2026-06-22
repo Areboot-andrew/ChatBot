@@ -213,7 +213,10 @@ async def _tool_search_catalog(
             value = original_hits * 10 + name_hits * 12 + category_hits * 6 + synonym_hits
             return value, name_hits, category_hits
 
-        ranked = sorted(candidates, key=score, reverse=True)[:12]
+        # Top 6 (was 12): keep the validator input small and on-topic. 12 rows
+        # dragged cross-category noise (e.g. phone "чистка роз'єму" into a
+        # coffee-machine query) and bloated the validator until its JSON broke.
+        ranked = sorted(candidates, key=score, reverse=True)[:6]
         lines = []
         for price, category in ranked:
             category_meta = category.meta or {}

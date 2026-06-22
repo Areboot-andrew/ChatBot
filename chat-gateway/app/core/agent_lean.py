@@ -835,7 +835,7 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     # FIX 2: 1400 (was 450) so the validator JSON is not truncated mid-object on
     # large catalogs (reasoning <think> + full result) — that caused
     # validation_failed and the salvage path. Server context is 32k, so safe.
-    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 1400, retry=True)
+    out = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 2000, retry=True)
     out = (out or "").strip()
     try:
         parsed = _extract_json(out)
