@@ -151,7 +151,12 @@ async def dashboard(
     embed_status = "ERROR"
     try:
         from app.core.llm import embed as _embed
-        _vec = await _embed("ping")
+        _em = None
+        if tenant_id:
+            _rs = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+            _s = _rs.scalars().first()
+            _em = (_s.meta or {}).get("embed_model") if _s and _s.meta else None
+        _vec = await _embed("ping", model=_em)
         embed_status = "OK" if _vec else "Не відповідає (embed-модель не завантажена)"
     except Exception:
         embed_status = "ERROR"
@@ -848,6 +853,7 @@ async def update_settings(
     fallback_text: str = Form(""),
     agent_max_iterations: str = Form("3"),
     serper_api_key: str = Form(""),
+    embed_model: str = Form(""),
     parts_sites: str = Form(""),
     price_search_urls: str = Form(""),
     ban_message: str = Form("Вітаю, вас забанено."),
@@ -885,6 +891,7 @@ async def update_settings(
 
             meta_data["agent_max_iterations"] = agent_max_iterations
             meta_data["serper_api_key"] = serper_api_key.strip()
+            meta_data["embed_model"] = embed_model.strip()
             meta_data["parts_sites"] = parts_sites.strip()
             meta_data["price_search_urls"] = price_search_urls.strip()
             meta_data["catalog_synonyms"] = catalog_synonyms.strip()
@@ -1165,7 +1172,10 @@ async def docs_upload(
         if text:
             # We would normally update status to "indexed" after the task finishes,
             # but for this MVP, we launch the task.
-            background_tasks.add_task(process_and_vectorize_document, str(tenant_id), str(doc.id), doc_title, text)
+            _rs = await db.execute(select(BotSetting).where(BotSetting.tenant_id == tenant_id))
+            _s = _rs.scalars().first()
+            _embed_model = (_s.meta or {}).get("embed_model") if _s and _s.meta else None
+            background_tasks.add_task(process_and_vectorize_document, str(tenant_id), str(doc.id), doc_title, text, _embed_model)
             doc.status = "indexed"
         else:
             doc.status = "error: extraction failed"

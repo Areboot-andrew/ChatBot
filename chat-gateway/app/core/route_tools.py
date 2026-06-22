@@ -281,7 +281,8 @@ async def _tool_search_knowledge(query: str, tenant_id: uuid.UUID, db: AsyncSess
         for qa in sorted(qa_rows, key=qa_score, reverse=True)[:6]:
             parts.append(f"Q: {qa.question}\nA: {qa.answer}")
     try:
-        rag_docs = await search_knowledge(query, str(tenant_id), top_k=top_k, threshold=threshold)
+        embed_model = (settings.meta or {}).get("embed_model") if settings and settings.meta else None
+        rag_docs = await search_knowledge(query, str(tenant_id), top_k=top_k, threshold=threshold, embed_model=embed_model)
         for doc in rag_docs:
             parts.append(f"[Документ]: {doc}")
     except Exception as e:

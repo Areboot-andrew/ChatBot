@@ -100,6 +100,11 @@
                     <input type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" name="llm_api_key" id="llm_api_key" value="{{ settings.meta.get('llm_api_key', '') if settings and settings.meta else '' }}" placeholder="sk-..." class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
                     <p class="mt-1 text-xs text-gray-500">Якщо API публічне і не вимагає ключа, впишіть будь-що (напр. 'free').</p>
                 </div>
+                <div class="md:col-span-2">
+                    <label for="embed_model" class="block mb-2 text-sm font-medium text-gray-300">Embed-модель (для векторного пошуку / RAG)</label>
+                    <input type="text" autocomplete="off" data-lpignore="true" name="embed_model" id="embed_model" value="{{ settings.meta.get('embed_model', '') if settings and settings.meta else '' }}" placeholder="Напр.: text-embedding-embeddinggemma-300m (порожньо = bge-m3 за замовч.)" class="bg-gray-800 border border-gray-700 text-gray-200 sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <p class="mt-1 text-xs text-gray-500">Точна назва embedding-моделі, завантаженої в LM Studio (ID зі списку моделей). Має бути саме embedding-модель, не чат. Порожньо = вшитий дефолт.</p>
+                </div>
                 <div class="mt-4 flex justify-end items-center gap-4">
                     <div id="conn_status" class="text-sm"></div>
                     <button type="button" id="btn_test_conn" class="text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-600 focus:ring-4 focus:outline-none focus:ring-gray-800 font-medium rounded-lg text-sm px-5 py-2.5 flex items-center transition">

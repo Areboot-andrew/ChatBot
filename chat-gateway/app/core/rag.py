@@ -24,7 +24,7 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]
         i += chunk_size - overlap
     return chunks
 
-async def process_and_vectorize_document(tenant_id: str, doc_id: str, title: str, text: str):
+async def process_and_vectorize_document(tenant_id: str, doc_id: str, title: str, text: str, embed_model: str = None):
     """
     Фонова задача: розбиває текст, отримує ембединги і зберігає в Qdrant.
     """
@@ -32,10 +32,10 @@ async def process_and_vectorize_document(tenant_id: str, doc_id: str, title: str
     try:
         chunks = chunk_text(text)
         points = []
-        
+
         for i, chunk in enumerate(chunks):
             # В майбутньому: якщо ембединг падає, зробити retry
-            vector = await embed(chunk)
+            vector = await embed(chunk, model=embed_model)
             if not vector:
                 continue
                 
@@ -66,14 +66,14 @@ async def process_and_vectorize_document(tenant_id: str, doc_id: str, title: str
     except Exception as e:
         logger.error(f"Error vectorizing document {doc_id}: {e}")
 
-async def search_knowledge(query: str, tenant_id: str, top_k: int = 3, threshold: float = 0.5) -> List[str]:
+async def search_knowledge(query: str, tenant_id: str, top_k: int = 3, threshold: float = 0.5, embed_model: str = None) -> List[str]:
     """
     Шукає релевантні шматки тексту в Qdrant.
     Повертає список знайдених фрагментів (текстів).
     """
     from qdrant_client.http.models import Filter, FieldCondition, MatchValue
-    
-    vector = await embed(query)
+
+    vector = await embed(query, model=embed_model)
     if not vector:
         logger.warning("Could not generate embedding for query.")
         return []

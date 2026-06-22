@@ -138,15 +138,18 @@ async def chat_stream(
         logger.error(f"LLM Chat Stream Error: {e}")
         yield fallback_text or "Service temporarily unavailable."
 
-async def embed(text: str, model: str = settings.EMBED_MODEL) -> list[float]:
-    """Generates embeddings using LM Studio or fails fast."""
+async def embed(text: str, model: str = None) -> list[float]:
+    """Generates embeddings using LM Studio. The model name defaults to
+    settings.EMBED_MODEL but can be overridden per tenant (panel field
+    meta.embed_model), so the exact LM Studio model id can be set without code."""
+    model = (model or "").strip() or settings.EMBED_MODEL
     try:
         response = await client.embeddings.with_options(max_retries=0).create(
             input=text,
             model=model,
-            timeout=3.0
+            timeout=15.0
         )
         return response.data[0].embedding
     except Exception as e:
-        logger.error(f"LLM Embed Error: {e}")
+        logger.error(f"LLM Embed Error (model={model}): {e}")
         return []
