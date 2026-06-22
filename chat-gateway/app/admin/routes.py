@@ -111,10 +111,12 @@ async def dashboard(
                 lmstudio_status = "OK"
                 data = resp.json()
                 models = [m.get("id") for m in data.get("data", [])]
-                if models:
-                    loaded_models = ", ".join(models)
-                else:
-                    loaded_models = "Моделі не завантажені"
+                # This card is about the CHAT model — embedding models have their
+                # own card, so don't let an embedding id show up here as "the model".
+                _is_embed = lambda m: any(k in (m or "").lower() for k in ("embed", "bge", "e5", "gte", "nomic"))
+                chat_models = [m for m in models if not _is_embed(m)]
+                shown = chat_models or models
+                loaded_models = ", ".join(shown) if shown else "Моделі не завантажені"
     except Exception:
         loaded_models = "Недоступно (Check URL/Network)"
 
