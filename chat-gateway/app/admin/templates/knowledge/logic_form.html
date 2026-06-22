@@ -34,18 +34,30 @@
             <div>
                 <label for="source_description" class="block mb-2 text-sm font-medium text-gray-300">1. Що це за база і які факти їй належать</label>
                 <p class="text-xs text-gray-500 mb-2">Опишіть межі джерела: що воно підтверджує, а що ні. Для каталогу зміст категорій/позицій підтягується автоматично й показується controller-моделі.</p>
+                <p class="text-[11px] text-gray-500 mb-2 bg-gray-900/60 rounded p-2 leading-relaxed">
+                    🛒 <b>Магазин:</b> «Каталог товарів: назви, ціни, наявність, характеристики. Не містить умов доставки чи контактів.»<br>
+                    🔧 <b>Сервіс:</b> «Каталог послуг ремонту і наших цін. Не містить цін на запчастини в постачальників.»
+                </p>
                 <textarea name="source_description" id="source_description" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Внутрішній каталог товарів, послуг, варіантів і наших цін. Не містить політик, контактів або зовнішніх пропозицій.">{{ logic.meta.get('source_description', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
                 <label for="query_prompt" class="block mb-2 text-sm font-medium text-gray-300">2. Як вибрати пункт зі змісту і відкрити глибше</label>
                 <p class="text-xs text-gray-500 mb-2">Поясніть route-моделі, як зіставляти питання клієнта з картою заголовків. Якщо пункт є — відкрити саме його; якщо нема — не вигадувати й повернути “не підтверджено”.</p>
+                <p class="text-[11px] text-gray-500 mb-2 bg-gray-900/60 rounded p-2 leading-relaxed">
+                    🛒 <b>Магазин:</b> «Зістав товар із категоріями; для ціни/підбору — категорія + параметри й бюджет клієнта (не питай “модель”).»<br>
+                    🔧 <b>Сервіс:</b> «Зістав пристрій із категоріями; для ціни — тип пристрою + конкретна послуга/несправність.»
+                </p>
                 <textarea name="query_prompt" id="query_prompt" rows="3" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Для catalog: SOURCE CONTENT MAP містить лише заголовки категорій. Для scope порівняй предмет із категоріями; для ціни/деталей сформуй короткий запит по категорії + конкретній послузі.">{{ logic.meta.get('query_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
 
             <div>
                 <label for="result_validation_prompt" class="block mb-2 text-sm font-medium text-gray-300">3. Як очистити глибокий блок для чат-моделі</label>
                 <p class="text-xs text-gray-500 mb-2">Route-модель має повернути не готову відповідь, а структурований висновок: підтверджено/частково/не підтверджено, умови, винятки, ціни, що ще спитати, коли відмовити, і стан теми для наступного повідомлення.</p>
+                <p class="text-[11px] text-gray-500 mb-2 bg-gray-900/60 rounded p-2 leading-relaxed">
+                    🛒 <b>Магазин:</b> «Лиши товари, що підходять, з ціною й наявністю. Якщо кілька варіантів — постав уточнення параметра/бюджету. Не вигадуй характеристик.»<br>
+                    🔧 <b>Сервіс:</b> «Лиши послуги, що підходять, і ціну-орієнтир. Якщо кілька типів пристрою — спитай тип. Симптом ≠ діагноз.»
+                </p>
                 <textarea name="result_validation_prompt" id="result_validation_prompt" rows="5" class="font-mono text-sm bg-gray-950 border border-gray-700 text-gray-300 rounded-lg block w-full p-3" placeholder="Прочитай блок як знання: що підтверджено, які умови/винятки, ціна/наявність/характеристики, що ще треба спитати. Поверни facts, notes, missing, state і answer_instruction. Не пиши готову фразу клієнту.">{{ logic.meta.get('result_validation_prompt', '') if logic and logic.meta else '' }}</textarea>
             </div>
         </div>
