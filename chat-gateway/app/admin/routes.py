@@ -145,6 +145,17 @@ async def dashboard(
     except Exception:
         pass
 
+    # 4b. Embed model check — actually CALL embed (vector search/RAG need a real
+    # vector, "model loaded" is not enough). Tells us if hybrid catalog search and
+    # document RAG can work at all.
+    embed_status = "ERROR"
+    try:
+        from app.core.llm import embed as _embed
+        _vec = await _embed("ping")
+        embed_status = "OK" if _vec else "Не відповідає (embed-модель не завантажена)"
+    except Exception:
+        embed_status = "ERROR"
+
     # 5. Quick Stats
     channels_count = 0
     messages_today = 0
@@ -167,8 +178,9 @@ async def dashboard(
     statuses = {
         "lmstudio": lmstudio_status, 
         "postgres": postgres_status, 
-        "redis": redis_status, 
+        "redis": redis_status,
         "qdrant": qdrant_status,
+        "embed": embed_status,
         "lmstudio_models": loaded_models,
         "lmstudio_url": lmstudio_url,
         "channels_count": channels_count,
