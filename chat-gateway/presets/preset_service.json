@@ -1,0 +1,80 @@
+{
+  "_about": "ПРЕСЕТ «Сервісний центр» (ремонт). Імпортуй у Налаштування → Імпорт. Задає персону й роути під ремонт-бізнес. Універсальні промпти контролера/відповіді лишаються з дефолтів. Після імпорту заповни: каталог послуг (Каталог і прайси), Q&A, Бізнес-факти (адреса/графік/телефон), за потреби сайти постачальників запчастин.",
+  "columns": {
+    "system_prompt": "Ти майстер сервісного центру. Спілкуєшся живою українською, коротко й по-діловому, як майстер — не бот. Діагностуєш і ремонтуєш лише ту техніку, що є в каталозі. Без огляду точну причину не називаєш (симптом — не діагноз), кажеш орієнтовні ціни з каталогу й що точна сума після діагностики. Ніколи не вигадуєш ціни, адресу, графік, гарантію. Якщо тип техніки не наш — чесно кажеш, що такого не беремо. Не показуєш клієнту бази/прайси/внутрішню кухню.",
+    "fallback_text": "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом.",
+    "temperature": "0.4",
+    "max_tokens": "700"
+  },
+  "meta": {
+    "engine": "lean",
+    "agent_max_iterations": "1",
+    "conduct_enabled": "1",
+    "conduct_warnings": "2",
+    "marketing_enabled": "0",
+    "ban_message": "Вітаю, вас забанено.",
+    "business_info": {}
+  },
+  "routes": [
+    {
+      "code": "catalog", "label": "Каталог послуг і цін", "handler": "search_catalog", "enabled": true,
+      "intent_patterns": ["чи робите", "ремонтуєте", "скільки коштує", "ціна", "прайс", "діагностика"],
+      "meta": {
+        "tool_name": "search_catalog",
+        "source_description": "Internal catalog of repair services with prices. Category headings + service rows (name, price/condition, notes). Owns what we repair and our prices. Does NOT own contacts, policies, or supplier part prices.",
+        "query_prompt": "Match the client's device/service to the category headings. For scope, return the device type. For price, return category + the concrete service words. Keep 2-6 keywords; don't invent components or diagnoses.",
+        "result_validation_prompt": "Keep only rows that match the client's device type/service. Give the price as an orientation (exact after inspection). If several service types match at different prices, return them and note that the type/fault should be clarified. If the device type is not covered by any category, return relevant:false and answer_instruction that we don't service that type. Symptom is not a diagnosis."
+      }
+    },
+    {
+      "code": "qa", "label": "Знання: гарантія, процес, правила", "handler": "search_knowledge", "enabled": true,
+      "intent_patterns": ["гарантія", "умови", "як відбувається", "терміни", "запчастини окремо"],
+      "meta": {
+        "tool_name": "search_knowledge",
+        "source_description": "Approved Q&A and documents: warranty, repair process, conditions, what we do/don't do. Not catalog prices, not contacts.",
+        "query_prompt": "Pick the closest topic + the requested fact (warranty / process / condition). Compact keywords, no invented policy.",
+        "result_validation_prompt": "Return facts/conditions that directly support the question. If nothing matches, return relevant:false with answer_instruction that it isn't covered. Never fill gaps from general knowledge."
+      }
+    },
+    {
+      "code": "business_info", "label": "Бізнес-факти: адреса, графік, телефон", "handler": "get_business_info", "enabled": true,
+      "intent_patterns": ["адреса", "де ви", "графік", "коли працюєте", "телефон", "оплата", "доставка"],
+      "meta": {
+        "tool_name": "get_business_info",
+        "source_description": "Operational fields: address, hours, holidays, phone, payment, delivery/receiving, warranty contact. Sole owner of these.",
+        "query_prompt": "Return only the requested field(s). Keep stated day/time so it can be checked.",
+        "result_validation_prompt": "Return the actual value text, only what was asked. Compare a proposed visit time with hours/holidays. Never invent a missing field; if absent, say it's not configured."
+      }
+    },
+    {
+      "code": "external_price", "label": "Веб-ціни запчастин (постачальники)", "handler": "search_parts", "enabled": true,
+      "intent_patterns": ["ціна деталі", "ціна запчастини", "скільки коштує деталь", "у постачальників"],
+      "meta": {
+        "tool_name": "search_parts",
+        "source_description": "External market price of a concrete spare part from configured supplier sites. Price reference only — never our work price, stock or final quote.",
+        "query_prompt": "Build <бренд> <модель> <деталь> [варіант]. Use only confirmed values. The exact model is required — if missing, return empty query so the assistant asks for it.",
+        "result_validation_prompt": "Trust the 'СТРУКТУРОВАНІ ЦІНИ' block. Accept only offers matching the part + model. Label variants (оригінал/копія). Mark as external reference. If nothing matches, say the part price couldn't be confirmed."
+      }
+    },
+    {
+      "code": "web_search", "label": "Веб: визначити незрозумілий пристрій", "handler": "web_research", "enabled": true,
+      "intent_patterns": ["що це", "яка модель", "характеристики", "специфікація"],
+      "meta": {
+        "tool_name": "web_research",
+        "source_description": "Public web identification of an unfamiliar device/spec. Never proves we service it or our price.",
+        "query_prompt": "Narrow query from the exact name/identifier + the external fact needed. Keep original names. If no useful query, return empty.",
+        "result_validation_prompt": "Accept only evidence tied to the same subject. Mark as external. Never convert into our availability/price."
+      }
+    },
+    {
+      "code": "handoff", "label": "Передача оператору", "handler": "escalate", "enabled": true,
+      "intent_patterns": ["людина", "оператор", "менеджер", "подзвонити", "скарга"],
+      "meta": {
+        "tool_name": "escalate",
+        "source_description": "Human handoff / contact path. Owns transfer guidance only.",
+        "query_prompt": "Summarize the unresolved goal in one line for a human.",
+        "result_validation_prompt": "Distinguish confirmed transfer from contact guidance. Never claim someone was notified unless confirmed."
+      }
+    }
+  ]
+}

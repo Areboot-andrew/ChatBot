@@ -1,0 +1,80 @@
+{
+  "_about": "ПРЕСЕТ «Магазин» (продаж товарів). Імпортуй у Налаштування → Імпорт. Задає персону й роути під продаж. Універсальні промпти контролера/відповіді лишаються з дефолтів. Після імпорту заповни: каталог товарів з цінами й наявністю (Каталог і прайси), Q&A (доставка/оплата/гарантія/повернення), Бізнес-факти. Для великого каталогу (сотні позицій з описами) увімкни векторний/гібридний пошук.",
+  "columns": {
+    "system_prompt": "Ти консультант магазину. Спілкуєшся живою українською, привітно й коротко. Допомагаєш обрати товар під задачу й бюджет, кажеш ціну й наявність з каталогу, пояснюєш доставку/оплату й допомагаєш оформити замовлення. НЕ питаєш «модель/несправність» — питаєш потребу, параметри, бюджет, нагоду. Ніколи не вигадуєш ціни, наявність, умови доставки чи характеристики — лише з каталогу/знань. Якщо товару немає — чесно кажеш і пропонуєш близьку альтернативу з каталогу. Не показуєш клієнту бази/прайси/внутрішню кухню.",
+    "fallback_text": "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом.",
+    "temperature": "0.5",
+    "max_tokens": "700"
+  },
+  "meta": {
+    "engine": "lean",
+    "agent_max_iterations": "1",
+    "conduct_enabled": "1",
+    "conduct_warnings": "2",
+    "marketing_enabled": "0",
+    "ban_message": "Вітаю, вас забанено.",
+    "business_info": {}
+  },
+  "routes": [
+    {
+      "code": "catalog", "label": "Каталог товарів (ціни, наявність)", "handler": "search_catalog", "enabled": true,
+      "intent_patterns": ["є в наявності", "скільки коштує", "ціна", "хочу купити", "підкажіть", "який порадите"],
+      "meta": {
+        "tool_name": "search_catalog",
+        "source_description": "Shop product catalog: category headings + product rows (name, price, availability/stock, characteristics). Owns what we sell, prices and stock. Does NOT own delivery terms or contacts.",
+        "query_prompt": "Match the client's need to product categories. For selection use category + parameters/budget the client gave; do NOT ask for a 'model'. Return compact keywords, not a sentence. Keep brand/exact name if the client named one.",
+        "result_validation_prompt": "Keep only products that fit the client's need/parameters; give name, price and availability. If several fit, return the options and note which parameter to clarify (budget/size/type). If nothing fits, return relevant:false and suggest the closest available category. Never invent prices, stock or specs."
+      }
+    },
+    {
+      "code": "qa", "label": "Знання: доставка, оплата, гарантія, повернення", "handler": "search_knowledge", "enabled": true,
+      "intent_patterns": ["доставка", "оплата", "гарантія", "повернення", "як замовити", "термін доставки"],
+      "meta": {
+        "tool_name": "search_knowledge",
+        "source_description": "Approved Q&A and docs: delivery, payment, warranty, returns, how to order. Not product prices, not contacts.",
+        "query_prompt": "Pick the closest topic (delivery / payment / warranty / return) + the requested fact. Compact keywords; no invented policy.",
+        "result_validation_prompt": "Return the facts/conditions that directly answer the question. If nothing matches, return relevant:false with answer_instruction that it isn't covered. Never fill gaps from general knowledge."
+      }
+    },
+    {
+      "code": "business_info", "label": "Бізнес-факти: адреса, графік, доставка", "handler": "get_business_info", "enabled": true,
+      "intent_patterns": ["адреса", "де ви", "графік", "коли працюєте", "телефон", "оплата", "зони доставки"],
+      "meta": {
+        "tool_name": "get_business_info",
+        "source_description": "Operational fields: address, hours, holidays, phone, payment, delivery zones/terms. Sole owner of these.",
+        "query_prompt": "Return only the requested field(s). Keep stated day/time/zone so it can be checked.",
+        "result_validation_prompt": "Return the actual value text, only what was asked. Never invent a missing field; if absent, say it's not configured."
+      }
+    },
+    {
+      "code": "web_search", "label": "Веб: характеристики товару", "handler": "web_research", "enabled": true,
+      "intent_patterns": ["характеристики", "специфікація", "чим відрізняється", "огляд", "що краще"],
+      "meta": {
+        "tool_name": "web_research",
+        "source_description": "Public web product specs/comparison for an item the client named. Reference only — never proves our stock or price.",
+        "query_prompt": "Narrow query from the exact product name + the spec asked. Keep original name. If no useful query, return empty.",
+        "result_validation_prompt": "Accept only evidence about the same product. Mark as external reference. Never convert into our stock/price."
+      }
+    },
+    {
+      "code": "external_price", "label": "Веб-ціни (вимкнено за замовч.)", "handler": "search_parts", "enabled": false,
+      "intent_patterns": ["ринкова ціна", "у конкурентів", "де дешевше"],
+      "meta": {
+        "tool_name": "search_parts",
+        "source_description": "External market prices reference. Off by default for a shop — enable only if you want competitor/market price lookups.",
+        "query_prompt": "Build compact product keywords from confirmed values; if the exact item is missing, return empty query.",
+        "result_validation_prompt": "Accept only offers matching the item. Mark as external reference, never our price."
+      }
+    },
+    {
+      "code": "handoff", "label": "Передача менеджеру / оформлення", "handler": "escalate", "enabled": true,
+      "intent_patterns": ["оформити", "замовлення", "менеджер", "оператор", "подзвонити"],
+      "meta": {
+        "tool_name": "escalate",
+        "source_description": "Human handoff for order placement / questions a manager handles. Owns transfer guidance only.",
+        "query_prompt": "Summarize the order/intent in one line for the manager (item, quantity, contact if given).",
+        "result_validation_prompt": "Distinguish confirmed transfer from contact guidance. Never claim an order was placed unless confirmed."
+      }
+    }
+  ]
+}
