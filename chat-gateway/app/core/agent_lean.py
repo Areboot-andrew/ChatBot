@@ -465,9 +465,13 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
     if conduct_on and _conduct_precheck(text):
         conduct_warn = True
         emit("CONDUCT", "Швидкий скан", "очевидна лайка або пряма образа")
-    if conduct_on and conduct_prompt:
+    # CONDUCT LLM is OFF by default: the regex precheck above already catches
+    # obvious abuse instantly, while the LLM moderation call cost ~8s on EVERY
+    # clean message for little gain. Set meta.conduct_llm=1 to re-enable the
+    # nuanced LLM check (kept here, just gated) for testing/tuning.
+    conduct_llm_on = str(meta.get("conduct_llm", "0")).strip().lower() in ("1", "true", "on", "yes")
+    if conduct_on and conduct_prompt and conduct_llm_on and not conduct_warn:
         emit("CONDUCT", "Вхід у модель", _fmt_msgs([{"role": "system", "content": conduct_prompt}, {"role": "user", "content": text}]))
-    if conduct_on and conduct_prompt and not conduct_warn:
         conduct_warn = await _judge_conduct(text, conduct_prompt, model, base_url, api_key) == "warn"
     if conduct_on and conduct_warn:
         try:
@@ -778,27 +782,33 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
         f"[HOW THIS ROUTE BUILDS ITS SOURCE QUERY]\n{route.get('query_prompt') or ''}\n\n"
         f"[HOW THIS ROUTE VALIDATES AND FILTERS RESULTS]\n{route.get('result_validation_prompt') or ''}"
     )
-    route_memory = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": (
+    route_memory = [{"role": "system", "content": system}]
+    # QUERY LLM is OFF by default: in practice it almost always failed and fell back
+    # to a deterministic query from the structured request (every trace showed
+    # "Фолбек запиту"). So by default we build the query directly — no LLM call, no
+    # <think> wait. Set meta.route_query_llm=1 to re-enable it for testing.
+    meta_rs = (settings.meta or {}) if settings else {}
+    use_llm_query = str(meta_rs.get("route_query_llm", "0")).strip().lower() in ("1", "true", "on", "yes")
+    query_raw = ""
+    if use_llm_query:
+        route_memory.append({"role": "user", "content": (
             "PHASE: BUILD_SOURCE_QUERY\n"
             f"REQUEST: {json.dumps(request, ensure_ascii=False)}\n"
             'Return JSON only: {"query":"..."}'
-        )},
-    ]
-    emit(f"QUERY #{step}", "Вхід у модель", _fmt_msgs(route_memory))
-    # 700 (was 80): same reasoning-model issue — <think> ate the whole budget so
-    # the query JSON was empty and every route fell back to the raw-text query.
-    query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 700, retry=True)
-    try:
-        query = str(_extract_json(query_raw).get("query") or "").strip()
-    except Exception:
-        query = ""
-    query = _sanitize_query(query)
-    if not query:
-        query = _route_query_fallback(route, request)
-        if query:
+        )})
+        emit(f"QUERY #{step}", "Вхід у модель", _fmt_msgs(route_memory))
+        query_raw = await _safe_chat(route_memory, model, base_url, api_key, 0.0, 700, retry=True)
+        try:
+            query = str(_extract_json(query_raw).get("query") or "").strip()
+        except Exception:
+            query = ""
+        query = _sanitize_query(query)
+        if not query:
+            query = _route_query_fallback(route, request)
             emit(f"QUERY #{step}", "Фолбек запиту", query)
+    else:
+        query = _route_query_fallback(route, request)
+        emit(f"QUERY #{step}", "Запит (формула, без LLM)", query or "[empty]")
     emit(f"QUERY #{step}", route["code"], query or "[empty query]")
 
     raw_result, tool = await _run_tool(
@@ -807,7 +817,8 @@ async def _run_route_session(route, request, text, tenant_id, db, settings, syn_
     )
     emit(f"TOOL #{step}", f"{route['code']} → {tool}", str(raw_result)[:1500])
 
-    route_memory.append({"role": "assistant", "content": query_raw or '{"query":""}'})
+    if query_raw:
+        route_memory.append({"role": "assistant", "content": query_raw})
     route_memory.append({"role": "user", "content": (
         "PHASE: VALIDATE_SOURCE_RESULT\n"
         f"REQUEST: {json.dumps(request, ensure_ascii=False)}\n"
