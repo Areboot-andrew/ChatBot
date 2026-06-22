@@ -703,6 +703,8 @@ async def _judge_conduct(text, prompt, model, base_url, api_key):
 
 async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens, retry=False,
                      emit=None, label="LLM"):
+    import time
+    t0 = time.perf_counter()
     err = None
     try:
         out = await chat(messages, model=model, temperature=temperature, max_tokens=max_tokens,
@@ -715,6 +717,10 @@ async def _safe_chat(messages, model, base_url, api_key, temperature, max_tokens
                              base_url=base_url, api_key=api_key, raise_error=True)
         except Exception as e:
             err, out = e, ""
+    # Per-step timing so the trace shows WHERE the seconds go (LLM calls, not search).
+    if emit:
+        dt = time.perf_counter() - t0
+        emit(label, "⏱ час кроку", f"{dt:.1f}s · {len(str(out or ''))} симв.")
     if err:
         logger.warning(f"lean chat failed (model={model}): {err}")
         # Surface the real reason (wrong model, bad key, rate limit, context
