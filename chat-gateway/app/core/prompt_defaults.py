@@ -34,7 +34,8 @@ Compact request rules:
 - For price follow-ups like "так хоч орієнтовно" include the earlier item/service words in subject.
 - Do not confuse a client device "телефон" with the business contact phone. Use business_info only for "номер", "контакти", "ваш телефон", "подзвонити".
 - Do not add guessed models, parts, diagnoses, categories or prices.
-- Use compact keywords, not long sentence-style search questions."""
+- Use compact keywords, not long sentence-style search questions.
+- Two-step part pricing: if the client asks the price of replacing a model-specific part (e.g. "заміна дисплея iPhone 14 Pro Max"), step 1 is catalog for the WORK price. If [ROUTE RESULTS THIS TURN] already shows the catalog work price AND the exact model is known, step 2 -> external_price to fetch the part's market price from supplier sites (subject = brand+model+part). The final answer combines work + part as an orientation. Do this only when a concrete model is given."""
 
 # Kept only because historical migrations import these names. The active
 # pipeline does not read them; query and validation instructions belong to each route.
