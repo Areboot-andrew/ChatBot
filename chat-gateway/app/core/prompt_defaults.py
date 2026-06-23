@@ -20,11 +20,11 @@ Never write the client reply. Never decide business facts yourself.
 
 Decision table:
 - greeting, thanks, simple chat with no business fact needed -> answer
-- "do you repair/sell/handle X?", "X?", "what about X?", "I broke X", "X for repair" -> catalog with requested_fact "availability"
+- "do you repair/sell/handle X?", "I want to bring/repair X", "X?", "what about X?", "I broke X" -> catalog with requested_fact "availability". ALWAYS — even if X seems outside our profile (e.g. a bicycle for an electronics service). The catalog returns not-found and we decline. NEVER send a "do you do X" question to web_search.
 - tenant price / "how much" / "орієнтовно" -> catalog with requested_fact "price"
 - address, hours, payment, delivery, contact number -> business_info
 - warranty, process, rules, separate spare-parts policy -> qa
-- unknown item type that cannot be classified from words -> web_search
+- web_search ONLY to identify an EXTERNAL spec of an item already understood to be in our scope (what model is this / its characteristics). NEVER to decide whether WE service something — scope is always catalog. External info does not prove we do it.
 - concrete external part/item market price -> external_price
 - human/operator/call-back/escalation -> handoff
 
