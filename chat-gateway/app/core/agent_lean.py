@@ -614,10 +614,11 @@ async def run_agent_lean(text, history, tenant_id, db, settings, trace=None, mem
         # cap 2000 (was 1200): reasoning <think> needs headroom before the reply;
         # 32k server context makes this safe. Actual value still comes from the
         # tenant's "Максимум токенів" setting, just no longer clamped down to 1200.
-        # cap 700 (was 2000): a reasoning model fills the whole budget with <think>,
-        # so a big cap made a 1-2 sentence reply take 85s. The reply is short; 700 is
-        # enough for think + answer and keeps it fast.
-        answer_tokens = min(700, max(120, int(settings.max_tokens or 700))) if settings else 700
+        # cap 1400: reasoning <think> must fit BEFORE the reply. 700 was too small on
+        # a big context (think ate it all -> empty answer); 2000 made it think to the
+        # limit (85s). 1400 is the compromise. The real fix is a non-reasoning model
+        # for the answer step — token tuning only trades "empty" for "slow".
+        answer_tokens = min(1400, max(400, int(settings.max_tokens or 900))) if settings else 900
     except (ValueError, TypeError):
         answer_tokens = 700
     raw_answer = await _safe_chat(amsgs, model, base_url, api_key, temp, answer_tokens, retry=True,
