@@ -359,6 +359,22 @@ async def _run_tool(route, query, text, tenant_id, db, settings, syn_map, serper
     fact = (requested_fact or "").strip().lower()
     scope_only = fact in {"availability", "scope", "scope_check", "наявність", "наличие"}
     if tool == "search_catalog" and scope_only:
+        # Availability/scope questions ("беремось за X?") still run the REAL item
+        # search so a concrete match surfaces (e.g. "пилосос" -> the vacuum-repair
+        # rows that live under "дрібна побутова техніка"). We pass an empty
+        # requested_fact so matched items keep their price — the model can both
+        # confirm we do it AND give an orientation price in one turn. Only when
+        # the search finds nothing do we fall back to the category landscape, so
+        # unknown items ("велосипед", "газонокосарка") still get a clean decline.
+        # Previously this branch short-circuited straight to category headers,
+        # hiding real items whose category DESCRIPTION did not enumerate them ->
+        # false "we don't do that" even though the catalog had the rows.
+        if q:
+            found = await _tool_search_catalog(
+                q, tenant_id, db, synonyms=syn_map, requested_fact=""
+            )
+            if found and "немає рядка" not in found:
+                return found, tool
         return await _tool_list_categories(tenant_id, db), tool
     if not q and tool != "get_business_info":
         return "", tool
