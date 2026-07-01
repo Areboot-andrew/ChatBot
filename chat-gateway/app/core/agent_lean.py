@@ -66,7 +66,17 @@ def _ua_fallback(settings) -> str:
     ft = (settings.fallback_text if settings and settings.fallback_text else "").strip()
     if ft.lower() in ("none", "null", "undefined", "nil", "-"):
         ft = ""
-    return ft or "Вибачте, зараз не можу відповісти — спробуйте ще раз трохи згодом."
+    if ft:
+        return ft
+    # Shown when the LLM backend is down mid-turn — it must read like a busy
+    # human stepping away, not an answering machine. Rotate so repeated failures
+    # in one dialog don't show the client the same canned line twice.
+    import random
+    return random.choice([
+        "Ой, щось я підвис 🙈 Напишіть, будь ласка, ще раз за хвилинку.",
+        "Секунду, щось збилося з мого боку — повторіть, будь ласка, трохи згодом.",
+        "Перепрошую, я на хвильку випав 🙈 Напишіть ще раз — відповім.",
+    ])
 
 
 def _decision_from_raw(raw: str):
